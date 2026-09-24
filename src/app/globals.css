@@ -1,26 +1,241 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Palette — extracted from goldsand.fi */
+  --color-ink: #121111;
+  --color-sand: #c48535;
+  --color-paper: #ffffff;
+  --color-stone: #f0efeb;
+  --color-mute: #8a8783;
+  --color-line: #e6e4e0;
+
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-general-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Talise sets eyebrows, stat labels and dark-section prose in mono. */
+  --font-mono: var(--font-mono-ui), ui-monospace, SFMono-Regular, monospace;
+
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    /* Nothing may scroll the page sideways. Note this cannot live on <body>
+       alongside the sticky fee-scroll section: overflow-x on an ancestor
+       creates a scroll container and breaks position:sticky. */
+    overflow-x: hidden;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+
+  /* The vw term has to carry small screens on its own: a rem-only floor sized
+     for desktop overflows a 375px viewport before the clamp ever engages. */
+  h1 {
+    font-size: clamp(1.875rem, 1rem + 3.6vw, 3.5rem);
+    line-height: 1.07;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    font-size: clamp(1.5rem, 0.95rem + 2.5vw, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  h3 {
+    font-size: clamp(1.125rem, 1.6vw, 1.3125rem);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--color-sand);
+    color: var(--color-paper);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-sand);
+    outline-offset: 3px;
+    border-radius: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* Section rhythm — whitespace is the design, but 12vw was 173px a side at
+     1440px and made every section read oversized at 100% zoom. */
+  .section-y {
+    padding-block: clamp(3.25rem, 7vw, 6.5rem);
+  }
+
+  /* `.section-y` sets `padding-block`, and it is emitted AFTER Tailwind's
+     `pt-*`/`pb-*` utilities, so those lose on source order and silently do
+     nothing. Sections that continue onto the same ground as their neighbour
+     (the Anywhere → Card → SettleLive dark run) need a trimmed edge, so the
+     variants are declared here where they can actually win. */
+  .section-y-tight-b {
+    padding-bottom: clamp(1.75rem, 3.5vw, 3rem);
+  }
+
+  .section-y-tight-t {
+    padding-top: clamp(1.75rem, 3.5vw, 3rem);
+  }
+
+  .section-y-flush-t {
+    padding-top: 0;
+  }
+
+  .shell {
+    width: 100%;
+    max-width: 68rem;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .shell {
+      padding-inline: 2.5rem;
+    }
+  }
+
+  .dot-grid {
+    background-image: radial-gradient(
+      var(--color-line) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+
+  /* Talise marks the corners of a block with a thin crosshair rather than
+     drawing a border. Applied to a `relative` element; the marks sit on the
+     corners themselves, so they read as registration marks, not decoration.
+     currentColor means the same class works on paper and on ink. */
+  .crosshairs::before,
+  .crosshairs::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-repeat: no-repeat;
+  }
+
+  .crosshairs::before {
+    background-image: linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor);
+    background-size: 13px 1px, 1px 13px, 13px 1px, 1px 13px;
+    background-position: left -6px top, left top -6px, right -6px top,
+      right top -6px;
+  }
+
+  .crosshairs::after {
+    background-image: linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor);
+    background-size: 13px 1px, 1px 13px, 13px 1px, 1px 13px;
+    background-position: left -6px bottom, left bottom -6px,
+      right -6px bottom, right bottom -6px;
+  }
+
+  /* The ■ LABEL eyebrow. The square is a pseudo-element rather than a literal
+     character so it stays optically square at every size. */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 0.4375rem;
+    height: 0.4375rem;
+    background: currentColor;
+    flex: none;
+  }
+}
+
+/* Marquee for the testimonial rails. */
+@keyframes marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-marquee-left {
+  animation: marquee-left 64s linear infinite;
+}
+
+.animate-marquee-right {
+  animation: marquee-right 64s linear infinite;
+}
+
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-marquee-left,
+  .animate-marquee-right {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1050" width="1400" height="1050">
+<rect width="1400" height="1050" fill="#F0EFEB"/>
+<rect x="240" y="180" width="300" height="640" rx="40" fill="#121111" opacity="0.85" transform="rotate(-7 390 500)"/>
+<rect x="860" y="180" width="300" height="640" rx="40" fill="#121111" opacity="0.85" transform="rotate(7 1010 500)"/>
+<rect x="540" y="120" width="320" height="720" rx="44" fill="#121111"/>
+<text x="700" y="470" font-family="system-ui" font-size="28" fill="#C48535" text-anchor="middle">Pay $49.00</text>
+<text x="700" y="515" font-family="system-ui" font-size="17" fill="#FFFFFF" text-anchor="middle" opacity="0.6">BTC · SOL · Base</text>
+<text x="700" y="960" font-family="system-ui" font-size="18" fill="#8A8783" text-anchor="middle">hero-phones placeholder — replace with generated image</text>
+</svg>

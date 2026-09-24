@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor / assistant scratch files.
+# AGENTS.md is written back by `next dev` on every run, so it is ignored
+# rather than deleted — otherwise it reappears as an untracked file.
+AGENTS.md
+CLAUDE.md
+.claude/
+.cursor/
+.aider*
