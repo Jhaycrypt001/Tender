@@ -3,7 +3,7 @@ import Link from "next/link";
 import { posts, formatDate } from "@/lib/posts";
 
 export const metadata: Metadata = {
-  title: "Insights and updates — Tender",
+  title: "Insights and updates · Tender",
   description:
     "Notes on crypto checkout, settlement and the parts of payments nobody writes about.",
 };

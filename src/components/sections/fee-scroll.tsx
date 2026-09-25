@@ -19,13 +19,18 @@ function Beat({ index }: { index: number }) {
   const beat = BEATS[index];
   return (
     <>
-      <div className="flex h-[270px] w-[270px] items-center justify-center rounded-[20px] bg-stone">
+      {/* The tile scales with the viewport rather than sitting at a fixed
+          270px, which overflowed the gutters on a 375px screen. The sketches
+          carry their own generous margin, so the image fills the tile at 92%
+          instead of 70%: nesting two margins left the art floating small. */}
+      <div className="flex aspect-square w-[min(270px,68vw)] items-center justify-center rounded-[20px] bg-stone">
         <Image
           src={beat.img}
           alt={beat.alt}
-          width={270}
-          height={270}
-          className="h-[70%] w-[70%] object-contain mix-blend-multiply"
+          width={540}
+          height={540}
+          sizes="(max-width: 640px) 68vw, 270px"
+          className="h-[92%] w-[92%] object-contain mix-blend-multiply"
         />
       </div>
 

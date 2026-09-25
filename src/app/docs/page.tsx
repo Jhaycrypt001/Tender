@@ -4,7 +4,7 @@ import { docs } from "@/lib/docs";
 import Button from "@/components/button";
 
 export const metadata: Metadata = {
-  title: "Documentation — Tender",
+  title: "Documentation · Tender",
   description:
     "Create an invoice, show the checkout, listen for the webhook. The Tender API in three calls.",
 };

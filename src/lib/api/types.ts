@@ -1,0 +1,412 @@
+/**
+ * The Tender API contract, in TypeScript.
+ *
+ * ⭐ THIS FILE IS THE SEAM BETWEEN THE TWO HALVES OF THE PROJECT.
+ *
+ * The frontend imports it to build screens; the backend implements it. Both
+ * sides agree here first, in one file, so neither can drift while they are
+ * built in parallel. Changing a shape here is a conversation, not a commit.
+ *
+ * Every shape below is taken from what `/docs` already publishes to the world
+ * (see `src/lib/docs.ts`) and from BACKEND.md §5. Where the two could differ,
+ * the published page wins — it is a promise we have already made.
+ *
+ * Two conventions run through the whole file and are easy to get wrong:
+ *
+ *   1. THE WIRE IS snake_case. `amount_expected`, not `amountExpected`. The
+ *      backend is Prisma/camelCase internally and serialises to snake_case at
+ *      the edge. We keep the wire shape verbatim here rather than converting,
+ *      so that what you read in this file is exactly what comes back on the
+ *      network — no mental translation while debugging.
+ *
+ *   2. MONEY IS ALWAYS `string`, NEVER `number`. An 18-decimal on-chain value
+ *      does not survive a JSON float: 0.1 + 0.2 is the cheap demonstration,
+ *      but the real failure is silent precision loss on large token amounts.
+ *      Format these for display; never parse one to do arithmetic.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Primitives                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A decimal amount as a base-10 string, e.g. "49.00" or "0.000461".
+ * Never a number. See note 2 above.
+ */
+export type Amount = string;
+
+/** ISO 8601 UTC, e.g. "2026-09-24T14:32:00Z". */
+export type Timestamp = string;
+
+/**
+ * Chain identifiers as the backend spells them. Lowercase, no spaces.
+ * The authoritative list comes from `GET /public/chains` at runtime — this
+ * type exists for the chains we name in code (the demo set), not as a closed
+ * set. Hence the `(string & {})` escape: it keeps autocomplete for the known
+ * names without rejecting a chain the API adds later.
+ */
+export type ChainId =
+  | "bitcoin"
+  | "solana"
+  | "base"
+  | "ethereum"
+  | "arbitrum"
+  | "tron"
+  | "monad"
+  | (string & {});
+
+/* -------------------------------------------------------------------------- */
+/* Invoice                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every state an invoice can reach. Published at /docs, so this list is a
+ * public commitment: six of the eight are terminal and never move again.
+ *
+ * ⚠️ UNDERPAID and NEEDS_RECOVERY are NOT the same kind of failure, and the UI
+ * must never render them alike:
+ *
+ *   UNDERPAID       — the deposit was below the minimum. Aurora refunds this
+ *                     automatically by the quote deadline. Nobody acts.
+ *   NEEDS_RECOVERY  — the deposit LANDED and the onward settlement then failed.
+ *                     Aurora does NOT auto-refund this. Recovery is explicit:
+ *                     a human retries or withdraws.
+ *
+ * That asymmetry is real behaviour of the underlying network, not a Tender
+ * invention, and modelling it is the thing most integrations get wrong.
+ */
+export type InvoiceStatus =
+  | "PENDING"
+  | "DETECTED"
+  | "SETTLED"
+  | "OVERPAID"
+  | "UNDERPAID"
+  | "EXPIRED"
+  | "CANCELLED"
+  | "NEEDS_RECOVERY";
+
+/** The six states an invoice can never leave. */
+export const TERMINAL_STATUSES: readonly InvoiceStatus[] = [
+  "SETTLED",
+  "OVERPAID",
+  "UNDERPAID",
+  "EXPIRED",
+  "CANCELLED",
+  "NEEDS_RECOVERY",
+] as const;
+
+export function isTerminal(status: InvoiceStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/**
+ * One deposit address, on one chain.
+ *
+ * There is one of these PER CHAIN, because Aurora's addresses are unique per
+ * chain — a Bitcoin address and a Solana address cannot be the same string.
+ * So an invoice accepting four chains carries four addresses, and the buyer
+ * page shows whichever one matches the chain they picked.
+ */
+export type InvoiceAddress = {
+  chain: ChainId;
+  address: string;
+  /**
+   * The minimum that chain will accept. Below this, Aurora refunds the deposit
+   * automatically — so the buyer has to see this number BEFORE they send, or
+   * the refund arrives as a surprise and becomes a support ticket.
+   * Optional because the backend may not have it wired yet.
+   */
+  minimum?: Amount;
+};
+
+export type Invoice = {
+  /** "inv_" prefixed. Merchant-facing, never in a public URL. */
+  id: string;
+  /**
+   * "chk_" prefixed. This is what goes in the checkout URL.
+   *
+   * It is deliberately NOT the id: the id is enumerable and merchant-private,
+   * while this is a high-entropy random token that carries nothing. Never put
+   * `id` in a buyer-facing link.
+   */
+  token: string;
+  status: InvoiceStatus;
+  amount_expected: Amount;
+  currency: string;
+  /** The merchant's own order id. Unique per merchant, and the idempotency key. */
+  reference: string;
+  expires_at: Timestamp;
+  created_at: Timestamp;
+  redirect_url?: string | null;
+  metadata?: Record<string, unknown> | null;
+  addresses: InvoiceAddress[];
+  /** Present on a single-invoice fetch; omitted from list responses. */
+  payments?: Payment[];
+};
+
+/** Body of POST /v1/invoices. */
+export type CreateInvoiceInput = {
+  amount_expected: Amount;
+  currency: string;
+  reference: string;
+  redirect_url?: string;
+  /** Which chains to accept. Omitted means the merchant's configured default. */
+  chains?: ChainId[];
+  metadata?: Record<string, unknown>;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Payment                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type PaymentStatus = "DETECTED" | "SETTLED" | "FAILED" | "REFUNDED";
+
+/**
+ * One deposit against one invoice.
+ *
+ * ⚠️ An invoice can have MORE THAN ONE payment. Aurora quotes and processes
+ * each deposit independently and cannot batch two partial payments into one
+ * settlement, so two half-payments are two rows here — not one combined
+ * payment. Never sum these and call the invoice settled.
+ */
+export type Payment = {
+  id: string;
+  invoice_id: string;
+  /** The source-chain transaction. Unique — this is how duplicates are caught. */
+  tx_hash: string;
+  from_chain: ChainId;
+  /** What the buyer actually sent, in the source asset. */
+  amount_in: Amount;
+  /** What landed at the merchant's address, in the settlement asset. */
+  amount_settled?: Amount | null;
+  status: PaymentStatus;
+  first_seen_at: Timestamp;
+  settled_at?: Timestamp | null;
+};
+
+/**
+ * A payment needing explicit recovery: the deposit succeeded but the onward
+ * settlement failed, and Aurora does not refund that case automatically.
+ * Attached to the payment detail screen, which offers Retry and Withdraw.
+ */
+export type RecoveryTask = {
+  id: string;
+  payment_id: string;
+  reason: string;
+  state: "OPEN" | "RETRYING" | "WITHDRAWN" | "RESOLVED" | "FAILED";
+  notes?: string | null;
+  created_at: Timestamp;
+};
+
+/** Payment detail: the payment, its invoice, its history, and any recovery. */
+export type PaymentDetail = Payment & {
+  invoice: Pick<Invoice, "id" | "reference" | "amount_expected" | "currency" | "status">;
+  history: { status: string; at: Timestamp; note?: string }[];
+  recovery?: RecoveryTask | null;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Merchant                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type Merchant = {
+  id: string;
+  name: string;
+  email: string;
+  /** Where money lands. On Monad, chain 143. */
+  settlement_address?: string | null;
+  /** What everything converts to before it lands. */
+  settlement_asset?: string | null;
+  /**
+   * ⚠️ Whether the settlement address has been proven to belong to this
+   * merchant. Until this is true the address must NOT be used: an unverified
+   * address behind nothing but a session means a stolen account silently
+   * redirects every future payment. The UI gates on this.
+   */
+  settlement_verified: boolean;
+  webhook_url?: string | null;
+  /** Tender's fee in basis points. 40 = 0.40%. */
+  fee_bps: number;
+  created_at: Timestamp;
+};
+
+export type UpdateMerchantInput = {
+  settlement_address?: string;
+  settlement_asset?: string;
+  webhook_url?: string;
+};
+
+/** Per-asset settled/unsettled totals for the Home screen. */
+export type Balance = {
+  /** Landed and final. */
+  settled: { asset: string; amount: Amount }[];
+  /** Detected but not yet final. */
+  unsettled: { asset: string; amount: Amount }[];
+  /** Optional convenience total in the merchant's display currency. */
+  display_total?: { currency: string; amount: Amount } | null;
+};
+
+/** Proof-of-control: the nonce the merchant signs with the settlement wallet. */
+export type SettlementChallenge = {
+  nonce: string;
+  /** The exact string to sign. Show it verbatim; do not reconstruct it. */
+  message: string;
+  expires_at: Timestamp;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Links, Earn, Ramps                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A reusable payment link: one link, many buyers, many invoices. */
+export type PaymentLink = {
+  id: string;
+  token: string;
+  label: string;
+  /** Null means the buyer chooses the amount. */
+  amount?: Amount | null;
+  currency: string;
+  active: boolean;
+  /** How many invoices this link has produced. */
+  uses: number;
+  created_at: Timestamp;
+};
+
+export type CreateLinkInput = {
+  label: string;
+  amount?: Amount;
+  currency: string;
+};
+
+/** A position opened with settled revenue, via Intents Connect. */
+export type EarnPosition = {
+  id: string;
+  protocol: string;
+  asset: string;
+  /** Annual percentage yield as a string, e.g. "4.20". Variable. */
+  apy: Amount;
+  deposited: Amount;
+  earned: Amount;
+  updated_at: Timestamp;
+};
+
+/**
+ * An off-ramp corridor. Most are not live, and the UI says so honestly rather
+ * than pretending — a corridor marked COMING SOON reads as finished; a faked
+ * bank payout does not.
+ */
+export type RampCorridor = {
+  country: string;
+  currency: string;
+  status: "LIVE" | "COMING_SOON" | "NOT_OPEN";
+  /** Per-day limit in the local currency, when there is one. */
+  daily_cap?: Amount | null;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Public (buyer-facing, unauthenticated)                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the checkout page is allowed to see.
+ *
+ * ⚠️ Deliberately NOT an `Invoice`. This shape carries no merchant email, no
+ * settlement address, no internal id and no other invoice — only what a
+ * stranger holding the link may know. Keep it that way when it changes.
+ */
+export type PublicInvoice = {
+  token: string;
+  status: InvoiceStatus;
+  amount_expected: Amount;
+  currency: string;
+  expires_at: Timestamp;
+  /** Display name only. Nothing else about the merchant. */
+  merchant_name: string;
+  addresses: InvoiceAddress[];
+  redirect_url?: string | null;
+};
+
+/** One supported chain, from GET /public/chains. */
+export type Chain = {
+  id: ChainId;
+  name: string;
+  /** The asset a buyer sends on this chain, e.g. "BTC", "USDC". */
+  asset: string;
+  /** Below this, the deposit is auto-refunded. Show it before they send. */
+  minimum: Amount;
+  /** Human estimate, e.g. "about 2 minutes". */
+  estimated_settlement: string;
+};
+
+/** The SSE payload on /public/invoices/:token/events. */
+export type InvoiceEvent = {
+  status: InvoiceStatus;
+  at: Timestamp;
+  payment?: Pick<Payment, "tx_hash" | "from_chain" | "amount_in">;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Envelopes                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export type Paginated<T> = {
+  data: T[];
+  /** Opaque. Pass back as `cursor` to get the next page. */
+  next_cursor?: string | null;
+  has_more: boolean;
+};
+
+export type ListInvoicesQuery = {
+  status?: InvoiceStatus;
+  cursor?: string;
+  limit?: number;
+};
+
+export type ListPaymentsQuery = {
+  status?: PaymentStatus;
+  invoice_status?: InvoiceStatus;
+  cursor?: string;
+  limit?: number;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Errors                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Failure kinds the UI has to tell apart.
+ *
+ * `not_configured` is the one that matters most today: it is what every call
+ * returns while NEXT_PUBLIC_API_URL is unset, which is the normal state until
+ * the backend is live. Screens treat it as "no data yet" and render their
+ * empty state — not as a crash.
+ */
+export type ApiErrorKind =
+  | "not_configured"
+  | "network"
+  | "unauthorized"
+  | "not_found"
+  | "validation"
+  | "rate_limited"
+  | "server"
+  | "unknown";
+
+export type ApiError = {
+  kind: ApiErrorKind;
+  message: string;
+  /** HTTP status, when there was a response at all. */
+  status?: number;
+  /** Field-level detail from a validation failure. */
+  fields?: Record<string, string>;
+};
+
+/**
+ * Every call returns this instead of throwing.
+ *
+ * A failed request is an ordinary, expected outcome here — the backend is not
+ * up yet — so making it a value rather than an exception forces each screen to
+ * handle it, and makes "error" a designed state rather than a blank page.
+ */
+export type ApiResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: ApiError };

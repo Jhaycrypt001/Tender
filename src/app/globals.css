@@ -239,3 +239,123 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Post-sign-in transition (/app/welcome)
+
+   Declared here rather than inline so the animations start on first paint.
+   Every one is disabled under prefers-reduced-motion, where the end state is
+   simply the resting state — nothing is hidden, it just does not travel.
+   -------------------------------------------------------------------------- */
+
+@keyframes tender-roll-in {
+  from {
+    transform: translateX(-14rem) rotate(-540deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes tender-fade-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tender-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tender-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tender-roll {
+  /* A roll needs near-linear travel: ease-out-expo decelerates so hard the
+     mark appears to arrive rather than roll. 1.5s so it is actually seen. */
+  animation: tender-roll-in 1.5s cubic-bezier(0.32, 0.72, 0.4, 1) both;
+}
+
+.tender-wordmark {
+  animation: tender-fade-slide 0.6s var(--ease-out-expo) 1.15s both;
+}
+
+.tender-pop {
+  animation: tender-pop-in 0.5s var(--ease-out-expo) both;
+}
+
+.tender-rise {
+  animation: tender-rise-in 0.45s var(--ease-out-expo) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tender-roll,
+  .tender-wordmark,
+  .tender-pop,
+  .tender-rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Chrome suppression for the checkout and the dashboard.
+
+   ⚠️ These rules used to live in a <style> tag inside the /pay and /app
+   layouts. React 19 does not server-render a <style> element that has no
+   `href`/`precedence` — it hoists it and inserts it during hydration, so the
+   rules only applied AFTER the page became interactive. The class hook was in
+   the static HTML but nothing acted on it, which meant the buyer's first paint
+   showed the full marketing nav and footer wrapped around their payment
+   address, and it then vanished. On the one screen where a "Get started"
+   button beside a payment address invites mid-transaction abandonment, that
+   flash is the whole problem the layout existed to prevent.
+
+   In the stylesheet the rules ship in the CSS the document already blocks on,
+   so the chrome is never painted at all.
+--------------------------------------------------------------------------- */
+body:has(.tender-pay-chrome) > header,
+body:has(.tender-pay-chrome) > footer,
+body:has(.tender-app-chrome) > header,
+body:has(.tender-app-chrome) > footer {
+  display: none;
+}
+
+body:has(.tender-pay-chrome) nav[aria-label="Primary"],
+body:has(.tender-app-chrome) nav[aria-label="Primary"] {
+  display: none;
+}
+
+body:has(.tender-pay-chrome) > main,
+body:has(.tender-app-chrome) > main {
+  padding: 0;
+}

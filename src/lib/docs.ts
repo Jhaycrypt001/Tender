@@ -35,7 +35,7 @@ export const docs = {
     { "chain": "base",    "address": "0x7c2f91…a4de03" }
   ]
 }`,
-    note: "Send the buyer to https://pay.tender.sh/{token}. The token is not the invoice id — it carries nothing private, so it is safe in a URL.",
+    note: "Send the buyer to https://pay.tender.sh/{token}. The token is not the invoice id. It carries nothing private, so it is safe in a URL.",
   },
 
   endpoints: {
@@ -80,7 +80,7 @@ export const docs = {
       },
       {
         label: "Public",
-        auth: "No authentication — safe to call from the browser",
+        auth: "No authentication, safe to call from the browser",
         rows: [
           {
             method: "GET",
@@ -109,7 +109,7 @@ export const docs = {
 
   states: {
     title: "Invoice states",
-    body: "An invoice is the thing your system cares about. These are every state it can reach, and the six terminal ones are marked — once an invoice is terminal it will never move again.",
+    body: "An invoice is the thing your system cares about. These are every state it can reach, and the six terminal ones are marked. Once an invoice is terminal it will never move again.",
     rows: [
       {
         name: "PENDING",
@@ -149,12 +149,12 @@ export const docs = {
       {
         name: "NEEDS_RECOVERY",
         terminal: true,
-        desc: "A deposit succeeded but the onward settlement failed. This one is not auto-refunded — see below.",
+        desc: "A deposit succeeded but the onward settlement failed. This one is not auto-refunded. See below.",
       },
     ],
     callout: {
       title: "Why NEEDS_RECOVERY exists",
-      body: "Failures before the deposit lands are refunded for you. A failure after it lands is not — recovery is explicit. Most processors hide this behind a generic error; Tender gives it a state so your support team can see it and act on it.",
+      body: "Failures before the deposit lands are refunded for you. A failure after it lands is not, and recovery is explicit. Most processors hide this behind a generic error; Tender gives it a state so your support team can see it and act on it.",
     },
   },
 
@@ -185,7 +185,7 @@ export const docs = {
 }`,
     verify: `import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Verify against the RAW body — parsing first changes the bytes.
+// Verify against the RAW body: parsing first changes the bytes.
 export function verify(rawBody: string, header: string, secret: string) {
   const expected = "sha256=" + createHmac("sha256", secret)
     .update(rawBody)
@@ -203,7 +203,7 @@ export function verify(rawBody: string, header: string, secret: string) {
     items: [
       {
         q: "Do I need MON to receive payments?",
-        a: "No. Gas is abstracted end to end — neither you nor your buyer ever acquires the destination chain's native token.",
+        a: "No. Gas is abstracted end to end, so neither you nor your buyer ever acquires the destination chain's native token.",
       },
       {
         q: "How long are deposit addresses valid?",

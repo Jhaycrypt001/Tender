@@ -11,18 +11,18 @@ export const nav = {
     { label: "FAQ", href: "/#faq" },
   ],
   ghost: { label: "Docs", href: "/docs" },
-  primary: { label: "Get started", href: "/#get-started" },
+  primary: { label: "Get started", href: "/app" },
 } as const;
 
 export const hero = {
   eyebrow: "Live on Monad · 31+ chains",
   title: ["Get paid in any coin.", "Settle on Monad."],
-  sub: "Your customer pays with whatever they already hold — Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
-  primary: { label: "Get started", href: "/#get-started" },
+  sub: "Your customer pays with whatever they already hold: Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
+  primary: { label: "Get started", href: "/app" },
   secondary: { label: "Read the docs", href: "/docs" },
   // Goldsand runs one quiet qualifier under the button pair, not a chip row.
-  note: "Non-custodial · Settles on Monad · No wallet connect required",
-  strip: ["31+ chains", "~0.4% fee", "No wallet connect", "Non-custodial"],
+  note: "Non-custodial · Settles on Monad · Works with any wallet",
+  strip: ["31+ chains", "~0.4% fee", "Scan and send", "Non-custodial"],
 } as const;
 
 export const testimonials = [
@@ -71,32 +71,32 @@ export const feeScroll = {
     {
       caption: "Your customer holds Bitcoin",
       sub: null,
-      img: "/img/beat-1.svg",
+      img: "/img/beat-1.png",
       alt: "Ink sketch of a hand holding a smartphone with a coin above the screen",
     },
     {
       caption: "Your checkout only takes one chain",
       sub: null,
-      img: "/img/beat-2.svg",
-      alt: "Ink sketch of a closed iron gate with a padlock",
+      img: "/img/beat-2.png",
+      alt: "Ink sketch of a hand tilting a smartphone with a single coin on its screen",
     },
     {
       caption: "So they bridge, swap, and buy gas",
       sub: null,
-      img: "/img/beat-3.svg",
-      alt: "Ink sketch of a tangled knot of arrows going nowhere",
+      img: "/img/beat-3.png",
+      alt: "Ink sketch of a hand pushing a payment card into a card terminal",
     },
     {
       caption: "Most of them just leave",
       sub: "85% of crypto checkouts are abandoned",
-      img: "/img/beat-4.svg",
-      alt: "Ink sketch of an empty basket tipped over as a door swings shut",
+      img: "/img/beat-4.png",
+      alt: "Ink sketch of an open hand letting a smartphone fall away",
     },
     {
       caption: "Tender takes whatever they have",
       sub: "One address per chain. Settled on Monad.",
-      img: "/img/beat-5.svg",
-      alt: "Ink sketch of five coins converging into one arrow pointing at a globe",
+      img: "/img/beat-5.png",
+      alt: "Ink sketch of a hand tapping a smartphone against a payment terminal",
       link: { label: "See how it works", href: "/#how-it-works" },
     },
   ],
@@ -104,7 +104,7 @@ export const feeScroll = {
 
 export const comparison = {
   heading: "Convert more\nwith Tender.",
-  body: "Crypto checkouts lose most of their buyers, and the top cited reason is network selection confusion. Tender removes the choice entirely — every chain is simply accepted.",
+  body: "Crypto checkouts lose most of their buyers, and the top cited reason is network selection confusion. Tender removes the choice entirely. Every chain is simply accepted.",
   // Completion rate, not abandonment: the winning bar has to be the tall one,
   // the way goldsand.fi charts "up to 7%" against the banks.
   bars: [
@@ -122,7 +122,7 @@ export const showcase = {
   items: [
     {
       title: "Every chain, one address",
-      body: "Bitcoin, Solana, USDT on Tron, any EVM. Your buyer sends from the wallet they already have — no bridge, no swap, no network picker.",
+      body: "Bitcoin, Solana, USDT on Tron, any EVM. Your buyer sends from the wallet they already have, with no bridge, no swap, no network picker.",
     },
     {
       title: "Settled in seconds, not days",
@@ -162,8 +162,8 @@ export const capabilities = {
   cards: [
     {
       title: "Accept any coin",
-      body: "Bitcoin, Solana, USDT on Tron, USDC on Base — 31 chains in total. Your buyer pays from the wallet they already have open.",
-      points: ["No wallet connect", "No bridge", "No network picker"],
+      body: "Bitcoin, Solana, USDT on Tron, USDC on Base, and 27 more. Your buyer pays from the wallet they already have open.",
+      points: ["Scan and send", "No bridge", "No network picker"],
     },
     {
       title: "Settle in one asset",
@@ -189,7 +189,7 @@ export const anywhere = {
       body: "The checkout shows the asset they picked and an address that only accepts it. Nothing to get wrong.",
     },
     {
-      title: "No wallet connection",
+      title: "Works with any wallet",
       body: "Tender never asks for a signature or a connect prompt, so exchange withdrawals work exactly like wallet sends.",
     },
     {
@@ -232,7 +232,7 @@ export const settleLive = {
   heading: "Money that shows up while you are still looking at it",
   body: "Most payments clear in under a minute. You watch the invoice move from detected to settled on the same screen your customer is standing in front of.",
   stat: { value: "~40s", label: "Median time to settled" },
-  cta: { label: "Get started", href: "/#get-started" },
+  cta: { label: "Get started", href: "/app" },
   image: {
     src: "/img/settle-live.png",
     alt: "A settlement card showing a payment moving from detected to settled on Monad",
@@ -250,7 +250,7 @@ export const howItWorks = {
     {
       n: "02",
       title: "Buyer pays anything",
-      body: "They scan a QR with the wallet they already use. No wallet connect, no bridge, no network switch, no gas token.",
+      body: "They scan a QR with the wallet they already use. It works from any wallet or exchange, with no bridge, no network switch and no gas token.",
     },
     {
       n: "03",
@@ -321,7 +321,7 @@ export const faq = {
       a: "It's a first-class state, not an error. Deposits below the minimum are refunded automatically by the quote deadline, and the invoice moves to UNDERPAID. You get a webhook either way, so your system always knows.",
     },
     {
-      q: "Does my customer need a wallet connection?",
+      q: "Does my customer need to connect anything?",
       a: "Never. They see an amount and a QR code, and they send from whatever wallet or exchange they already use. There is no connect step, no signature request, and no network switching prompt.",
     },
     {
@@ -330,7 +330,7 @@ export const faq = {
     },
     {
       q: "How fast do payments settle?",
-      a: "Most settle within a minute of confirmation on the source chain. Confirmation time depends on the chain your customer pays from — Solana is seconds, Bitcoin is longer.",
+      a: "Most settle within a minute of confirmation on the source chain. Confirmation time depends on the chain your customer pays from: Solana is seconds, Bitcoin is longer.",
     },
     {
       q: "What does it cost?",
@@ -342,7 +342,7 @@ export const faq = {
 export const cta = {
   heading: "Start accepting any coin today.",
   body: "Create an invoice in under five minutes. No sales call, no contract.",
-  primary: { label: "Get started", href: "/#get-started" },
+  primary: { label: "Get started", href: "/app" },
   secondary: { label: "Read the docs", href: "/docs" },
 } as const;
 
@@ -350,7 +350,7 @@ export const footer = {
   tagline: "Any coin in. One asset out.",
   blurb:
     "Tender is an any-chain crypto checkout. Your buyer pays from the wallet they already have; you are settled in one asset on Monad.",
-  cta: { label: "Get started", href: "/#get-started" },
+  cta: { label: "Get started", href: "/app" },
   social: [
     { label: "X", href: "#x" },
     { label: "GitHub", href: "#github" },

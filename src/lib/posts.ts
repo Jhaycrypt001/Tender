@@ -45,7 +45,7 @@ export const posts: Post[] = [
       "Every payment system has to answer one awkward question: what do you do when the money that arrives is not the money you asked for? Most crypto processors answer it with silence, a stuck invoice and an email address.",
       "Underpayment happens for ordinary reasons. An exchange deducts its withdrawal fee from the amount the buyer typed. The price moved between the quote and the send. Someone typed the figure by hand and missed a decimal. None of these are fraud and none of them are rare.",
       "Tender models the short payment as a first-class invoice state rather than an exception. A deposit below the minimum is refunded by the quote deadline, the invoice moves to UNDERPAID, and your server gets a webhook saying exactly that. Your system knows what happened without anyone reading a ticket.",
-      "There is a second case that matters more and is discussed less. If a deposit succeeds and the settlement step afterwards fails, there is no automatic refund — recovery has to be explicit. We surface that as its own state, NEEDS_RECOVERY, instead of leaving the invoice sitting in limbo looking like it is still waiting.",
+      "There is a second case that matters more and is discussed less. If a deposit succeeds and the settlement step afterwards fails, there is no automatic refund, and recovery has to be explicit. We surface that as its own state, NEEDS_RECOVERY, instead of leaving the invoice sitting in limbo looking like it is still waiting.",
       "Naming the bad paths is not pessimism. It is the difference between a payment system your finance team can reconcile and one they cannot.",
     ],
   },
@@ -58,7 +58,7 @@ export const posts: Post[] = [
     readingTime: "4 min read",
     category: "Product",
     body: [
-      "A settlement layer is judged on a single axis — how long the merchant has to stand there not knowing whether they have been paid. Everything else is secondary to closing that window.",
+      "A settlement layer is judged on a single axis: how long the merchant has to stand there not knowing whether they have been paid. Everything else is secondary to closing that window.",
       "Monad gives us sub-second finality with EVM equivalence, which means the tooling merchants already trust keeps working and the confirmation arrives inside the span of a normal counter interaction. The buyer has not put their phone back in their pocket before the invoice has moved to settled.",
       "The second reason is cost. Settlement that eats a visible percentage of a small payment is not settlement, it is a tax on small baskets. Fees on Monad stay low enough that a coffee-sized payment is still worth accepting, which is the test most chains quietly fail.",
       "The third is that neither side needs to hold the native token. Gas is abstracted end to end, so a merchant can receive their first payment without ever having acquired MON, and a buyer never learns the word.",

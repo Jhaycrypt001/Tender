@@ -44,11 +44,11 @@ const SITE = "https://tender.to";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "Tender — Get paid in any coin. Settle on Monad.",
+  title: "Tender · Get paid in any coin. Settle on Monad.",
   description:
-    "Your customer pays with whatever they already hold — Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
+    "Your customer pays with whatever they already hold: Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
   openGraph: {
-    title: "Tender — Get paid in any coin. Settle on Monad.",
+    title: "Tender · Get paid in any coin. Settle on Monad.",
     description:
       "Any-chain crypto checkout. 31+ chains in, one asset out, non-custodial.",
     url: SITE,
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tender — Get paid in any coin. Settle on Monad.",
+    title: "Tender · Get paid in any coin. Settle on Monad.",
     description:
       "Any-chain crypto checkout. 31+ chains in, one asset out, non-custodial.",
   },
