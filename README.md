@@ -12,8 +12,8 @@ outright rather than mitigating it.
 
 | Half | Location | State |
 | --- | --- | --- |
-| Web — marketing site + docs | this repo, `src/` | built |
-| API — invoices, settlement poller, webhooks | not yet in the repo | in progress |
+| Web — marketing site, docs, dashboard, checkout | `frontend/` | built |
+| API — invoices, settlement poller, webhooks | `backend/` (spec: `backend/BACKEND.md`) | in progress |
 
 The web half is what is here today. It is written against the API contract documented on
 the `/docs` page; the two are reconciled once the API lands.
@@ -28,6 +28,7 @@ the `/docs` page; the two are reconciled once the API lands.
 ## Getting started
 
 ```bash
+cd frontend
 npm install
 npm run dev
 ```

@@ -1,7 +1,7 @@
 # Tender — Frontend Build Specification
 
 **Owner:** frontend (you).
-**Counterpart:** [BACKEND.md](BACKEND.md) — the backend engineer's spec. Read §5 of it; that is the contract you build against.
+**Counterpart:** [BACKEND.md](../backend/BACKEND.md) — the backend engineer's spec. Read §5 of it; that is the contract you build against.
 **Rule zero:** you never write backend code, and the backend never writes `src/`.
 
 ---
@@ -372,7 +372,7 @@ Both are marked 🔴 in BACKEND.md §1 as his day-one tasks. Chase them.
 
 ## 12. Today
 
-1. Send him [BACKEND.md](BACKEND.md) and tell him to take **Option B** in §3 so your `src/` does not move.
+1. Send him [BACKEND.md](../backend/BACKEND.md) and tell him to take **Option B** in §3 so your `src/` does not move.
 2. Ask him for the two 🔴 blockers: the status enum and the per-chain minimums.
 3. Write `src/lib/api/types.ts`, and send it to him the moment it compiles.
 4. Then build the shell. It needs nothing from anyone.
