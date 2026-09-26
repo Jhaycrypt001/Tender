@@ -1,0 +1,30 @@
+# Local infrastructure for the Tender API.
+# Postgres is published on 5434 so it never collides with a Postgres
+# installed on the host (5432) or another project's container (5433).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tender
+      POSTGRES_PASSWORD: tender
+      POSTGRES_DB: tender
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tender"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

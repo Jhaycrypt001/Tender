@@ -24,7 +24,7 @@ That mapping *is* the product. Everything below is in service of it.
 
 1. **No mock data anywhere.** Not in dev, not in seeds shown to judges, not in the demo. If a thing is not real, it returns empty, not fake.
 2. **The frontend is already published against a fixed contract.** `src/lib/docs.ts` renders a public API reference at `/docs`. The paths, field names, invoice states, ID prefixes and webhook payloads in §5 below are **copied from what that page already promises the world**. They are not suggestions. If you need to change one, tell the frontend owner first — it changes a published page.
-3. **Never edit `src/`.** Your work lands in `apps/api/` and `packages/contract/`.
+3. **Never edit `frontend/`.** Your work lands in `backend/`.
 4. **Aurora's API is called from exactly one directory** (`aurora/`). Nowhere else.
 
 ---
@@ -36,7 +36,8 @@ Every one of these was confirmed against Aurora's live documentation. They are l
 | # | Constraint | What it forces |
 |---|---|---|
 | 1 | **Aurora has no webhooks** (marked "coming soon") | You MUST own a poller. It is the heart of the system. §6. |
-| 2 | **Deposit addresses are unique per chain.** BTC and SOL cannot share one | One invoice = **N addresses**, one per accepted chain. Not one address. |
+| 2 | **Deposit addresses are unique per chain *family*.** ✅ *Verified live 2026-09-26.* **All EVM chains share one address** — minting for `base` then `arb`, `eth`, `monad` or `evm` returns the same address with `alreadyExists: true`. Every non-EVM chain (BTC, SOL, Tron, …) gets its own | One invoice = **one address per chain family**: one EVM address + one each for the non-EVM chains. Mint the EVM address **once** (`depositChain: "evm"`). On the wire, still return one `addresses[]` entry per accepted chain — the EVM chains simply repeat the same address — so the published contract does not change. |
+| 2a | **Stellar deposits require a `memo`.** ✅ *Verified live.* The mint response carries `memo`; a deposit without it is **not credited** | The published `InvoiceAddress` shape has no memo field. **Stellar is out of scope** until the contract carries one — do not offer it. |
 | 3 | **Per-deposit quotes, no batching.** Each deposit is processed independently | You **cannot** sum two partial payments into one settlement. Two payments against one invoice are two `Payment` rows. |
 | 4 | **Sub-minimum deposits are refunded automatically** (`INCOMPLETE_DEPOSIT` → "refunded by the quote deadline") | Underpayment is a **normal expected state**, not an error. Model it. |
 | 5 | **Addresses are permanent.** No TTL, no regeneration, no expiry | Invoice expiry is **Tender's** concept, invented by us, layered on top. An expired invoice's address still works — you must decide and document what happens to late money. |
@@ -51,17 +52,43 @@ Every one of these was confirmed against Aurora's live documentation. They are l
 Base: `https://intents-api.aurora.dev`
 
 ```
+GET  /api/tokens/{apiKey}
+   ->   { tokens: [ { assetId, symbol, blockchain, decimals, price, ... } ], asset_stats }
+
 POST /api/persistent-deposit-address/{apiKey}
-  body { recipient, sender, depositChain, destinationChain, destinationAsset }
-   ->   { depositAddress, alreadyExists }
+  body { recipient, sender, depositChain, destinationChain, destinationAsset, confidential? }
+   ->   { depositAddress, alreadyExists, memo?, correlationId? }
+  429 = a concurrent request is already minting this address; retry.
 
 POST /api/deposit/submit/{apiKey}
   body { txHash, depositAddress }
   optional; accelerates processing when the buyer gives us a tx hash
 
-GET  /api/persistent-deposit-status/{apiKey}?type=received|success|failed&address=...
-   ->   { deposits: [ { amount, fromChain, destinationChain, ... } ] }
+GET  /api/persistent-deposit-status/{apiKey}?type=received|success|failed&address=...&limit=&offset=
+   ->   { deposits: [ { tx_hash, fromChain, destinationChain, asset_id, decimals,
+                        amount, from, created_at, intents_account,
+                        deposit_address, recipient } ] }
 ```
+
+Chain codes are Aurora's short aliases (`eth`, `arb`, `base`, `monad`, `btc`, `sol`, `tron`, `evm`, …). Tender's wire names (`ethereum`, `arbitrum`, `bitcoin`, `solana`, …) are mapped in `aurora/mapper.ts` — nowhere else.
+
+**The address identity is** `(apiKey, sender, recipient, depositChain-family, destinationAsset, confidential)`. Same inputs → same address, forever. Different `sender` → different address. That is what makes `sender = invoice id` give every invoice its own addresses.
+
+#### Verified live — 2026-09-26
+
+Probed with a real key (`sender: "tender-smoke-001"`, destination USDC on Monad). No funds moved.
+
+| Check | Result |
+|---|---|
+| Key valid, `GET /api/tokens` | ✅ 200, 197 tokens |
+| Settlement assets on Monad | ✅ **USDC** (6 dp, `nep245:v2_1.omni.hot.tg:143_2dmLwYWkCQKyTjeUPAsGJuiVLbFx`), **USDT0** (6 dp), **MON** (18 dp). Default to USDC. |
+| Mint with Monad USDC as destination | ✅ works for `evm`, `sol`, `btc`, `tron`, `stellar` |
+| EVM chains share one address | ✅ confirmed (constraint #2) |
+| Stellar returns a `memo` | ✅ confirmed (constraint #2a) |
+| `persistent-deposit-status` on an unused address | ✅ 200 `{"deposits":[]}` for all three types |
+| Minting several families for one `sender` **in parallel** | ⚠️ Aurora answers some of them `429` on the first attempt. The client's retry absorbs it (an invoice with 3 families succeeded live), but it adds latency — if it becomes a problem, mint families sequentially. |
+
+**Not yet verified — needs a real deposit:** whether a `received` entry and its matching `success`/`failed` entry share a `tx_hash`, or how else they link (`intents_account` + amount?). **The poller's dedupe key depends on this** — see §6.
 
 **Intents Connect** (for §9 only): `/api/v1/executions/{wallet}`, `/submit`, `/intermediary`. ERC-191 signing.
 
@@ -71,16 +98,15 @@ GET  /api/persistent-deposit-status/{apiKey}?type=received|success|failed&addres
 
 60/40 revenue split in the integrator's favour. Integrator fee up to **100 bps**. Aurora floor is `max(2 bps, 40% of integrator fee)`. One integrator may generate **as many API keys as needed**, each with independent fee settings → **one Aurora API key per merchant**. Fees accrue and auto-withdraw at a $1,000 default threshold. No custody, no license, no float.
 
-### Open questions — resolve these in Aurora Studio before coding
+### Open questions — status after the 2026-09-26 live probe
 
-Research was cut short. The design below assumes none of these and degrades safely if they differ, but **two of them block the frontend**, so answer those two first and post the answers in the repo.
-
-1. 🔴 **Exact enum of deposit status values.** *Blocks frontend* — drives the status pills.
-2. 🔴 **Minimum deposit per chain.** *Blocks frontend* — must be shown to the buyer **before** they send, or constraint #4 turns into a support ticket.
-3. Full field list of `persistent-deposit-status` responses.
-4. Supported destination assets on Monad.
-5. Whether exact-output amounts are supported (decides whether "send exactly X" is truthful).
-6. API rate limits (decides poll interval and whether SSE fans out from one poll).
+1. ✅ **Deposit status values — answered.** There is **no per-deposit status field** on persistent addresses. Status is *which list a deposit appears in*: `received` (reached the Intents account), `success` (payout to recipient landed), `failed` (payout to recipient failed). The frontend's pills render **Tender's** `InvoiceStatus`, never Aurora's; `aurora/mapper.ts` derives transitions from list membership. (The `PENDING_DEPOSIT … INCOMPLETE_DEPOSIT … REFUNDED` enum in Aurora's docs belongs to the quote-based swap API, not to persistent addresses.)
+2. 🔴 **Minimum deposit per chain — still open.** *Blocks frontend.* Not documented anywhere (confirmed via the docs' own search). Next attempt: a `dry: true` quote per chain. Until known, `minimum` stays omitted from `InvoiceAddress` — it is optional in the contract for exactly this reason.
+3. ✅ **Status response fields — answered** (from the OpenAPI spec; see the API surface above).
+4. ✅ **Destination assets on Monad — answered:** USDC, USDT0, MON.
+5. Whether exact-output amounts are supported (decides whether "send exactly X" is truthful). Persistent addresses take no amount at all, so the answer is effectively **no** — the buyer page must say "send at least X", and over/underpayment is judged after the fact.
+6. **API rate limits — not documented.** Endpoints may return `429`. Back off on it; keep the poll interval in config.
+7. 🟡 **Is a post-deposit payout failure refunded?** Constraint #7's wording does not appear in the Intents *Deposits* docs; `type=failed` exists, but its refund behaviour is undocumented. Keep `NEEDS_RECOVERY` in the design, but **confirm with Aurora (contact@aurora.dev) before claiming the asymmetry to judges.**
 
 ---
 
@@ -88,7 +114,7 @@ Research was cut short. The design below assumes none of these and degrades safe
 
 | Layer | Choice | Why |
 |---|---|---|
-| Language | **TypeScript** | Shares types with the frontend via `packages/contract`. Non-negotiable. |
+| Language | **TypeScript** | Checked against the frontend's types by `backend/contract`. Non-negotiable. |
 | HTTP | **Fastify** | Fast, schema-first, first-class zod support. |
 | DB | **PostgreSQL + Prisma** | Relational state machine with hard uniqueness guarantees. |
 | Queue | **Redis + BullMQ** | Durable retries with backoff, out of the box. Needed for webhooks and the poller. |
@@ -102,47 +128,27 @@ Node 20+.
 
 ## 3. Repository layout
 
-The repo is currently frontend-only. You are converting it to npm workspaces. **Do this carefully in one commit**, because it moves the frontend's files.
-
-> ⚠️ **Coordinate the workspace move with the frontend owner before you push it.** It relocates `src/` into `apps/web/src/` and will conflict with their in-flight work. If they are mid-build, take **Option B** instead and defer the move.
-
-**Option A — full monorepo (preferred):**
+**Done (commit 253ed69):** the repo is split into two top-level folders. There are no npm workspaces; each half is its own package.
 
 ```
 tender/
-├── package.json                # workspaces: ["apps/*", "packages/*"]
-├── docker-compose.yml          # postgres + redis
-├── .env.example
-├── packages/
-│   └── contract/               # THE SEAM — both halves import this
-│       ├── package.json        # name: "@tender/contract"
-│       └── src/
-│           ├── types.ts
-│           ├── schemas.ts      # zod; source of truth for both sides
-│           └── index.ts
-├── apps/
-│   ├── web/                    # the existing frontend, moved here
-│   └── api/                    # YOUR WORK
-└── docs/
-    ├── api.md
-    └── demo-script.md
+├── frontend/                   # Next.js app — the frontend owner's. Never edit.
+│   └── src/lib/api/types.ts    # ⭐ THE SEAM — the wire contract, as TypeScript types
+└── backend/                    # YOUR WORK
+    ├── package.json
+    ├── docker-compose.yml      # postgres (5433) + redis
+    ├── .env.example
+    ├── contract/               # zod schemas for the wire contract
+    ├── prisma/schema.prisma
+    └── src/
 ```
 
-**Option B — no move, if the frontend owner is mid-build:**
+**The contract.** The frontend owner has already written the wire contract as TypeScript types in `frontend/src/lib/api/types.ts`. The backend does not keep a second copy of those types. `backend/contract/` holds the **zod schemas** that validate requests and shape responses, and a type-level test asserts that `z.infer<schema>` matches the frontend's type exactly. If either side changes a shape alone, `tsc` fails in the backend. That check is what stops the two halves drifting.
+
+### `backend/` internal layout
 
 ```
-tender/
-├── src/                        # frontend stays exactly where it is
-├── packages/contract/          # still shared; frontend imports by relative path
-└── apps/api/                   # your work, self-contained
-```
-
-Either way, **`packages/contract` exists and both halves import it.** That package is the single most important decision in this document: it is what stops the two halves drifting while they are built in parallel.
-
-### `apps/api/` internal layout
-
-```
-apps/api/src/
+backend/src/
 ├── server.ts             # Fastify bootstrap, plugin registration, graceful shutdown
 ├── routes/               # HTTP ONLY: validate -> call service -> shape response
 │   ├── invoices.ts
@@ -232,7 +238,7 @@ model InvoiceAddress {
   invoice  Invoice   @relation(fields: [invoiceId], references: [id])
   payments Payment[]
 
-  @@unique([invoiceId, chain])        // constraint #2
+  @@unique([invoiceId, family])       // one address per chain family (constraint #2)
   @@index([address])
 }
 
@@ -288,7 +294,7 @@ enum RecoveryState { OPEN RETRYING WITHDRAWN RESOLVED FAILED }
 
 - `Payment.auroraTxHash @unique` — the poller runs at-least-once and may run twice concurrently. This constraint is what makes that safe.
 - `@@unique([merchantId, reference])` — merchants retry creates on network failure. This turns a retry into an idempotent no-op instead of a duplicate charge.
-- `@@unique([invoiceId, chain])` — constraint #2, enforced by the database rather than by hope.
+- `@@unique([invoiceId, family])` — constraint #2, enforced by the database rather than by hope. All EVM chains share the one `evm` row.
 
 **Money is `Decimal(36,18)`. Never `Float`.** Never parse an on-chain amount into a JS number.
 
@@ -516,7 +522,7 @@ Dependency-ordered. Each step is independently demoable, which matters when time
 
 | # | Step | Unblocks |
 |---|---|---|
-| 1 | **`packages/contract`** — types + zod schemas | 🔴 **BOTH HALVES. Do this first, today, and tell the frontend owner the moment it lands.** |
+| 1 | **`backend/contract`** — zod schemas, checked against `frontend/src/lib/api/types.ts` | 🔴 **BOTH HALVES. Do this first, today, and tell the frontend owner the moment it lands.** |
 | 2 | Prisma schema + migrations + a real (non-fake) seed | everything |
 | 3 | **`aurora/client.ts` against the real API** — prove an address can actually be minted | 🔴 **do this on day one.** If Aurora access has a problem, both halves need to know now, not on day four. |
 | 4 | `POST /v1/invoices` + per-chain address minting | the dashboard's create flow |
@@ -592,5 +598,55 @@ Order matters. Beats 6 and 7 are what separate this from every other entry.
 
 1. Read §1. All ten constraints. They are not background — each one dictates a decision below it.
 2. Get Aurora Studio access and **answer open questions #1 and #2**, then post them in the repo. The frontend is blocked on both.
-3. Write `packages/contract` and tell the frontend owner it exists.
+3. Write `backend/contract` and tell the frontend owner it exists.
 4. Mint one real deposit address against the real Aurora API. Nothing else is real until that is.
+
+---
+
+## 16. Implementation status — 2026-09-26
+
+What is built, what was decided while building it, and what is honestly not possible yet. Everything below is covered by the test suite (100 tests: unit, integration against a real Postgres + Redis, and a fake Aurora) unless it says otherwise.
+
+### Built
+
+| Step | What exists |
+|---|---|
+| 1 Contract | `contract/schemas.ts` + `contract.check.ts`: `tsc` fails if any schema drifts from `frontend/src/lib/api/types.ts` |
+| 2 Data model | Prisma migrations; every load-bearing unique constraint enforced by Postgres |
+| 3 Aurora client | `src/aurora/` — timeouts, retries, zod-parsed responses, key never logged. Live-tested |
+| 4–5 Invoices | Create / list / get / cancel, and the public checkout read. Live-tested against real Aurora |
+| 6 Poller | `src/workers/poller.ts` — idempotent, concurrency-safe (row lock), per-address backoff. Live-polled real addresses |
+| 7 SSE | `/public/invoices/:token/events` via Redis pub/sub; the frontend's `EventSource` shape |
+| 8 Webhooks | Outbox + `webhook.worker.ts`: signed, backoff 30s→8h then gives up, `SKIP LOCKED` claims, SSRF-safe at connect time |
+| 9 Recovery | `NEEDS_RECOVERY` + tasks; `/retry`, `/withdraw` — see the decision below |
+| 10 Hardening | argon2 keys; Redis-backed rate limits; SSRF guard; settlement proof-of-control (EIP-191 challenge) |
+| 11 Dashboard | payments list/detail, balance, links (+ `POST /public/links/:token`), `PATCH /v1/merchant`, webhook test |
+| 12 Metrics | Prometheus: API `GET /metrics`, worker on `:9464`. Optional `METRICS_TOKEN` |
+| — Chains | `/public/chains` + per-address `minimum`, **measured live** (see below) |
+
+### Decisions made while building
+
+- **Coverage is judged on what the buyer sent** (USD value at detection, from Aurora's price feed), with a 1% tolerance (`PAYMENT_TOLERANCE_BPS`). Fees come out of what the merchant receives, as with a card — judging on the settled amount would mark every correct payment short.
+- **Payments are judged one at a time, never summed** (as `types.ts` requires). A second payment after SETTLED makes it OVERPAID, as `/docs` promises — the one move out of a terminal state, matching the §5 diagram.
+- **Deadline and late money.** A deposit that reaches Aurora up to `EXPIRY_GRACE_MINUTES` (15) after the deadline still counts. Later money is recorded against the invoice without reopening it. Closed invoices are watched for `LATE_WINDOW_HOURS` (24).
+- **Only the expiry step closes an invoice**, and only after every address was polled successfully past the window. An Aurora outage can never expire a paid invoice. (A test caught the bug this rule fixes.)
+- **Minimums are measured, not guessed.** The worker binary-searches dry quotes (`/api/quote`, `dry: true`) per chain every 30 min, refunding to an origin-chain probe address (an Intents-account refund under-measures by ~20%), adds a 20% margin, and caches in Redis. Live on 2026-09-26: Bitcoin $8.45, Tron $3.29, Solana $0.41, Ethereum $0.37, Base $0.19, Arbitrum/Monad $0.02. Minimums are **USD**, because a buyer may send more than one asset on a chain.
+- **Payout matching is inferred.** Whether a `success` entry carries the deposit's tx hash is unknown until a real payment; `matchOutcomes` matches on a shared hash first, else chronologically within the invoice's own address.
+
+### Constraint #7 does not apply to persistent addresses
+
+The "`OPERATION_FAILED` is not auto-refunded; recovery is explicit (retry/withdraw)" behaviour is from **Intents Connect executions**. Persistent deposit addresses have **no retry, withdraw or refund API** (confirmed against the docs and their search, 2026-09-26). Aurora's documented route for a stuck payout is a support case at https://aurora.dev/intents-support. So:
+
+- `/retry` re-checks Aurora immediately and keeps watching; if Aurora completes the payout, the payment settles and the task resolves.
+- `/withdraw` records the requested destination and attaches a ready-to-file support case. The task stays `OPEN` — it never claims funds moved.
+- `/refund` returns `501`.
+
+**Do not tell judges Tender retries or withdraws funds itself.** The accurate line: *"Tender detects a payout that failed after the deposit landed, gives it its own state instead of a generic failure, keeps watching for Aurora to complete it, and hands the merchant a ready support case."*
+
+### Not built
+
+- **Earn / Intents Connect (§9).** Aurora's deposit "Custom Actions" are *coming soon*; Connect needs the merchant's wallet to sign each execution in the browser plus a verified Monad lending integration. `GET /v1/earn/positions` returns `[]`, `POST /v1/earn/deposit` returns `501`.
+- **Ramps.** No off-ramp partner: `GET /v1/ramps/corridors` returns `[]`.
+- **`tk_test_` sandbox keys**, promised at `/docs`. Aurora has no testnet for persistent addresses.
+- **Smart-contract settlement wallets** (ERC-1271) in proof-of-control: EOAs only.
+- **A real end-to-end payment.** Still required: ~$2 from Solana to a live invoice. It verifies payout matching and the deposit → settled path on camera.

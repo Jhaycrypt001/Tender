@@ -1,0 +1,211 @@
+// Tender data model. See BACKEND.md §4.
+//
+// Three constraints here are load-bearing. Do not relax them:
+//   Payment.auroraTxHash @unique        — the poller is at-least-once; this makes a
+//                                         double run produce one row, not two.
+//   Invoice @@unique([merchantId, reference]) — a merchant retrying a create gets
+//                                         the same invoice, not a second charge.
+//   InvoiceAddress @@unique([invoiceId, family]) — one address per chain family
+//                                         (all EVM chains share one; verified live).
+//
+// Money is Decimal(36,18). Never Float.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Merchant {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  /// Monad (chain 143). Unusable for settlement until settlementVerified is true.
+  settlementAddress  String?
+  /// Aurora asset id or symbol on Monad, e.g. "USDC".
+  settlementAsset    String?
+  settlementVerified Boolean  @default(false)
+  feeBps             Int      @default(40)
+  webhookUrl         String?
+  webhookSecret      String
+  /// argon2id hash. The key itself is shown once and never stored.
+  apiKeyHash         String
+  /// First characters of the key, for lookup and for display ("tk_live_ab12…").
+  apiKeyPrefix       String   @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  invoices Invoice[]
+  links    PaymentLink[]
+}
+
+model Invoice {
+  /// "inv_" + base62. Merchant-facing; never in a buyer URL.
+  id             String        @id
+  /// "chk_" + base62, 160 bits. The only identifier a buyer ever sees.
+  token          String        @unique
+  merchantId     String
+  /// The merchant's own order id.
+  reference      String
+  amountExpected Decimal       @db.Decimal(36, 18)
+  currency       String
+  /// Tender chain ids the buyer may pay on, e.g. ["solana", "base"]. Each maps
+  /// to one InvoiceAddress by family; EVM chains share the evm address.
+  chains         String[]
+  status         InvoiceStatus @default(PENDING)
+  expiresAt      DateTime
+  redirectUrl    String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  merchant  Merchant         @relation(fields: [merchantId], references: [id])
+  addresses InvoiceAddress[]
+  payments  Payment[]
+  events    InvoiceEvent[]
+
+  @@unique([merchantId, reference])
+  @@index([status, expiresAt])
+}
+
+/// A reusable payment link: one URL, many buyers. Each buyer who opens it gets
+/// their own invoice (and so their own deposit addresses).
+model PaymentLink {
+  /// "lnk_" + base62. Merchant-facing.
+  id         String   @id
+  /// "pl_" + base62, 160 bits. The only identifier in the public URL.
+  token      String   @unique
+  merchantId String
+  label      String
+  /// Null: the buyer chooses the amount.
+  amount     Decimal? @db.Decimal(36, 18)
+  currency   String
+  active     Boolean  @default(true)
+  uses       Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId, createdAt])
+}
+
+model InvoiceAddress {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  /// Aurora deposit family: "evm" | "sol" | "btc" | "tron" | … (constraint #2).
+  family       String
+  address      String
+  /// What we passed to Aurora as `sender` — the invoice id (constraint #6).
+  auroraSender String
+  /// Per-address poll backoff: one failing address must never stall the loop.
+  pollFailures Int      @default(0)
+  nextPollAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  invoice  Invoice   @relation(fields: [invoiceId], references: [id])
+  payments Payment[]
+
+  @@unique([invoiceId, family])
+  @@index([address])
+  @@index([nextPollAt])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  invoiceId        String
+  invoiceAddressId String
+  /// Dedupe key. ⚠️ Whether Aurora's `received` and `success` entries share this
+  /// hash is not yet verified live — see BACKEND.md §1.
+  auroraTxHash     String        @unique
+  fromChain        String
+  /// Aurora asset id of what the buyer sent, e.g. "nep141:sol.omft.near".
+  assetIn          String?
+  amountIn         Decimal       @db.Decimal(36, 18)
+  /// USD value of amountIn at detection, from Aurora's price feed. What
+  /// coverage is judged on: fees are the merchant's cost, as with a card.
+  amountInUsd      Decimal?      @db.Decimal(36, 18)
+  amountSettled    Decimal?      @db.Decimal(36, 18)
+  /// The payout (success/failed list) entry this payment was matched to.
+  outcomeTxHash    String?       @unique
+  status           PaymentStatus
+  firstSeenAt      DateTime      @default(now())
+  settledAt        DateTime?
+  /// The untouched Aurora payload(s), for audit.
+  raw              Json
+
+  invoice  Invoice        @relation(fields: [invoiceId], references: [id])
+  address  InvoiceAddress @relation(fields: [invoiceAddressId], references: [id])
+  recovery RecoveryTask?
+}
+
+/// Every status change an invoice goes through. Backs the dashboard's history
+/// view and replays to an SSE client that connects late.
+model InvoiceEvent {
+  id        String        @id
+  invoiceId String
+  status    InvoiceStatus
+  paymentId String?
+  note      String?
+  at        DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId, at])
+}
+
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  merchantId  String
+  invoiceId   String
+  event       String
+  payload     Json
+  attempts    Int       @default(0)
+  nextRetryAt DateTime?
+  deliveredAt DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([deliveredAt, nextRetryAt])
+}
+
+model RecoveryTask {
+  id        String        @id @default(cuid())
+  paymentId String        @unique
+  reason    String
+  state     RecoveryState @default(OPEN)
+  attempts  Int           @default(0)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+}
+
+enum InvoiceStatus {
+  PENDING
+  DETECTED
+  SETTLED
+  OVERPAID
+  UNDERPAID
+  EXPIRED
+  CANCELLED
+  NEEDS_RECOVERY
+}
+
+enum PaymentStatus {
+  DETECTED
+  SETTLED
+  FAILED
+  REFUNDED
+}
+
+enum RecoveryState {
+  OPEN
+  RETRYING
+  WITHDRAWN
+  RESOLVED
+  FAILED
+}
