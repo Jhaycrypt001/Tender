@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Money } from "@/components/dash/money";
 import { QRCode } from "@/components/pay/qr";
+import { submitTx } from "@/lib/api/public";
 import type { InvoiceStatus, PublicInvoice } from "@/lib/api/types";
+import { chainLabel } from "@/lib/chains";
 
 /**
  * The buyer's checkout.
@@ -27,29 +30,6 @@ import type { InvoiceStatus, PublicInvoice } from "@/lib/api/types";
 
 /** Statuses where the buyer still has something to do. */
 const OPEN: InvoiceStatus[] = ["PENDING", "DETECTED"];
-
-/**
- * Display names for chains.
- *
- * The wire carries lowercase ids (`base`, `bitcoin`). Rendering those raw
- * put "base" and "bitcoin" in front of a buyer on the one screen that has to
- * look trustworthy. `ChainId` is deliberately an OPEN union — the API can add
- * a chain we have not named — so an unknown id falls back to capitalising it
- * rather than rendering blank or "Unknown".
- */
-const CHAIN_LABEL: Record<string, string> = {
-  bitcoin: "Bitcoin",
-  solana: "Solana",
-  base: "Base",
-  ethereum: "Ethereum",
-  arbitrum: "Arbitrum",
-  tron: "Tron",
-  monad: "Monad",
-};
-
-function chainLabel(id: string): string {
-  return CHAIN_LABEL[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
-}
 
 function useCountdown(expiresAt: string) {
   // Null until mounted: the server and the browser would otherwise compute
@@ -109,6 +89,94 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+/**
+ * "I already sent it" — the accelerator.
+ *
+ * ⚠️ This is optional and it is NOT an error path. The payment is found by the
+ * next poll whether or not the buyer touches this, so a failure here changes
+ * nothing about whether they get their goods. That is why a rejected hash says
+ * "we will find it anyway" rather than showing a red error: the buyer who
+ * reaches for this is already anxious, and telling them their payment failed
+ * when it has not is how this page creates the support ticket it exists to
+ * prevent.
+ *
+ * It only exists because Aurora has no webhooks, so detection is a poll on an
+ * interval. This lets a buyer who is watching skip the wait.
+ */
+function AlreadySent({ token }: { token: string }) {
+  const [open, setOpen] = useState(false);
+  const [hash, setHash] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    const value = hash.trim();
+    if (!value || busy) return;
+
+    setBusy(true);
+    setNote("");
+    const result = await submitTx(token, value);
+    setBusy(false);
+
+    // Both branches are reassuring on purpose — see the note above.
+    setNote(
+      result.ok && result.data.accepted
+        ? "Thanks — we are looking for it now."
+        : "Thanks. We could not match that reference, but your payment will still be found automatically.",
+    );
+    if (result.ok && result.data.accepted) setHash("");
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-4 text-[0.8125rem] text-paper/60 underline decoration-paper/30 underline-offset-4 transition-colors hover:text-paper"
+      >
+        Already sent it?
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={send} className="mt-4 border-t border-paper/10 pt-4">
+      <label
+        htmlFor="tx-hash"
+        className="block text-[0.8125rem] leading-relaxed text-paper/60"
+      >
+        Paste the transaction ID from your wallet and we will look for it right
+        away. You do not have to — it is found automatically either way.
+      </label>
+      <div className="mt-2.5 flex gap-2">
+        <input
+          id="tx-hash"
+          name="tx_hash"
+          value={hash}
+          onChange={(e) => setHash(e.target.value)}
+          placeholder="Transaction ID"
+          autoComplete="off"
+          spellCheck={false}
+          className="min-w-0 flex-1 rounded-lg border border-paper/20 bg-paper/[0.04] px-3 py-2 font-mono text-[0.8125rem] text-paper placeholder:text-paper/30 focus:border-paper/50 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={busy || !hash.trim()}
+          className="shrink-0 rounded-lg border border-paper/20 px-3 py-2 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-paper/80 transition-colors hover:border-paper/40 hover:text-paper disabled:cursor-not-allowed disabled:text-paper/30"
+        >
+          {busy ? "Checking" : "Check"}
+        </button>
+      </div>
+      {note && (
+        <p role="status" className="mt-2.5 text-[0.8125rem] text-paper/70">
+          {note}
+        </p>
+      )}
+    </form>
+  );
+}
+
 export default function Checkout({
   invoice,
   /** SSE endpoint. Empty when the API is not configured. */
@@ -136,21 +204,35 @@ export default function Checkout({
    * the buyer is staring at the screen deciding whether this worked. The stream
    * is closed as soon as the invoice reaches a state the buyer cannot change.
    */
+  // ⚠️ `status` is deliberately NOT a dependency, and `done` is a ref rather
+  // than state. Depending on status tore the EventSource down and rebuilt it on
+  // every transition — so the PENDING -> DETECTED hop, which happens while the
+  // buyer is watching the screen, dropped the stream and reconnected. The
+  // moment the connection is least replaceable is the moment it was being
+  // recycled. One stream is opened, and it closes itself once the invoice
+  // reaches a state the buyer cannot change.
+  const done = useRef(false);
+
   useEffect(() => {
-    if (!eventsUrl || !OPEN.includes(status)) return;
+    if (!eventsUrl) return;
 
     const source = new EventSource(eventsUrl);
     source.onmessage = (event) => {
       try {
         const next = JSON.parse(event.data) as { status?: InvoiceStatus };
-        if (next.status) setStatus(next.status);
+        if (!next.status) return;
+        setStatus(next.status);
+        if (!OPEN.includes(next.status)) {
+          done.current = true;
+          source.close();
+        }
       } catch {
         // A malformed frame is not worth tearing the stream down for.
       }
     };
     // On error the browser reconnects on its own; nothing to do here.
     return () => source.close();
-  }, [eventsUrl, status]);
+  }, [eventsUrl]);
 
   // Once paid, hand back to the merchant if they gave us somewhere to go.
   useEffect(() => {
@@ -180,7 +262,12 @@ export default function Checkout({
         <div>
           <p className="eyebrow text-mute">Pay {invoice.merchant_name}</p>
           <p className="mt-3 font-display text-[2.25rem] leading-none tracking-[-0.03em] md:text-[2.75rem]">
-            {invoice.amount_expected}
+            {/* ⚠️ maxDp={8}, not the default 2. `Money` TRUNCATES rather
+                than rounds, so a crypto-denominated invoice rendered at 2dp
+                would quietly understate what is owed — and the buyer would
+                send that smaller number, land under the minimum, and have
+                the whole deposit auto-refunded. */}
+            <Money amount={invoice.amount_expected} maxDp={8} />
             <span className="ml-2 font-mono text-[0.9375rem] tracking-[0.08em] text-mute">
               {invoice.currency}
             </span>
@@ -273,6 +360,8 @@ export default function Checkout({
                   ? "Payment spotted. Waiting for it to confirm — you can close this page, it will still complete."
                   : "This page updates by itself when your payment arrives. No need to refresh."}
               </p>
+
+              <AlreadySent token={invoice.token} />
             </>
           ) : (
             <p className="text-[0.9375rem] text-paper/70">
@@ -412,7 +501,8 @@ function Resolved({
       </p>
 
       <p className="mt-8 font-mono text-[0.75rem] uppercase tracking-[0.12em] text-mute">
-        {invoice.amount_expected} {invoice.currency}
+        <Money amount={invoice.amount_expected} maxDp={8} />{" "}
+        {invoice.currency}
       </p>
     </div>
   );

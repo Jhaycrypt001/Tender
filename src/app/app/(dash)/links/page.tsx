@@ -1,18 +1,104 @@
-import { Placeholder } from "@/components/dash/placeholder";
+import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
+import { Card } from "@/components/dash/card";
+import { Empty, ErrorState } from "@/components/dash/empty";
+import { CopyValue } from "@/components/dash/copy";
+import { Money, Timestamp } from "@/components/dash/money";
+import { listLinks } from "@/lib/api/links";
+import { APP_URL } from "@/lib/auth";
+import { LinkForm } from "./form";
 
 export const metadata = { title: "Links · Tender" };
 
-export default function LinksPage() {
+export const dynamic = "force-dynamic";
+
+/** How many links to show. Links are few by nature — these are not invoices. */
+const LIMIT = 50;
+
+/**
+ * Reusable payment links.
+ *
+ * ⚠️ Every share URL is built from `token`, never `id` — the same rule the
+ * invoice page follows. The id is enumerable and merchant-private; putting it
+ * in a URL that gets pasted into a group chat would hand a stranger a walk
+ * through the merchant's links.
+ */
+export default async function LinksPage() {
+  const result = await listLinks({ limit: LIMIT });
+
   return (
-    <Placeholder
-      eyebrow="Reusable"
-      title="Links"
-      description="One link, shared once, that many buyers can pay."
-      building={[
-        "Create a link with a fixed amount, or let the buyer choose",
-        "See how many times each link has been paid",
-        "Deactivate a link without touching the payments it made",
-      ]}
-    />
+    <PageShell>
+      <PageHeader
+        eyebrow="Get paid"
+        title="Payment links"
+        description="One link you can reuse. Every buyer who opens it gets their own invoice."
+      />
+
+      <LinkForm />
+
+      <div className="mt-7">
+        <SectionHeader label="Your links" />
+
+        {!result.ok ? (
+          <ErrorState error={result.error} />
+        ) : result.data.data.length === 0 ? (
+          <Empty
+            title="No links yet"
+            description="Create one above. A link is worth making when you get paid the same amount more than once — a retainer, a class, a standard service."
+          />
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {result.data.data.map((link) => {
+              const url = `${APP_URL}/pay/${link.token}`;
+              return (
+                <li key={link.id}>
+                  <Card tone="quiet">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <span className="text-[0.9375rem]">{link.label}</span>
+                        <span className="text-[0.9375rem]">
+                          {/* A null amount is the open-amount link. Rendering
+                              "0.00" here would be a lie about what the buyer
+                              is asked for. */}
+                          {link.amount ? (
+                            <Money
+                              amount={link.amount}
+                              currency={link.currency}
+                            />
+                          ) : (
+                            <span className="text-mute">Buyer chooses</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-paper px-3 py-2">
+                        <code className="min-w-0 break-all font-mono text-[0.75rem]">
+                          {url}
+                        </code>
+                        <CopyValue value={url} label="Copy link" />
+                      </div>
+
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line pt-2.5 text-[0.8125rem] text-mute">
+                        <span>
+                          {/* `uses` is a count of invoices produced, not of
+                              payments received. Those differ whenever a buyer
+                              opens a link and does not pay. */}
+                          {link.uses === 1
+                            ? "1 invoice created"
+                            : `${link.uses} invoices created`}
+                          {!link.active && " · paused"}
+                        </span>
+                        <span>
+                          Created <Timestamp value={link.created_at} />
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </PageShell>
   );
 }
