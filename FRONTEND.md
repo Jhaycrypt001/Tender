@@ -104,7 +104,7 @@ src/app/app/callback/route.ts        OAuth callback                 ✅ BUILT
 src/app/app/start/route.ts           OAuth start                    ✅ BUILT
 src/app/app/signout/route.ts         sign out                       ✅ BUILT
 
-src/app/app/(dash)/layout.tsx        ⬜ dash chrome + auth guard
+src/app/app/(dash)/layout.tsx        ✅ dash chrome + auth guard
 src/app/app/(dash)/home/             ✅ Home
 src/app/app/(dash)/checkout/         ✅ Checkout: new + [id]
 src/app/app/(dash)/activity/         ✅ Activity
@@ -113,7 +113,7 @@ src/app/app/(dash)/links/            ✅ Links
 src/app/app/(dash)/earn/             ✅ Earn
 src/app/app/(dash)/ramps/            ✅ Ramps
 src/app/app/(dash)/settings/         ✅ Settings: settlement + developers
-src/app/app/(dash)/ask/              ⬜ Ask (cut first if short on time)
+src/app/app/(dash)/ask/              ✅ Ask (saved questions, not free text)
 
 src/app/pay/[token]/page.tsx         ✅ 🔴 THE BUYER CHECKOUT — public, no auth
 ```
