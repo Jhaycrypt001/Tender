@@ -605,7 +605,7 @@ Order matters. Beats 6 and 7 are what separate this from every other entry.
 
 ## 16. Implementation status — 2026-09-26
 
-What is built, what was decided while building it, and what is honestly not possible yet. Everything below is covered by the test suite (100 tests: unit, integration against a real Postgres + Redis, and a fake Aurora) unless it says otherwise.
+What is built, what was decided while building it, and what is honestly not possible yet. Everything below is covered by the test suite (110 tests: unit, integration against a real Postgres + Redis, and a fake Aurora) unless it says otherwise.
 
 ### Built
 
@@ -619,10 +619,16 @@ What is built, what was decided while building it, and what is honestly not poss
 | 7 SSE | `/public/invoices/:token/events` via Redis pub/sub; the frontend's `EventSource` shape |
 | 8 Webhooks | Outbox + `webhook.worker.ts`: signed, backoff 30s→8h then gives up, `SKIP LOCKED` claims, SSRF-safe at connect time |
 | 9 Recovery | `NEEDS_RECOVERY` + tasks; `/retry`, `/withdraw` — see the decision below |
-| 10 Hardening | argon2 keys; Redis-backed rate limits; SSRF guard; settlement proof-of-control (EIP-191 challenge) |
+| 10 Hardening | argon2 keys; Redis-backed rate limits; SSRF guard; settlement proof-of-control (EIP-191 challenge; smart-contract wallets via ERC-1271 over Monad RPC) |
 | 11 Dashboard | payments list/detail, balance, links (+ `POST /public/links/:token`), `PATCH /v1/merchant`, webhook test |
 | 12 Metrics | Prometheus: API `GET /metrics`, worker on `:9464`. Optional `METRICS_TOKEN` |
 | — Chains | `/public/chains` + per-address `minimum`, **measured live** (see below) |
+| — Docs | Swagger UI at `/docs` (test fails if it drifts from the routes); `docs/openapi.json`; `docs/demo-script.md` with the corrected recovery line |
+| — Crash safety | §12 kill-mid-poll: simulated at three points (mid-transaction, after commit, webhook worker holding a lease) — `test/crash.test.ts` |
+
+### Why BullMQ was not used
+
+The spec chose Redis + BullMQ. It was replaced by a Postgres **outbox** because a status change (Postgres) and a BullMQ job (Redis) cannot share a transaction: commit-then-enqueue can lose a webhook on a crash; enqueue-then-commit can announce a payment that was never recorded. The outbox writes the status change and its webhook row in one transaction, delivered with `SKIP LOCKED` claims and stored backoff. The poller is a periodic scan, not a job queue. `bullmq` remains installed but unused — remove it, or add a relay if its tooling is wanted.
 
 ### Decisions made while building
 
@@ -648,5 +654,4 @@ The "`OPERATION_FAILED` is not auto-refunded; recovery is explicit (retry/withdr
 - **Earn / Intents Connect (§9).** Aurora's deposit "Custom Actions" are *coming soon*; Connect needs the merchant's wallet to sign each execution in the browser plus a verified Monad lending integration. `GET /v1/earn/positions` returns `[]`, `POST /v1/earn/deposit` returns `501`.
 - **Ramps.** No off-ramp partner: `GET /v1/ramps/corridors` returns `[]`.
 - **`tk_test_` sandbox keys**, promised at `/docs`. Aurora has no testnet for persistent addresses.
-- **Smart-contract settlement wallets** (ERC-1271) in proof-of-control: EOAs only.
 - **A real end-to-end payment.** Still required: ~$2 from Solana to a live invoice. It verifies payout matching and the deposit → settled path on camera.

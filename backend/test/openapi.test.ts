@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { OPERATIONS } from "../src/openapi.js";
+import { buildOpenApiDocument, OPERATIONS } from "../src/openapi.js";
 import { setupApp, teardown, type TestContext } from "./helpers.js";
 
 let t: TestContext;
@@ -14,6 +15,11 @@ describe("Swagger / OpenAPI", () => {
     const served = [...new Set(t.app.apiRoutes)].sort();
     const documented = Object.keys(OPERATIONS).sort();
     expect(documented).toEqual(served);
+  });
+
+  it("keeps docs/openapi.json up to date (run npm run openapi:export)", () => {
+    const onDisk = JSON.parse(readFileSync(new URL("../docs/openapi.json", import.meta.url), "utf8"));
+    expect(onDisk).toEqual(JSON.parse(JSON.stringify(buildOpenApiDocument())));
   });
 
   it("serves the document and the UI", async () => {

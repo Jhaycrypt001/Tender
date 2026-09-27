@@ -20,6 +20,7 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { publicRoutes } from "./routes/public.js";
 import type { ChainCatalogueReader } from "./services/chains.service.js";
+import type { ChainReader } from "./services/settlement-proof.service.js";
 import type { InvoiceStream } from "./services/stream.js";
 
 declare module "fastify" {
@@ -36,6 +37,8 @@ export type AppDeps = {
   aurora: Pick<AuroraClient, "mintAddress" | "submitDeposit">;
   stream: InvoiceStream;
   catalogue: ChainCatalogueReader;
+  /** Monad RPC reader for smart-contract wallet proofs. Optional: without it, EOAs only. */
+  chain?: ChainReader;
 };
 
 /**
@@ -117,7 +120,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // this plugin, so it can never leak onto /public or /health.
   await app.register(async (merchantScope) => {
     requireMerchant(merchantScope, deps.db);
-    merchantRoutes(merchantScope, { db: deps.db, redis: deps.redis });
+    merchantRoutes(merchantScope, { db: deps.db, redis: deps.redis, chain: deps.chain });
     paymentRoutes(merchantScope, { db: deps.db });
     dashboardRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, ttlMinutes: config.INVOICE_TTL_MINUTES });
     invoiceRoutes(merchantScope, {

@@ -1,4 +1,5 @@
 import { Redis } from "ioredis";
+import { createPublicClient, defineChain, http } from "viem";
 import { buildApp } from "./app.js";
 import { AuroraClient } from "./aurora/client.js";
 import { loadConfig } from "./config.js";
@@ -27,7 +28,15 @@ const aurora = new AuroraClient({
   logger: createLogger(config.LOG_LEVEL, config.NODE_ENV === "development").child({ component: "aurora" }),
 });
 
-const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis) });
+const monad = defineChain({
+  id: 143,
+  name: "Monad",
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+  rpcUrls: { default: { http: [config.MONAD_RPC_URL] } },
+});
+const chain = createPublicClient({ chain: monad, transport: http(config.MONAD_RPC_URL, { timeout: 10_000 }) });
+
+const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain });
 
 // Graceful shutdown: stop taking requests, then close connections. A second
 // signal forces exit.

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Redis } from "ioredis";
-import { verifyMessage, type Hex } from "viem";
+import { verifyMessage, type Hex, type PublicClient } from "viem";
 import type { Db } from "../db/client.js";
 import type { Merchant } from "../generated/prisma/client.js";
 import { ApiError, conflict } from "../lib/errors.js";
@@ -20,8 +20,11 @@ import { ApiError, conflict } from "../lib/errors.js";
  * - It is single-use: consumed on the first successful verify.
  * - If the address changes after the challenge was issued, verification fails.
  *
- * Supports EOA wallets. Smart-contract wallets (ERC-1271) need an on-chain
- * call and are not supported yet.
+ * Wallets:
+ *  - ordinary wallets (EOAs) are checked locally, with no network call;
+ *  - smart-contract wallets (Safe and other ERC-1271 wallets) are checked by
+ *    asking the contract itself, over Monad RPC — only when the local check
+ *    fails AND the address actually holds contract code.
  */
 
 const TTL_SECONDS = 10 * 60;
@@ -51,8 +54,11 @@ export async function issueChallenge(redis: Pick<Redis, "set">, merchant: Mercha
   return { nonce, message, expires_at: expiresAt };
 }
 
+/** The slice of a viem client needed for contract wallets. Optional: without it, EOAs only. */
+export type ChainReader = Pick<PublicClient, "getCode" | "verifyMessage">;
+
 export async function verifyChallenge(
-  deps: { db: Db; redis: Pick<Redis, "get" | "del"> },
+  deps: { db: Db; redis: Pick<Redis, "get" | "del">; chain?: ChainReader },
   merchant: Merchant,
   signature: string,
 ): Promise<Merchant> {
@@ -65,11 +71,7 @@ export async function verifyChallenge(
     throw new ApiError(400, "address_changed", "The settlement address changed after this challenge was issued. Request a new one.");
   }
 
-  const valid = await verifyMessage({
-    address: challenge.address as Hex,
-    message: challenge.message,
-    signature: signature as Hex,
-  }).catch(() => false);
+  const valid = await signedBy(challenge.address as Hex, challenge.message, signature as Hex, deps.chain);
   if (!valid) throw new ApiError(400, "invalid_signature", "The signature does not match the settlement address.");
 
   // Single use. Deleting before the write means a racing second verify fails.
@@ -77,4 +79,15 @@ export async function verifyChallenge(
   if (consumed === 0) throw new ApiError(400, "challenge_expired", "No active challenge. Request a new one.");
 
   return deps.db.merchant.update({ where: { id: merchant.id }, data: { settlementVerified: true } });
+}
+
+async function signedBy(address: Hex, message: string, signature: Hex, chain: ChainReader | undefined): Promise<boolean> {
+  // An ordinary wallet: pure signature recovery, no network.
+  if (await verifyMessage({ address, message, signature }).catch(() => false)) return true;
+  if (!chain) return false;
+
+  // A smart-contract wallet validates signatures itself (ERC-1271).
+  const code = await chain.getCode({ address }).catch(() => undefined);
+  if (!code || code === "0x") return false;
+  return chain.verifyMessage({ address, message, signature }).catch(() => false);
 }

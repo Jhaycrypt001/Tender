@@ -35,6 +35,9 @@ const schema = z.object({
   POLL_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(4),
   POLL_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(200),
 
+  /** Monad RPC, used only to verify smart-contract settlement wallets (ERC-1271). */
+  MONAD_RPC_URL: z.url().default("https://rpc.monad.xyz"),
+
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),
   /** Port for the worker process's own /metrics endpoint. */

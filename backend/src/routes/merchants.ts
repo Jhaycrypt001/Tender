@@ -8,13 +8,13 @@ import { eventId } from "../lib/ids.js";
 import { assertSafeWebhookUrl, UnsafeDestinationError } from "../lib/safe-http.js";
 import { SETTLEMENT_ASSETS, updateMerchant } from "../services/merchant.service.js";
 import { toMerchant } from "../services/serialize.js";
-import { issueChallenge, verifyChallenge } from "../services/settlement-proof.service.js";
+import { issueChallenge, verifyChallenge, type ChainReader } from "../services/settlement-proof.service.js";
 import { sendWebhook } from "../services/webhook.service.js";
 import { merchantOf } from "./auth.js";
 
 const VerifyBody = z.object({ signature: z.string().regex(/^0x[0-9a-fA-F]+$/, "must be a 0x-prefixed hex signature") });
 
-export type MerchantRouteDeps = { db: Db; redis: Redis };
+export type MerchantRouteDeps = { db: Db; redis: Redis; chain?: ChainReader };
 
 /** Merchant profile, settings and settlement proof. Registered inside a `requireMerchant` scope. */
 export function merchantRoutes(app: FastifyInstance, deps: MerchantRouteDeps) {

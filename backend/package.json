@@ -21,7 +21,8 @@
     "merchant:create": "tsx scripts/create-merchant.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "worker": "node dist/src/worker.js",
-    "setup": "docker compose up -d --wait && prisma migrate deploy && prisma generate"
+    "setup": "docker compose up -d --wait && prisma migrate deploy && prisma generate",
+    "openapi:export": "tsx scripts/export-openapi.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
