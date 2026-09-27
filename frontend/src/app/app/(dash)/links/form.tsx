@@ -1,0 +1,95 @@
+"use client";
+
+import { useActionState } from "react";
+import { Card, CardHeader } from "@/components/dash/card";
+import { AmountField, Field, Select } from "@/components/dash/field";
+import { Submit } from "@/components/dash/action";
+import { createLinkAction, type LinkState } from "./actions";
+
+/**
+ * Create a reusable payment link.
+ *
+ * The amount box is deliberately not required. Leaving it blank is how a
+ * merchant makes an open-amount link — a tip jar, a donation, a deposit the
+ * buyer decides. The hint says so in words, because an empty optional field
+ * looks identical to one the merchant forgot to fill in.
+ */
+
+const EMPTY: LinkState = {};
+
+export function LinkForm() {
+  const [state, action] = useActionState(createLinkAction, EMPTY);
+  const v = state.values ?? {};
+
+  return (
+    <Card marks>
+      <CardHeader
+        label="New link"
+        hint="One link, shared anywhere. Each buyer who opens it gets their own invoice."
+      />
+
+      <form action={action} className="flex flex-col gap-5">
+        <Field
+          label="Name"
+          name="label"
+          required
+          placeholder="Monthly retainer"
+          defaultValue={v.label}
+          error={state.fields?.label}
+          hint="Only you see this. It is how you find the link again."
+        />
+
+        <AmountField
+          label="Amount (optional)"
+          name="amount"
+          currency={v.currency || "USDC"}
+          defaultValue={v.amount}
+          error={state.fields?.amount}
+          hint="Leave empty to let the buyer choose what to pay."
+        />
+
+        <Select
+          label="Currency"
+          name="currency"
+          defaultValue={v.currency || "USDC"}
+          error={state.fields?.currency}
+          hint="What the amount is priced in. Buyers still pay with any coin."
+          options={[
+            { value: "USDC", label: "USDC" },
+            { value: "USDT", label: "USDT" },
+            { value: "USD", label: "USD" },
+            { value: "EUR", label: "EUR" },
+            { value: "GBP", label: "GBP" },
+          ]}
+        />
+
+        {state.message && (
+          <p
+            role="alert"
+            className="text-[0.875rem] leading-relaxed text-ink"
+          >
+            <span aria-hidden="true" className="mr-1.5 text-sand">
+              &#9632;
+            </span>
+            {state.message}
+          </p>
+        )}
+        {state.ok && (
+          <p
+            role="status"
+            className="text-[0.875rem] leading-relaxed text-ink"
+          >
+            <span aria-hidden="true" className="mr-1.5 text-sand">
+              &#9632;
+            </span>
+            {state.ok}
+          </p>
+        )}
+
+        <div>
+          <Submit pendingLabel="Creating…">Create link</Submit>
+        </div>
+      </form>
+    </Card>
+  );
+}
