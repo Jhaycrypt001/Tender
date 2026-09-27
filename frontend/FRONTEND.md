@@ -104,7 +104,7 @@ src/app/app/callback/route.ts        OAuth callback                 ✅ BUILT
 src/app/app/start/route.ts           OAuth start                    ✅ BUILT
 src/app/app/signout/route.ts         sign out                       ✅ BUILT
 
-src/app/app/(dash)/layout.tsx        ⬜ dash chrome + auth guard
+src/app/app/(dash)/layout.tsx        ✅ dash chrome + auth guard
 src/app/app/(dash)/home/             ✅ Home
 src/app/app/(dash)/checkout/         ✅ Checkout: new + [id]
 src/app/app/(dash)/activity/         ✅ Activity
@@ -113,7 +113,7 @@ src/app/app/(dash)/links/            ✅ Links
 src/app/app/(dash)/earn/             ✅ Earn
 src/app/app/(dash)/ramps/            ✅ Ramps
 src/app/app/(dash)/settings/         ✅ Settings: settlement + developers
-src/app/app/(dash)/ask/              ⬜ Ask (cut first if short on time)
+src/app/app/(dash)/ask/              ✅ Ask (saved questions, not free text)
 
 src/app/pay/[token]/page.tsx         ✅ 🔴 THE BUYER CHECKOUT — public, no auth
 ```
@@ -372,7 +372,7 @@ Both are marked 🔴 in BACKEND.md §1 as his day-one tasks. Chase them.
 
 ## 12. Today
 
-1. Send him [BACKEND.md](../backend/BACKEND.md) and tell him to take **Option B** in §3 so your `src/` does not move.
+1. ~~Send him [BACKEND.md](../backend/BACKEND.md) and tell him to take **Option B** in §3 so your `src/` does not move.~~ Done differently — the repo was split into `frontend/` and `backend/`, and `src/` moved wholesale into `frontend/`. Paths in this file are relative to `frontend/`.
 2. Ask him for the two 🔴 blockers: the status enum and the per-chain minimums.
 3. Write `src/lib/api/types.ts`, and send it to him the moment it compiles.
 4. Then build the shell. It needs nothing from anyone.
