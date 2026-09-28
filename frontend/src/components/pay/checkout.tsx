@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Money } from "@/components/dash/money";
+import { Money, UsdMinimum } from "@/components/dash/money";
 import { QRCode } from "@/components/pay/qr";
 import { submitTx } from "@/lib/api/public";
 import type { InvoiceStatus, PublicInvoice } from "@/lib/api/types";
@@ -308,7 +308,7 @@ export default function Checkout({
                           active ? "text-paper/60" : "text-mute"
                         }`}
                       >
-                        MIN {a.minimum}
+                        MIN <UsdMinimum amount={a.minimum} />
                       </span>
                     )}
                   </button>
@@ -345,12 +345,19 @@ export default function Checkout({
 
               {/* ⚠️ The minimum has to appear BEFORE they send. Below it, the
                   deposit is auto-refunded — and a refund nobody was warned
-                  about arrives as a support ticket, not as a rescue. */}
+                  about arrives as a support ticket, not as a rescue.
+
+                  The figure is USD, so it reads "worth of Bitcoin", never "on
+                  Bitcoin": with the amount right beside the chain name, "on"
+                  makes the unit look like BTC, and a buyer acting on 8.45 BTC
+                  instead of $8.45 sends about six figures too much. */}
               {address.minimum && (
                 <p className="mt-3 text-[0.8125rem] leading-relaxed text-paper/60">
                   Send at least{" "}
-                  <span className="font-mono text-paper">{address.minimum}</span>{" "}
-                  on {chainLabel(address.chain)}. Anything below that is
+                  <span className="font-mono text-paper">
+                    <UsdMinimum amount={address.minimum} />
+                  </span>{" "}
+                  worth of {chainLabel(address.chain)}. Anything below that is
                   returned to you automatically.
                 </p>
               )}

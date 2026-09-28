@@ -3,7 +3,7 @@ import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
-import { Hash, Money, Timestamp } from "@/components/dash/money";
+import { Hash, Money, Timestamp, UsdMinimum } from "@/components/dash/money";
 import {
   INVOICE_STATUS_HELP,
   InvoiceStatePill,
@@ -136,7 +136,7 @@ export default async function InvoicePage({
                     <span className="text-[0.875rem]">{chainLabel(a.chain)}</span>
                     {a.minimum && (
                       <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-mute">
-                        MIN {a.minimum}
+                        MIN <UsdMinimum amount={a.minimum} />
                       </span>
                     )}
                   </div>

@@ -111,9 +111,16 @@ export type InvoiceAddress = {
   chain: ChainId;
   address: string;
   /**
-   * The minimum that chain will accept. Below this, Aurora refunds the deposit
-   * automatically — so the buyer has to see this number BEFORE they send, or
-   * the refund arrives as a surprise and becomes a support ticket.
+   * The minimum that chain will accept, **in USD** — not in the chain's own
+   * asset. Below this, Aurora refunds the deposit automatically, so the buyer
+   * has to see this number BEFORE they send, or the refund arrives as a
+   * surprise and becomes a support ticket.
+   *
+   * ⚠️ USD, because a chain can carry more than one asset — Ethereum takes ETH
+   * and USDC both, and one minimum has to cover them. It MUST be rendered with
+   * a currency marker: a bare "8.45" beside the word Bitcoin reads as 8.45 BTC,
+   * which is about six figures of overpayment. Use `UsdMinimum`.
+   *
    * Optional because the backend may not have it wired yet.
    */
   minimum?: Amount;
@@ -332,7 +339,11 @@ export type Chain = {
   name: string;
   /** The asset a buyer sends on this chain, e.g. "BTC", "USDC". */
   asset: string;
-  /** Below this, the deposit is auto-refunded. Show it before they send. */
+  /**
+   * Below this, the deposit is auto-refunded. Show it before they send.
+   * **In USD**, not in `asset` — one chain can carry several assets, so the
+   * minimum is quoted in dollars. Render it with a currency marker.
+   */
   minimum: Amount;
   /** Human estimate, e.g. "about 2 minutes". */
   estimated_settlement: string;

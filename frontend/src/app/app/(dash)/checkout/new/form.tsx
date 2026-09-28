@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { AmountField, Field, Select } from "@/components/dash/field";
 import { Card, CardHeader } from "@/components/dash/card";
 import { Submit } from "@/components/dash/action";
+import { UsdMinimum } from "@/components/dash/money";
 import {
   createInvoiceAction,
   type CreateState,
@@ -150,7 +151,7 @@ export function CreateInvoiceForm({
                         invented locally. */}
                     {c.minimum && (
                       <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-mute">
-                        MIN {c.minimum}
+                        MIN <UsdMinimum amount={c.minimum} />
                       </span>
                     )}
                   </label>

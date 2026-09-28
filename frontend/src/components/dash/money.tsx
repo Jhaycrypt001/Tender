@@ -161,3 +161,72 @@ export function Timestamp({
     </span>
   );
 }
+
+/**
+ * A chain minimum, in dollars.
+ *
+ * ⚠️ These are USD, NOT the chain's own asset — a chain can carry several
+ * assets (Ethereum takes ETH and USDC both), so one minimum has to be quoted
+ * in a common unit. The backend sends a bare decimal string like "8.45".
+ *
+ * Rendering that bare string next to a chain name is a genuine money bug, not
+ * a cosmetic one: "Send at least 8.45 on Bitcoin" reads as 8.45 BTC. A buyer
+ * who believes it sends roughly six figures instead of eight dollars, and it
+ * is a real on-chain transfer that nothing can call back. The "$" is the whole
+ * difference between those two readings, so it is not optional and it is not
+ * decoration.
+ *
+ * Kept as a component rather than a format helper so the marker can never be
+ * dropped at a call site: there is no way to render this without it.
+ */
+export function UsdMinimum({
+  amount,
+  className = "",
+}: {
+  amount: Amount;
+  className?: string;
+}) {
+  // The backend may or may not send its own marker. Strip any leading "$" and
+  // whitespace so a future change there cannot produce "$$8.45" here, and so
+  // this component is the single place the symbol comes from.
+  const bare = amount.trim().replace(/^$s*/, "");
+
+  // Cents, like a price tag. These are dollars, not an 18-decimal on-chain
+  // value, so 2dp is the honest precision — and `parts` truncates, which for
+  // a MINIMUM is the wrong direction: truncating $8.459 to $8.45 would state a
+  // floor below the real one and invite the auto-refund this line exists to
+  // prevent. So the fraction is padded back to a full 2dp and any third digit
+  // is carried up, by string, never by float.
+  const { negative, int, frac } = parts(bare, 3);
+  const carried = carryToCents(int, frac);
+
+  return (
+    <span className={`tabular-nums ${className}`}>
+      {negative && "-"}
+      {"$"}
+      {carried}
+    </span>
+  );
+}
+
+/**
+ * Rounds a grouped integer + up-to-3dp fraction UP to 2dp, as strings.
+ *
+ * Rounding up is deliberate: this is a floor a buyer must clear. Stating it
+ * even a cent low is what triggers the refund the caller is warning about.
+ */
+function carryToCents(int: string, frac: string): string {
+  const padded = (frac + "00").slice(0, 3);
+  const cents = padded.slice(0, 2);
+  const third = padded.charAt(2);
+
+  if (third === "" || third === "0") return `${int}.${cents}`;
+
+  // Carry by string so no float ever touches the value.
+  const bumped = String(Number(cents) + 1).padStart(2, "0");
+  if (bumped !== "100") return `${int}.${bumped}`;
+
+  // .99 -> 1.00 rolls the integer. Strip grouping, add one, regroup.
+  const plain = int.replace(/,/g, "");
+  return `${group(String(BigInt(plain) + BigInt(1)))}.00`;
+}
