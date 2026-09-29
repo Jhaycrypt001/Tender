@@ -15,10 +15,13 @@ export function CopyValue({
   value,
   label = "Copy",
   className = "",
+  tone = "paper",
 }: {
   value: string;
   label?: string;
   className?: string;
+  /** `ink` when the button sits on a dark surface, where the grey hairline vanishes. */
+  tone?: "paper" | "ink";
 }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,7 +50,11 @@ export function CopyValue({
       // Announced to a screen reader when it changes, so the confirmation is
       // not purely visual.
       aria-live="polite"
-      className={`shrink-0 rounded-full border border-line px-3.5 py-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-mute transition-colors hover:border-mute/50 hover:text-ink ${className}`}
+      className={`shrink-0 rounded-full border px-3.5 py-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.1em] transition-colors ${
+        tone === "ink"
+          ? "border-paper/20 text-paper/60 hover:border-paper/45 hover:text-paper"
+          : "border-line text-mute hover:border-mute/50 hover:text-ink"
+      } ${className}`}
     >
       {state === "done" ? "Copied" : state === "failed" ? "Select it" : label}
     </button>

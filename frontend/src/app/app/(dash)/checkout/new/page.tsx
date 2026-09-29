@@ -29,7 +29,7 @@ export default async function NewInvoicePage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Get paid"
+        eyebrow="Checkout · New"
         title="New invoice"
         description="Set the amount and what you will accept. You get a link to hand the buyer."
         actions={

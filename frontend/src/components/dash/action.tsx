@@ -29,8 +29,10 @@ const VARIANT: Record<Variant, string> = {
     "border border-ink bg-paper text-ink hover:bg-stone disabled:text-mute",
 };
 
+// Same shape as the CTA links in cta.tsx: a submit and a link that sit side by
+// side must not look like two different design systems.
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[0.875rem] transition-colors disabled:cursor-not-allowed";
+  "crosshairs relative inline-flex items-center justify-center gap-2 rounded-[0.625rem] px-4 py-2.5 font-mono text-[0.6875rem] uppercase leading-none tracking-[0.14em] transition-colors disabled:cursor-not-allowed";
 
 export function Submit({
   children,

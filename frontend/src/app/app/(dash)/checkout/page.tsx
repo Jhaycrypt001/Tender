@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { CheckoutIcon, PlusIcon } from "@/components/dash/icons";
+import { Cta } from "@/components/dash/cta";
 import { Money, Timestamp } from "@/components/dash/money";
 import { InvoiceStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
@@ -21,12 +23,10 @@ const FILTERS: { label: string; status?: InvoiceStatus }[] = [
 
 function NewInvoiceButton() {
   return (
-    <Link
-      href="/app/checkout/new"
-      className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-[0.875rem] text-paper transition-colors hover:bg-ink/90"
-    >
+    <Cta href="/app/checkout/new">
+      <PlusIcon className="h-3.5 w-3.5" />
       New invoice
-    </Link>
+    </Cta>
   );
 }
 
@@ -45,8 +45,8 @@ export default async function CheckoutPage({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Get paid"
-        title="Checkout"
+        eyebrow="Checkout"
+        title="Bill anyone. Any chain."
         description="Create an invoice, hand the buyer a link, and watch it settle."
         actions={<NewInvoiceButton />}
       />
@@ -54,7 +54,12 @@ export default async function CheckoutPage({
       {/* Filters render whether or not the request succeeded: they are
           navigation, and hiding them behind a failed fetch would make the
           screen look broken rather than empty. */}
-      <nav aria-label="Filter invoices" className="mb-5 flex flex-wrap gap-1.5">
+      {/* A segmented control, not loose pills: these are mutually exclusive
+          views of one list, and a single track says so at a glance. */}
+      <nav
+        aria-label="Filter invoices"
+        className="mb-5 inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-line bg-paper p-1"
+      >
         {FILTERS.map((f) => {
           const on = f.label === active.label;
           return (
@@ -62,10 +67,8 @@ export default async function CheckoutPage({
               key={f.label}
               href={f.status ? `/app/checkout?status=${f.status}` : "/app/checkout"}
               aria-current={on ? "page" : undefined}
-              className={`rounded-full border px-3.5 py-1.5 text-[0.8125rem] transition-colors ${
-                on
-                  ? "border-ink bg-ink text-paper"
-                  : "border-line bg-paper text-mute hover:border-mute/50 hover:text-ink"
+              className={`rounded-lg px-3.5 py-1.5 text-[0.8125rem] transition-colors ${
+                on ? "bg-ink text-paper" : "text-mute hover:bg-stone hover:text-ink"
               }`}
             >
               {f.label}
@@ -78,6 +81,7 @@ export default async function CheckoutPage({
         <ErrorState error={result.error} />
       ) : result.data.data.length === 0 ? (
         <Empty
+          icon={<CheckoutIcon className="h-5 w-5" />}
           title={
             active.status
               ? `No ${active.label.toLowerCase()} invoices`

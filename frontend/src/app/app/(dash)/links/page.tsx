@@ -1,6 +1,7 @@
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { LinkIcon } from "@/components/dash/icons";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
 import { listLinks } from "@/lib/api/links";
@@ -28,8 +29,8 @@ export default async function LinksPage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Get paid"
-        title="Payment links"
+        eyebrow="Links"
+        title="One link, every buyer."
         description="One link you can reuse. Every buyer who opens it gets their own invoice."
       />
 
@@ -42,6 +43,7 @@ export default async function LinksPage() {
           <ErrorState error={result.error} />
         ) : result.data.data.length === 0 ? (
           <Empty
+            icon={<LinkIcon className="h-5 w-5" />}
             title="No links yet"
             description="Create one above. A link is worth making when you get paid the same amount more than once — a retainer, a class, a standard service."
           />

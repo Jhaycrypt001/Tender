@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { RampsIcon } from "@/components/dash/icons";
 import { Money } from "@/components/dash/money";
 import { getCorridors } from "@/lib/api/ramps";
 import type { RampCorridor } from "@/lib/api/types";
@@ -59,8 +60,8 @@ export default async function RampsPage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Treasury"
-        title="Ramps"
+        eyebrow="Ramps"
+        title="From Monad to your bank."
         description="Move settled revenue out to a bank account."
       />
 
@@ -68,6 +69,7 @@ export default async function RampsPage() {
         <ErrorState error={result.error} />
       ) : result.data.length === 0 ? (
         <Empty
+          icon={<RampsIcon className="h-5 w-5" />}
           title="No corridors yet"
           description="Off-ramp corridors appear here as they open, with the countries and currencies each one covers."
         />

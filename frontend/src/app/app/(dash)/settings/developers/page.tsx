@@ -41,7 +41,7 @@ export default async function DevelopersPage() {
       <PageShell>
         <PageHeader
           eyebrow="Settings · Developers"
-          title="Developers"
+          title="Wire Tender into your stack."
           description="How your server talks to Tender, and how Tender talks back."
         />
         <ErrorState error={result.error} />
@@ -55,7 +55,7 @@ export default async function DevelopersPage() {
     <PageShell>
       <PageHeader
         eyebrow="Settings · Developers"
-        title="Developers"
+        title="Wire Tender into your stack."
         description="How your server talks to Tender, and how Tender talks back."
         actions={
           <Link

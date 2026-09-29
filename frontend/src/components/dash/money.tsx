@@ -56,7 +56,7 @@ export function Money({
   /** A ticker or symbol. Rendered as given — this component never converts. */
   currency?: string;
   maxDp?: number;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "hero";
   className?: string;
 }) {
   const { negative, int, frac } = parts(amount, maxDp);
@@ -66,6 +66,8 @@ export function Money({
     md: "text-[1rem]",
     lg: "font-display text-[1.75rem] tracking-[-0.02em]",
     xl: "font-display text-[2.5rem] leading-none tracking-[-0.03em]",
+    // The balance card only: the one figure a merchant opens the app to see.
+    hero: "font-display text-[clamp(2.75rem,2rem+3.2vw,4.25rem)] leading-none tracking-[-0.035em]",
   } as const;
 
   return (

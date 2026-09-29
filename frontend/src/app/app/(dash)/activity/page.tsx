@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { ActivityIcon, PlusIcon } from "@/components/dash/icons";
+import { Cta } from "@/components/dash/cta";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
@@ -47,8 +49,8 @@ export default async function ActivityPage({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Ledger"
-        title="Activity"
+        eyebrow="Activity"
+        title="Every coin, accounted for."
         description="Every payment across every invoice, and the state it reached."
       />
 
@@ -80,6 +82,7 @@ export default async function ActivityPage({
         <ErrorState error={result.error} />
       ) : result.data.data.length === 0 ? (
         <Empty
+          icon={<ActivityIcon className="h-5 w-5" />}
           title={
             active.label === "All"
               ? "No activity yet"
@@ -92,12 +95,10 @@ export default async function ActivityPage({
           }
           action={
             active.label === "All" ? (
-              <Link
-                href="/app/checkout/new"
-                className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-[0.875rem] text-paper transition-colors hover:bg-ink/90"
-              >
+              <Cta href="/app/checkout/new">
+                <PlusIcon className="h-3.5 w-3.5" />
                 New invoice
-              </Link>
+              </Cta>
             ) : undefined
           }
         />

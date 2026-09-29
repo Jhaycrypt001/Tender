@@ -47,9 +47,9 @@ export default function PayPage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Outbound"
-        title="Pay"
-        description="Money going back out: refunds to buyers, payouts to suppliers, splits across a team."
+        eyebrow="Pay"
+        title="Money going back out."
+        description="Refunds to buyers, payouts to suppliers, splits across a team."
       />
 
       <div className="grid gap-4 md:grid-cols-3">

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashNav from "@/components/dash/nav";
+import { FrameMark } from "@/components/dash/shell";
 import { SESSION_COOKIE, decodeSession } from "@/lib/auth";
 
 /**
@@ -40,7 +41,16 @@ export default async function DashLayout({
           picture: session.picture,
         }}
       />
-      <main className="flex-1">{children}</main>
+      {/* The frame: two hairline rails bounding the content column, marked
+          with a + where they meet the header rule. It is what makes every
+          screen read as one sheet of the same document rather than a page
+          floating on grey. Rails only from md — on a phone the column is the
+          screen, and two lines 16px in would just eat width. */}
+      <div className="relative mx-auto flex w-full max-w-[76rem] flex-1 flex-col md:border-x md:border-line">
+        <FrameMark className="left-0 top-0 -translate-x-1/2 -translate-y-1/2" />
+        <FrameMark className="right-0 top-0 translate-x-1/2 -translate-y-1/2" />
+        <main className="flex-1">{children}</main>
+      </div>
     </div>
   );
 }

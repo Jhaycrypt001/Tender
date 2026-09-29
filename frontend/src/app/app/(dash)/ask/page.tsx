@@ -154,8 +154,8 @@ export default async function AskPage({
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Answers"
-        title="Ask"
+        eyebrow="Ask"
+        title="Question your ledger."
         description="Questions about your money, answered from your live payment data."
       />
 

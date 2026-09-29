@@ -25,7 +25,7 @@ function Frame({
   return (
     <div
       className={`flex flex-col items-center rounded-2xl border bg-paper px-5 py-12 text-center md:py-16 ${
-        dashed ? "border-dashed border-line" : "border-line"
+        dashed ? "border-dashed border-mute/35" : "border-line"
       }`}
     >
       <div className="max-w-[34ch]">{children}</div>
@@ -43,13 +43,22 @@ export function Empty({
   title,
   description,
   action,
+  icon,
 }: {
   title: string;
   description: string;
   action?: React.ReactNode;
+  /** The screen's own nav icon reads best here; falls back to an empty tray. */
+  icon?: React.ReactNode;
 }) {
   return (
-    <Frame>
+    <Frame dashed={false}>
+      <span
+        aria-hidden="true"
+        className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-full border border-line bg-stone text-ink"
+      >
+        {icon ?? <TrayIcon />}
+      </span>
       <h3 className="font-display text-[1.25rem] leading-tight tracking-[-0.01em]">
         {title}
       </h3>
@@ -182,5 +191,23 @@ export function Loading({ rows = 4 }: { rows?: number }) {
         ))}
       </div>
     </>
+  );
+}
+
+/** The default empty-state glyph: an open tray. Local — only Empty uses it. */
+function TrayIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      <path d="M3 13.5 5.4 6.2A1.8 1.8 0 0 1 7.1 5h9.8a1.8 1.8 0 0 1 1.7 1.2L21 13.5" />
+      <path d="M3 13.5V18a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-4.5h-5.2l-1.3 2h-5l-1.3-2Z" />
+    </svg>
   );
 }

@@ -1,13 +1,25 @@
+import fs from "node:fs";
+import path from "node:path";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { PageShell, SectionHeader } from "@/components/dash/shell";
-import { Card, CardHeader } from "@/components/dash/card";
-import { ErrorState } from "@/components/dash/empty";
-import { CopyValue } from "@/components/dash/copy";
+import BalanceCard from "@/components/dash/balance-card";
+import { Cta } from "@/components/dash/cta";
+import { Empty, ErrorState } from "@/components/dash/empty";
+import {
+  ActivityIcon,
+  AskIcon,
+  CheckoutIcon,
+  PayIcon,
+  PlusIcon,
+} from "@/components/dash/icons";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { getBalance, getMerchant } from "@/lib/api/merchant";
 import { listPayments } from "@/lib/api/payments";
+import type { ApiResult, Merchant } from "@/lib/api/types";
+import { SESSION_COOKIE, decodeSession } from "@/lib/auth";
 import { chainLabel } from "@/lib/chains";
 
 export const metadata = { title: "Home · Tender" };
@@ -16,6 +28,12 @@ export const dynamic = "force-dynamic";
 
 /** How many recent payments the overview shows before deferring to Activity. */
 const RECENT = 5;
+
+/**
+ * The balance card's art. Generated separately and dropped in by hand; until
+ * the file exists the card draws its own CSS ground, so nothing here breaks.
+ */
+const CARD_ART = "/img/dash/balance-card.png";
 
 /**
  * The overview.
@@ -27,191 +45,101 @@ const RECENT = 5;
  * into a blank screen.
  */
 export default async function HomePage() {
-  const [balance, merchant, recent] = await Promise.all([
+  const [balance, merchant, recent, jar] = await Promise.all([
     getBalance(),
     getMerchant(),
     listPayments({ limit: RECENT }),
+    cookies(),
   ]);
 
-  const settled = balance.ok ? balance.data.settled : [];
-  const unsettled = balance.ok ? balance.data.unsettled : [];
+  const session = decodeSession(jar.get(SESSION_COOKIE)?.value);
+  const first = session?.name.trim().split(/\s+/)[0] ?? "";
+  const m = merchant.ok ? merchant.data : null;
+
+  // Checked on the server, per request: dropping the PNG in is the whole
+  // upgrade, with no code change and no broken-image flash before it exists.
+  const art = fs.existsSync(path.join(process.cwd(), "public", CARD_ART))
+    ? CARD_ART
+    : null;
 
   return (
     <PageShell>
-      <div className="mb-6">
-        <p className="eyebrow mb-2">Overview</p>
-        <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] leading-[1.06] tracking-[-0.02em]">
-          {merchant.ok && merchant.data.name
-            ? `Welcome back, ${merchant.data.name.split(" ")[0]}`
-            : "Your money"}
+      <Notice merchant={merchant} />
+
+      <div className="mb-7">
+        <p className="eyebrow mb-3.5 text-mute">Overview</p>
+        <h1 className="font-display text-[clamp(2rem,1.45rem+2.3vw,2.875rem)] leading-[1.04] tracking-[-0.025em]">
+          {first ? `Welcome back, ${first}.` : "Welcome back."}
         </h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        {/* The dark hero. Settled money is the one number a merchant opens
-            this app to see, so it gets the weight and everything else sits
-            beneath it. */}
-        <Card tone="ink" pad="lg" marks>
-          {/* Rendered inline rather than via CardHeader: that component sets
-              its label `text-mute`, a grey tuned for the white cards that
-              disappears against ink. */}
-          <div className="mb-4">
-            <h2 className="eyebrow text-paper/55">Settled on Monad</h2>
-            <p className="mt-2 text-[0.8125rem] leading-relaxed text-paper/55">
-              Landed, final, and yours to spend.
-            </p>
+      <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <BalanceCard
+          error={balance.ok ? null : balance.error.message || "The request did not complete."}
+          total={balance.ok ? balance.data.display_total : null}
+          settled={balance.ok ? balance.data.settled : []}
+          unsettled={balance.ok ? balance.data.unsettled : []}
+          asset={m?.settlement_asset}
+          address={m?.settlement_address}
+          addressKnown={merchant.ok}
+          verified={m?.settlement_verified ?? false}
+          art={art}
+        />
+
+        {/* The light partner to the dark card: one next move, not a menu.
+            Payment links are the shortest path from signing up to being paid,
+            so that is the move it offers. */}
+        <section className="crosshairs relative flex flex-col rounded-[1.25rem] border border-sand/25 bg-sand/[0.09] p-6 text-ink md:p-7">
+          <p className="font-mono text-[0.6875rem] uppercase leading-none tracking-[0.24em] text-sand">
+            No code needed
+          </p>
+          <h2 className="mt-5 font-display text-[1.625rem] leading-[1.1] tracking-[-0.02em]">
+            Share one link. Take any coin.
+          </h2>
+          <p className="mt-3 max-w-[34ch] text-[0.875rem] leading-relaxed text-mute">
+            A payment link opens a fresh invoice for every buyer. Put it in a
+            bio, an email, or a QR by the till.
+          </p>
+          <div className="mt-auto pt-7">
+            <Cta href="/app/links">
+              <PlusIcon className="h-3.5 w-3.5" />
+              Create a link
+            </Cta>
           </div>
-
-          {!balance.ok ? (
-            <p className="text-[0.9375rem] leading-relaxed text-paper/70">
-              Your balance could not be loaded. {balance.error.message}
-            </p>
-          ) : settled.length === 0 ? (
-            <div>
-              <p className="font-display text-[2.5rem] leading-none tracking-[-0.03em] text-paper/35">
-                0.00
-              </p>
-              <p className="mt-3 text-[0.875rem] leading-relaxed text-paper/60">
-                Nothing has settled yet. Your first payment lands here the
-                moment it clears on Monad.
-              </p>
-            </div>
-          ) : (
-            /* One row per asset. There is no single total, because adding
-               USDC to USDT would require a rate this screen does not have
-               and must not invent. */
-            <ul className="flex flex-col gap-3">
-              {settled.map((b) => (
-                <li key={b.asset} className="flex items-baseline gap-3">
-                  <Money amount={b.amount} size="xl" className="text-paper" />
-                  <span className="font-mono text-[0.75rem] uppercase tracking-[0.1em] text-paper/50">
-                    {b.asset}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* Unsettled sits inside the same card, dimmer. It is the same
-              money one step earlier, not a separate figure to compare. */}
-          {balance.ok && unsettled.length > 0 && (
-            <div className="mt-5 border-t border-paper/12 pt-4">
-              <p className="mb-2 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-paper/45">
-                On its way
-              </p>
-              <ul className="flex flex-wrap gap-x-5 gap-y-1.5">
-                {unsettled.map((b) => (
-                  <li key={b.asset} className="flex items-baseline gap-1.5">
-                    <Money amount={b.amount} className="text-paper/75" />
-                    <span className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-paper/45">
-                      {b.asset}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2.5 text-[0.8125rem] leading-relaxed text-paper/50">
-                Seen on chain, not yet final.
-              </p>
-            </div>
-          )}
-        </Card>
-
-        {/* The light accent card, paired with the dark one. This is where
-            money lands, so it sits beside the balance rather than buried in
-            Settings — and it is the one place the verification gate is
-            unavoidable. */}
-        <Card className="bg-sand/10">
-          <CardHeader
-            label="Settles to"
-            hint="Every payment converts to this asset and lands at this address."
-          />
-
-          {!merchant.ok ? (
-            <p className="text-[0.875rem] leading-relaxed text-mute">
-              Your settlement details could not be loaded.{" "}
-              {merchant.error.message}
-            </p>
-          ) : !merchant.data.settlement_address ? (
-            <div>
-              <p className="text-[0.875rem] leading-relaxed text-mute">
-                You have not set a settlement address yet. Payments cannot land
-                until you do.
-              </p>
-              <Link
-                href="/app/settings"
-                className="mt-4 inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-[0.875rem] text-paper transition-colors hover:bg-ink/90"
-              >
-                Set it up
-              </Link>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper px-3.5 py-2.5">
-                <code className="min-w-0 break-all font-mono text-[0.75rem]">
-                  {merchant.data.settlement_address}
-                </code>
-                <CopyValue value={merchant.data.settlement_address} />
-              </div>
-
-              <dl className="mt-4 flex flex-col gap-2.5 text-[0.875rem]">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[0.8125rem] text-mute">Asset</dt>
-                  <dd className="font-mono text-[0.8125rem] uppercase tracking-[0.08em]">
-                    {merchant.data.settlement_asset ?? "Not set"}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-[0.8125rem] text-mute">Tender fee</dt>
-                  {/* fee_bps is basis points. 40 → 0.40%. Shown because a
-                      merchant comparing processors wants it without hunting. */}
-                  <dd className="font-mono text-[0.8125rem] tabular-nums">
-                    {(merchant.data.fee_bps / 100).toFixed(2)}%
-                  </dd>
-                </div>
-              </dl>
-
-              {/* ⚠️ An unverified address must not receive money: behind
-                  nothing but a session cookie, a stolen account would silently
-                  redirect every future payment. This warning is the gate the
-                  merchant sees; Settings carries the challenge itself. */}
-              {!merchant.data.settlement_verified && (
-                <div className="mt-4 rounded-xl border border-ink bg-paper px-3.5 py-3">
-                  <p className="text-[0.8125rem] leading-relaxed">
-                    <span aria-hidden="true" className="mr-1.5 text-sand">
-                      &#9632;
-                    </span>
-                    This address has not been verified, so payments cannot
-                    settle to it yet.
-                  </p>
-                  <Link
-                    href="/app/settings"
-                    className="mt-2.5 inline-block text-[0.8125rem] text-sand underline-offset-4 hover:underline"
-                  >
-                    Prove you own it &rarr;
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
+        </section>
       </div>
 
-      {/* The pill row: the handful of things a merchant actually starts from
-          this screen. Secondary by design — the balance is the point. */}
-      <nav aria-label="Quick actions" className="mt-4 flex flex-wrap gap-2">
-        <Pill href="/app/checkout/new">New invoice</Pill>
-        <Pill href="/app/links">Payment link</Pill>
-        <Pill href="/app/pay/payout">Send a payout</Pill>
-        <Pill href="/app/settings/developers">API keys</Pill>
+      <nav
+        aria-label="Quick actions"
+        className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
+      >
+        <Cta href="/app/checkout" tone="outline">
+          <CheckoutIcon className="h-4 w-4" />
+          Invoices
+        </Cta>
+        <Cta href="/app/pay/refund" tone="outline">
+          <PayIcon className="h-4 w-4" />
+          Refund
+        </Cta>
+        <Cta href="/app/settings/developers" tone="outline">
+          <span aria-hidden="true" className="font-mono text-[0.8125rem] leading-none">
+            {"{}"}
+          </span>
+          API keys
+        </Cta>
+        <Cta href="/app/ask" tone="outline">
+          <AskIcon className="h-4 w-4" />
+          Ask
+        </Cta>
       </nav>
 
-      <div className="mt-8">
+      <div className="mt-10">
         <SectionHeader
           label="Recent"
           action={
             <Link
               href="/app/activity"
-              className="text-[0.875rem] text-mute underline-offset-4 hover:text-ink hover:underline"
+              className="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-mute underline-offset-4 hover:text-ink hover:underline"
             >
               See all
             </Link>
@@ -221,12 +149,17 @@ export default async function HomePage() {
         {!recent.ok ? (
           <ErrorState error={recent.error} />
         ) : recent.data.data.length === 0 ? (
-          <Card tone="quiet">
-            <p className="text-[0.875rem] leading-relaxed text-mute">
-              No payments yet. Create an invoice and the first one shows up
-              here as soon as it is seen on chain.
-            </p>
-          </Card>
+          <Empty
+            icon={<ActivityIcon className="h-5 w-5" />}
+            title="No payments yet"
+            description="Create an invoice and the first payment shows up here the moment it is seen on chain."
+            action={
+              <Cta href="/app/checkout/new">
+                <PlusIcon className="h-3.5 w-3.5" />
+                New invoice
+              </Cta>
+            }
+          />
         ) : (
           <DataTable
             columns={[
@@ -258,14 +191,64 @@ export default async function HomePage() {
   );
 }
 
-/** One quick action. Local — the pill row exists only on this screen. */
-function Pill({ href, children }: { href: string; children: React.ReactNode }) {
+/**
+ * The strip above the greeting.
+ *
+ * Anything blocking money from landing outranks news, so the settlement
+ * problems are checked first and the product note only shows when there is
+ * nothing to fix. ⚠️ The unverified case is the gate that keeps a hijacked
+ * session from silently redirecting payouts — it must stay unmissable.
+ */
+function Notice({ merchant }: { merchant: ApiResult<Merchant> }) {
+  const notice = !merchant.ok
+    ? {
+        tag: "Error",
+        text: `Your settlement details could not be loaded. ${merchant.error.message}`,
+        href: "/app/settings",
+        warn: true,
+      }
+    : !merchant.data.settlement_address
+      ? {
+          tag: "Set up",
+          text: "Payments cannot land until you set a settlement address.",
+          href: "/app/settings",
+          warn: true,
+        }
+      : !merchant.data.settlement_verified
+        ? {
+            tag: "Verify",
+            text: "Your settlement address is not verified yet, so nothing can settle to it.",
+            href: "/app/settings",
+            warn: true,
+          }
+        : {
+            tag: "New",
+            text: "Payment links: one URL any buyer can pay from any chain.",
+            href: "/app/links",
+            warn: false,
+          };
+
   return (
     <Link
-      href={href}
-      className="rounded-full border border-line bg-paper px-4 py-2 text-[0.8125rem] text-ink transition-colors hover:border-mute/50 hover:bg-stone"
+      href={notice.href}
+      className="group mb-8 flex items-center gap-3 rounded-2xl border border-line bg-paper py-1.5 pl-1.5 pr-4 transition-colors hover:border-ink/25"
     >
-      {children}
+      <span
+        className={`shrink-0 rounded-full px-2.5 py-1 font-mono text-[0.625rem] uppercase leading-none tracking-[0.14em] ${
+          notice.warn ? "bg-sand text-paper" : "bg-ink text-paper"
+        }`}
+      >
+        {notice.tag}
+      </span>
+      <span className="min-w-0 flex-1 text-[0.8125rem] leading-snug text-ink">
+        {notice.text}
+      </span>
+      <span
+        aria-hidden="true"
+        className="shrink-0 text-mute transition-transform group-hover:translate-x-0.5"
+      >
+        &rarr;
+      </span>
     </Link>
   );
 }

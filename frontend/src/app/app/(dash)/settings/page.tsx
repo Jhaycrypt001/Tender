@@ -27,8 +27,8 @@ export default async function SettingsPage() {
     return (
       <PageShell>
         <PageHeader
-          eyebrow="Account"
-          title="Settings"
+          eyebrow="Settings"
+          title="Where the money goes."
           description="Where money settles, and who this account belongs to."
         />
         <ErrorState error={result.error} />
@@ -41,8 +41,8 @@ export default async function SettingsPage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Account"
-        title="Settings"
+        eyebrow="Settings"
+        title="Where the money goes."
         description="Where money settles, and who this account belongs to."
         actions={
           <Link

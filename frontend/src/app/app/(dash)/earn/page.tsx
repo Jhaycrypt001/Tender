@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { EarnIcon } from "@/components/dash/icons";
 import { Money, Timestamp } from "@/components/dash/money";
 import { getPositions } from "@/lib/api/earn";
 
@@ -39,8 +40,8 @@ export default async function EarnPage() {
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Treasury"
-        title="Earn"
+        eyebrow="Earn"
+        title="Make idle revenue work."
         description="Settled revenue put to work on Monad, instead of sitting still."
       />
 
@@ -48,6 +49,7 @@ export default async function EarnPage() {
         <ErrorState error={result.error} />
       ) : result.data.length === 0 ? (
         <Empty
+          icon={<EarnIcon className="h-5 w-5" />}
           title="Nothing earning yet"
           description="Once revenue settles on Monad it can be put to work rather than sitting idle. Open positions appear here with what they have earned."
         />

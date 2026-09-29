@@ -45,7 +45,11 @@ export default function DashNav({ session }: { session: Session }) {
   const pathname = usePathname();
   const [open, setOpen] = useState<Open>(null);
   const [mobile, setMobile] = useState(false);
-  const [currency, setCurrency] = useState<DisplayCurrency>(DISPLAY_CURRENCIES[0]);
+  // ⚠️ Fixed, not state. Picking another currency would relabel the header
+  // while every amount on screen stayed in its settlement asset — a number the
+  // merchant did not ask for, dressed as one they did. The other codes stay
+  // listed as Soon until an FX feed exists to convert with.
+  const currency: DisplayCurrency = DISPLAY_CURRENCIES[0];
   const headerRef = useRef<HTMLElement>(null);
 
   // Any navigation dismisses everything. Without this a dropdown stays open
@@ -98,7 +102,7 @@ export default function DashNav({ session }: { session: Session }) {
       ref={headerRef}
       className="sticky top-0 z-50 border-b border-line bg-paper/90 backdrop-blur-md"
     >
-      <div className="mx-auto flex h-[3.875rem] w-full max-w-[76rem] items-center gap-2 px-4 md:px-6">
+      <div className="mx-auto flex h-[3.875rem] w-full max-w-[76rem] items-center gap-2 px-4 md:border-x md:border-line md:px-6">
         {/* Mark + beta chip */}
         <Link
           href="/app/home"
@@ -162,7 +166,7 @@ export default function DashNav({ session }: { session: Session }) {
               aria-haspopup="listbox"
               className="flex h-9 items-center gap-1.5 rounded-full border border-line px-3 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone"
             >
-              {currency.code}
+              {currency.code} · {currency.symbol}
               <ChevronDownIcon
                 className={`h-3.5 w-3.5 text-mute transition-transform ${
                   open === "currency" ? "rotate-180" : ""
@@ -175,8 +179,12 @@ export default function DashNav({ session }: { session: Session }) {
                 aria-label="Display currency"
                 className="absolute right-0 top-[calc(100%+0.5rem)] max-h-[19rem] w-[14rem] overflow-y-auto rounded-2xl border border-line bg-paper p-1.5 shadow-[0_18px_40px_-12px_rgba(18,17,17,0.22)]"
               >
-                <p className="px-2.5 py-2 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-mute">
-                  Display only
+                <p className="px-2.5 pb-1 pt-2 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-mute">
+                  Display currency
+                </p>
+                <p className="px-2.5 pb-2 text-[0.6875rem] leading-snug text-mute">
+                  Amounts show in the asset they settle in. Other currencies
+                  need a live FX rate, which is not connected yet.
                 </p>
                 {DISPLAY_CURRENCIES.map((item) => (
                   <button
@@ -184,19 +192,18 @@ export default function DashNav({ session }: { session: Session }) {
                     type="button"
                     role="option"
                     aria-selected={item.code === currency.code}
-                    onClick={() => {
-                      setCurrency(item);
-                      setOpen(null);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-[0.8125rem] transition-colors ${
+                    aria-disabled={item.code !== currency.code}
+                    disabled={item.code !== currency.code}
+                    onClick={() => setOpen(null)}
+                    className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-[0.8125rem] transition-colors disabled:cursor-not-allowed ${
                       item.code === currency.code
                         ? "bg-stone text-ink"
-                        : "text-ink hover:bg-stone"
+                        : "text-mute"
                     }`}
                   >
                     <span>{item.label}</span>
                     <span className="font-mono text-[0.6875rem] text-mute">
-                      {item.code}
+                      {item.code === currency.code ? item.code : "Soon"}
                     </span>
                   </button>
                 ))}
