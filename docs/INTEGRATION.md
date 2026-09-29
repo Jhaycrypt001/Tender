@@ -27,6 +27,7 @@ The frontend has been built to handle:
 | 1 | **No link between a Google sign-in and a merchant** | The dashboard signs merchants in with Google, but every server call uses the one `TENDER_API_KEY` in env. Right now every person who signs in sees the same merchant's money. |
 | 2 | **No API-key endpoints** | Settings → Developers can't issue, list or rotate a merchant's `tk_live_` key. Today a key only comes from `npm run merchant:create`. |
 | 3 | **Not deployed** | The checkout page calls `/public/*` straight from the buyer's browser, so the API needs a public HTTPS URL and `CORS_ORIGINS` set to the frontend's domain. |
+| 4 | **Only 7 of the 30 chains are wired** | The site now says 30 chains, matching exactly what Aurora's deposit-address API accepts. `aurora/chains.ts` has 7. See §8 for the list, the ids and the traps. |
 
 Fix 1 first. Nothing else matters until two people can sign in and see different accounts.
 
@@ -34,7 +35,7 @@ Fix 1 first. Nothing else matters until two people can sign in and see different
 
 - **All 24 calls the frontend makes have a matching backend route**, SSE included. `npm run typecheck` passes, which covers `contract.check.ts` against the current frontend types.
 - **The backend tests were not run.** They need Postgres on 5434, and Docker was down on this machine. Run `npm run setup && npm test` and post the result.
-- **Chain count doesn't match.** The landing page says "31+ chains". `aurora/chains.ts` offers 7: Bitcoin, Solana, Tron, Ethereum, Base, Arbitrum, Monad. Either add the Aurora chains we can support, or tell the frontend owner the real number so the copy says it. Judges will check.
+- **Chain count: resolved on the frontend, backend work remains.** The site said "31+", which included chains Aurora doesn't support. It now says 30, the exact list Aurora's deposit-address API accepts, minus Stellar. `aurora/chains.ts` still has 7. §8 has the full list and what to change.
 - **Screens with nothing behind them yet.** Each one says so on screen, and none fakes a result:
 
 | Screen | What the backend has today | What it would need |
@@ -227,3 +228,83 @@ If Aurora returns `OPERATION_FAILED` at any point during rehearsal, keep that pa
 2. The frontend owner updates `frontend/src/lib/api/types.ts` to match and builds the screen.
 3. Swagger at `http://localhost:4000/docs` is the reference both sides test against.
 4. Neither of us edits the other's folder. If a fix needs both sides, it's two commits, one each.
+
+---
+
+## 8. Chains: wire all 30 the site now claims
+
+Since 2026-09-29 the landing page, the sign-in page and the site metadata say **30 chains**, and the landing grid lists exactly the 30 below. `aurora/chains.ts` has 7. Until the other 23 are wired, the site claims more than the checkout offers, so do this before judging.
+
+### Where 30 comes from
+
+- Aurora's [Supported Chains](https://docs.intents.aurora.dev/intents-deposits/supported-chains.md) page lists 34. We create addresses through `POST /api/persistent-deposit-address`, and what counts is that endpoint's `depositChain` enum ([spec](https://docs.intents.aurora.dev/api-reference/persistent-addresses-api-reference/create-persistent-deposit-address.md)).
+- The enum has 31 public chains, plus `coca` (a partner code, not a public chain) and `evm` (a shortcut that resolves to Base).
+- **Stellar is out.** The spec says it is the only chain that returns a `memo` ("currently only Stellar"), and `mintAll` already refuses memo chains. 31 − 1 = **30**.
+- **Not offered:**
+  - Hyperliquid, Robinhood and Aurora are on the marketing page but not in the enum.
+  - Cosmos, Polkadot, zkSync, Linea and Blast aren't supported by Aurora at all. The old landing grid listed them; that's fixed.
+
+### The 30, and the ids to use
+
+`frontend/src/lib/chains.ts` already has display labels for exactly these **Tender ids**. Use the same ids so names show correctly on the checkout and in the dashboard. An id it doesn't know gets rendered as "Bsc" or "Xrp".
+
+| Tender id | Name | Aurora code | `family` | In `chains.ts` today |
+|---|---|---|---|---|
+| `ethereum` | Ethereum | `eth` | `evm` | ✅ |
+| `base` | Base | `base` | `evm` | ✅ |
+| `arbitrum` | Arbitrum | `arb` | `evm` | ✅ |
+| `monad` | Monad | `monad` | `evm` | ✅ |
+| `optimism` | Optimism | `op` | `evm` | add |
+| `polygon` | Polygon | `pol` | `evm` | add |
+| `bnb` | BNB Chain | `bsc` | `evm` | add |
+| `avalanche` | Avalanche | `avax` | `evm` | add |
+| `gnosis` | Gnosis | `gnosis` | `evm` | add |
+| `scroll` | Scroll | `scroll` | `evm` | add |
+| `berachain` | Berachain | `bera` | `evm` | add |
+| `plasma` | Plasma | `plasma` | `evm` | add |
+| `xlayer` | X Layer | `xlayer` | `evm` | add |
+| `adi` | ADI | `adi` | `evm` | add |
+| `bitcoin` | Bitcoin | `btc` | `btc` | ✅ |
+| `solana` | Solana | `sol` | `sol` | ✅ |
+| `tron` | Tron | `tron` | `tron` | ✅ |
+| `near` | NEAR | `near` | `near` | add |
+| `sui` | Sui | `sui` | `sui` | add |
+| `aptos` | Aptos | `aptos` | `aptos` | add |
+| `ton` | TON | `ton` | `ton` | add |
+| `xrp` | XRP | `xrp` | `xrp` | add |
+| `cardano` | Cardano | `cardano` | `cardano` | add |
+| `dogecoin` | Dogecoin | `doge` | `doge` | add |
+| `litecoin` | Litecoin | `ltc` | `ltc` | add |
+| `bitcoincash` | Bitcoin Cash | `bch` | `bch` | add |
+| `zcash` | Zcash | `zec` | `zec` | add |
+| `starknet` | Starknet | `starknet` | `starknet` | add |
+| `aleo` | Aleo | `aleo` | `aleo` | add |
+| `dash` | Dash | `dash` | `dash` | add |
+
+### What to change in the backend
+
+1. **Add the 23 rows to `CHAINS` in `aurora/chains.ts`.** EVM rows get `family: "evm"`, and every other row uses its Aurora code as the `family`. `ChainId` in `contract/schemas.ts` is `z.string()`, so the contract doesn't change.
+2. **Take each `asset` from Aurora; don't guess it.**
+   - `measureCatalogue` finds a chain's tokens with `t.blockchain === chain.aurora && t.symbol === chain.asset`.
+   - A chain is **silently dropped from `/public/chains`** in either of two cases:
+     - that symbol isn't listed under that code in `GET /api/tokens`;
+     - `/api/tokens` spells the chain differently from the `depositChain` enum.
+   - Before committing, run a one-off script that prints the symbols `/api/tokens` lists under each new `aurora` code. Pick the native coin or main stablecoin from that output.
+3. **Don't make all 30 the default.**
+   - `mintAll` makes one `mintAddress` call per family inside a `Promise.all`, and a single failure turns the whole invoice into a 502.
+   - Today that's 4 calls (`evm`, `btc`, `sol`, `tron`). With all 30 as default it's 17 parallel calls per invoice: slower, and far more chances of a 429 ("a concurrent request is already creating this deposit address").
+   - Simplest fix: keep `DEFAULT_CHAINS` to the current 7 plus the new EVM chains. The EVM chains cost nothing extra because they share the one `evm` address.
+   - Merchants choose any other chain per invoice through `chains`. The dashboard's create form already offers whatever `/public/chains` returns.
+   - Later, if wanted: create non-EVM addresses only when the buyer picks that chain on the checkout. That needs a new public route and a frontend change, so talk to the frontend owner first.
+4. **Minimum measurement gets slower.**
+   - The worker runs about 8 dry quotes per asset per chain, 300 ms apart. For 30 chains and up to 2 assets each, that's roughly 2–3 minutes per refresh.
+   - Keep the refresh interval well above that and below the 3-hour cache TTL.
+   - A chain that can't be measured drops out of `/public/chains` instead of getting a guessed number. That's correct; leave it.
+5. **Make a small real deposit on XRP and TON before calling them done.** Those chains normally need a destination tag or memo. Aurora's spec says only Stellar needs one here, and `mintAll` throws on any `memo`, but only a live deposit proves it.
+6. Add a dated line to `NOTES-FOR-FRONTEND.md` once they're live.
+
+### Already done on the frontend
+
+- The landing grid, "30 chains" everywhere, the sign-in page and the site metadata.
+- Labels for all 30 ids in `frontend/src/lib/chains.ts`.
+- Nothing else in the frontend hardcodes the list. The dashboard form and the checkout both show whatever `/public/chains` and the invoice return, so new chains appear on their own.

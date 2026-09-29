@@ -15,14 +15,14 @@ export const nav = {
 } as const;
 
 export const hero = {
-  eyebrow: "Live on Monad · 31+ chains",
+  eyebrow: "Live on Monad · 30 chains",
   title: ["Get paid in any coin.", "Settle on Monad."],
   sub: "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, no gas.",
   primary: { label: "Get started", href: "/app" },
   secondary: { label: "Read the docs", href: "/docs" },
   // Goldsand runs one quiet qualifier under the button pair, not a chip row.
   note: "Non-custodial · Settles on Monad · Works with any wallet",
-  strip: ["31+ chains", "~0.4% fee", "Scan and send", "Non-custodial"],
+  strip: ["30 chains", "~0.4% fee", "Scan and send", "Non-custodial"],
 } as const;
 
 export const testimonials = [
@@ -270,8 +270,16 @@ export const abandonment = {
     "Illustrative figures based on a $100K monthly checkout volume, comparing an 85% abandonment rate against under 2%. Results vary by business.",
 } as const;
 
+/**
+ * ⚠️ Exactly the chains Aurora's persistent-deposit-address API accepts as
+ * `depositChain` (checked 2026-09-29), minus Stellar, whose deposits need a
+ * memo the checkout has nowhere to show. Aurora's marketing page lists more
+ * (Hyperliquid, Robinhood, Aurora itself), but those cannot be deposited to
+ * through the API Tender uses, so they are not claimed here. Change this list
+ * only alongside `backend/src/aurora/chains.ts` and `src/lib/chains.ts`.
+ */
 export const chains = {
-  heading: "Thirty-one chains. One integration.",
+  heading: "Thirty chains. One integration.",
   body: "Your customer pays from the chain they already hold. Every one of these settles to the same address on Monad.",
   list: [
     "Bitcoin",
@@ -286,25 +294,24 @@ export const chains = {
     "Avalanche",
     "Tron",
     "NEAR",
-    "Aurora",
     "Sui",
     "Aptos",
     "TON",
-    "Stellar",
-    "Ripple",
+    "XRP",
     "Cardano",
     "Dogecoin",
     "Litecoin",
     "Bitcoin Cash",
     "Zcash",
-    "Cosmos",
-    "Polkadot",
     "Starknet",
-    "zkSync",
-    "Linea",
     "Scroll",
-    "Blast",
     "Gnosis",
+    "Berachain",
+    "Plasma",
+    "X Layer",
+    "ADI",
+    "Aleo",
+    "Dash",
   ],
 } as const;
 

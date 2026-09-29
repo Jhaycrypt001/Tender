@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Tender · Get paid in any coin. Settle on Monad.",
     description:
-      "Any-chain crypto checkout. 31+ chains in, one asset out, non-custodial.",
+      "Any-chain crypto checkout. 30 chains in, one asset out, non-custodial.",
     url: SITE,
     siteName: "Tender",
     type: "website",
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Tender · Get paid in any coin. Settle on Monad.",
     description:
-      "Any-chain crypto checkout. 31+ chains in, one asset out, non-custodial.",
+      "Any-chain crypto checkout. 30 chains in, one asset out, non-custodial.",
   },
 };
 

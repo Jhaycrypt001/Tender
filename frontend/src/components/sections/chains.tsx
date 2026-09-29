@@ -21,8 +21,10 @@ export default function Chains() {
               <span className="truncate">{chain}</span>
             </li>
           ))}
-          <li className="flex items-center bg-ink px-5 py-4 text-[0.9375rem] text-sand">
-            + more every month
+          {/* Spans the leftover cells so the 30 chains close every row flush:
+              alone on its row at 2 and 3 columns, beside two chains at 4. */}
+          <li className="col-span-2 flex items-center bg-ink px-5 py-4 text-[0.9375rem] text-sand sm:col-span-3 lg:col-span-2">
+            + more as Aurora adds them
           </li>
         </ul>
       </div>

@@ -59,7 +59,7 @@ export default async function AppSignIn({
           </p>
 
           <p className="mx-auto mt-6 max-w-[30ch] text-center text-[0.9375rem] leading-relaxed text-pretty text-ink/70">
-            Accept any coin on 31+ chains and settle on Monad. Sign in to create
+            Accept any coin on 30 chains and settle on Monad. Sign in to create
             invoices and track settlement.
           </p>
 
