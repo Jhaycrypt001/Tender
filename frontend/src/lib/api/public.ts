@@ -54,6 +54,27 @@ export function submitTx(
 }
 
 /**
+ * Open a reusable payment link (`pl_`): mints a fresh invoice for this buyer
+ * and returns its `chk_` checkout token.
+ *
+ * ⚠️ Call from the browser, never the server. The backend allows 10 opens a
+ * minute per IP; from our server every buyer would share one IP.
+ *
+ * A fixed-amount link ignores `amount`. An open-amount link called without one
+ * fails with a validation error on `fields.amount` — that is the signal to ask
+ * the buyer for an amount, not a failure.
+ */
+export function openPaymentLink(
+  token: string,
+  amount?: string,
+): Promise<ApiResult<{ token: string }>> {
+  return publicRequest<{ token: string }>(
+    `/public/links/${encodeURIComponent(token)}`,
+    { method: "POST", body: amount ? { amount } : {} },
+  );
+}
+
+/**
  * URL of the server-sent events stream for one invoice.
  *
  * Returned as a string rather than an EventSource so the caller owns the

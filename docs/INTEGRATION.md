@@ -167,7 +167,7 @@ These answer your `NOTES-FOR-FRONTEND.md` plus two issues found while writing th
 |---|---|---|
 | 1 | Minimums shown as USD (`$8.45`) | ✅ done (`UsdMinimum` on the checkout) |
 | 2 | Show `recovery.notes` on the payment screen | ✅ done (`activity/[id]`) |
-| 3 | **Payment links 404.** The dashboard shares `/pay/pl_…`, and `/pay/[token]` asks `GET /public/invoices/pl_…`, which is not an invoice. Fix: a `pl_` token calls `POST /public/links/:token`, then redirects to `/pay/chk_…`. A link with no fixed amount asks the buyer for the amount first. | queued |
+| 3 | **Payment links.** `/pay/pl_…` now opens the link instead of 404ing. Details and one small ask below. | ✅ done (`components/pay/open-link.tsx`) |
 | 4 | `/public/chains` 503 (`not_ready`) shown as "measuring minimums, try again shortly", not as an error | queued |
 | 5 | UNDERPAID wording in `/docs` and on the landing FAQ: use your suggested text | queued |
 | 6 | Remove the `tk_test_` sandbox FAQ | queued |
@@ -175,6 +175,18 @@ These answer your `NOTES-FOR-FRONTEND.md` plus two issues found while writing th
 | 8 | Refund `501 not_supported` shown as "not available for this payment", not as a failure | queued |
 | 9 | Webhook test result: show `status_code` / `error` | queued |
 | 10 | Session → merchant id → `X-Tender-Merchant` header | waiting on §1 |
+
+### Payment links: how the frontend opens them
+
+Your `openLink` is used unchanged. Here is how the page at `/pay/pl_…` behaves, so you know what hits the API:
+
+- **Nothing is sent on page load.** WhatsApp, Telegram, Slack and iMessage fetch a link to draw its preview, and if loading the page opened the link, every chat it was pasted into would leave an unpaid invoice behind. The buyer taps **Continue to payment**, which sends one `POST /public/links/:token`.
+- **The POST comes from the buyer's browser, not the Next server.** Your limit of 10 per minute per IP would otherwise apply to all buyers together, because they would all share our server's IP. So **`CORS_ORIGINS` must include the frontend origin** or every link fails (§3).
+- The first POST has an empty body `{}`. A `201 {token}` goes to `/pay/chk_…` with `router.replace`, so pressing Back doesn't mint a second invoice. The button stays disabled while the request runs.
+- A validation error with `fields.amount` is read as "this is an open-amount link". An amount field appears, and the next POST sends `{"amount":"25.00"}`. **Keep that field name and error shape**, because the page depends on them.
+- `404` shows "This payment link is not valid", `429` shows "too many tries from this network", and anything else shows "couldn't open, nothing was taken, try again". A token that doesn't match `^pl_[0-9A-Za-z]{27}$` is rejected before any request is made.
+
+**One small ask, additive and optional:** `GET /public/links/:token → { label, amount | null, currency, merchant_name, active }`. It creates nothing and doesn't count toward `uses`. Today the buyer can't see who they're paying or how much until after the invoice exists, and an open-amount link asks for an amount with no currency next to it. Once this route exists, the frontend will show the merchant name, label and amount before the button. Until then the page works without it.
 
 ---
 
