@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { PageShell, SectionHeader } from "@/components/dash/shell";
 import BalanceCard from "@/components/dash/balance-card";
+import { Card, CardCanvas } from "@/components/ui/animated-glow-card";
 import { Cta } from "@/components/dash/cta";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import {
@@ -12,6 +13,7 @@ import {
   CheckoutIcon,
   PayIcon,
   PlusIcon,
+  RampsIcon,
 } from "@/components/dash/icons";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { PaymentStatePill } from "@/components/dash/state-pill";
@@ -74,17 +76,27 @@ export default async function HomePage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <BalanceCard
-          error={balance.ok ? null : balance.error.message || "The request did not complete."}
-          total={balance.ok ? balance.data.display_total : null}
-          settled={balance.ok ? balance.data.settled : []}
-          unsettled={balance.ok ? balance.data.unsettled : []}
-          asset={m?.settlement_asset}
-          address={m?.settlement_address}
-          addressKnown={merchant.ok}
-          verified={m?.settlement_verified ?? false}
-          art={art}
-        />
+        {/* The one lit surface on the screen: light runs its edge because
+            this is the number the merchant came to check. */}
+        <CardCanvas className="h-full">
+          <Card>
+            <BalanceCard
+              error={
+                balance.ok
+                  ? null
+                  : balance.error.message || "The request did not complete."
+              }
+              total={balance.ok ? balance.data.display_total : null}
+              settled={balance.ok ? balance.data.settled : []}
+              unsettled={balance.ok ? balance.data.unsettled : []}
+              asset={m?.settlement_asset}
+              address={m?.settlement_address}
+              addressKnown={merchant.ok}
+              verified={m?.settlement_verified ?? false}
+              art={art}
+            />
+          </Card>
+        </CardCanvas>
 
         {/* The light partner to the dark card: one next move, not a menu.
             Payment links are the shortest path from signing up to being paid,
@@ -121,11 +133,12 @@ export default async function HomePage() {
           <PayIcon className="h-4 w-4" />
           Refund
         </Cta>
-        <Cta href="/app/settings/developers" tone="outline">
-          <span aria-hidden="true" className="font-mono text-[0.8125rem] leading-none">
-            {"{}"}
-          </span>
-          API keys
+        {/* Cash out, not API keys: this row is for things a merchant does
+            every day, and keys are a one-time developer setup that already
+            lives under the avatar menu → Developers. */}
+        <Cta href="/app/ramps" tone="outline">
+          <RampsIcon className="h-4 w-4" />
+          Cash out
         </Cta>
         <Cta href="/app/ask" tone="outline">
           <AskIcon className="h-4 w-4" />
@@ -169,19 +182,17 @@ export default async function HomePage() {
               { key: "tx", label: "Transaction", secondary: true },
               { key: "state", label: "State", align: "right" },
             ]}
-            rows={recent.data.data.slice(0, RECENT).map(
-              (p): Row => ({
-                id: p.id,
-                href: `/app/activity/${p.id}`,
-                cells: {
-                  when: <Timestamp value={p.first_seen_at} />,
-                  from: chainLabel(p.from_chain),
-                  sent: <Money amount={p.amount_in} maxDp={8} />,
-                  tx: <Hash value={p.tx_hash} />,
-                  state: <PaymentStatePill status={p.status} />,
-                },
-              }),
-            )}
+            rows={recent.data.data.slice(0, RECENT).map((p): Row => ({
+              id: p.id,
+              href: `/app/activity/${p.id}`,
+              cells: {
+                when: <Timestamp value={p.first_seen_at} />,
+                from: chainLabel(p.from_chain),
+                sent: <Money amount={p.amount_in} maxDp={8} />,
+                tx: <Hash value={p.tx_hash} />,
+                state: <PaymentStatePill status={p.status} />,
+              },
+            }))}
             empty="No payments yet."
             caption="Recent payments"
           />

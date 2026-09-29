@@ -60,6 +60,7 @@ export default async function RampsPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Ramps"
         title="From Monad to your bank."
         description="Move settled revenue out to a bank account."

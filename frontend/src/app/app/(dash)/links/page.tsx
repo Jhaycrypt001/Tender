@@ -29,6 +29,7 @@ export default async function LinksPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Links"
         title="One link, every buyer."
         description="One link you can reuse. Every buyer who opens it gets their own invoice."

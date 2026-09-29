@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /**
  * The list surface.
  *
@@ -59,7 +61,7 @@ export function DataTable({
   return (
     <>
       {/* Table layout, tablet and up. */}
-      <div className="hidden overflow-hidden rounded-2xl border border-line bg-paper md:block">
+      <div className="hidden overflow-x-auto rounded-2xl border border-line bg-paper md:block">
         <table className="w-full border-collapse text-left">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -96,14 +98,16 @@ export function DataTable({
                     } ${c.secondary ? "hidden lg:table-cell" : ""}`}
                   >
                     {/* The link wraps the first cell only. A nested <a> per
-                        cell would make one row many tab stops. */}
+                        cell would make one row many tab stops. A next/link,
+                        not a bare <a>: a bare anchor reloads the whole
+                        document, header and all, on every row tapped. */}
                     {row.href && i === 0 ? (
-                      <a
+                      <Link
                         href={row.href}
                         className="after:absolute after:inset-0 after:content-['']"
                       >
                         <Cell value={row.cells[c.key]} />
-                      </a>
+                      </Link>
                     ) : (
                       <Cell value={row.cells[c.key]} />
                     )}
@@ -127,19 +131,19 @@ export function DataTable({
             >
               <div className="mb-3 text-[0.9375rem]">
                 {row.href ? (
-                  <a
+                  <Link
                     href={row.href}
                     className="after:absolute after:inset-0 after:content-['']"
                   >
                     <Cell value={row.cells[lead.key]} />
-                  </a>
+                  </Link>
                 ) : (
                   <Cell value={row.cells[lead.key]} />
                 )}
               </div>
-              <dl className="flex flex-col gap-2">
+              <dl className="flex min-w-0 flex-col gap-2">
                 {rest.map((c) => (
-                  <div key={c.key} className="flex justify-between gap-4">
+                  <div key={c.key} className="flex min-w-0 justify-between gap-4">
                     <dt className="eyebrow shrink-0 text-mute">
                       <span className="before:hidden">{c.label}</span>
                     </dt>

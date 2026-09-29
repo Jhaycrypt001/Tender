@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import { ActivityIcon, PlusIcon } from "@/components/dash/icons";
@@ -6,6 +5,7 @@ import { Cta } from "@/components/dash/cta";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
+import { FilterTabs } from "@/components/dash/filter-tabs";
 import { listPayments } from "@/lib/api/payments";
 import { chainLabel } from "@/lib/chains";
 import type { ListPaymentsQuery } from "@/lib/api/types";
@@ -49,6 +49,7 @@ export default async function ActivityPage({
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Activity"
         title="Every coin, accounted for."
         description="Every payment across every invoice, and the state it reached."
@@ -56,27 +57,17 @@ export default async function ActivityPage({
 
       {/* Rendered regardless of the result: these are navigation, and hiding
           them behind a failed fetch makes the screen look broken, not empty. */}
-      <nav aria-label="Filter payments" className="mb-5 flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => {
-          const on = f.label === active.label;
-          const href =
-            f.label === "All" ? "/app/activity" : `/app/activity?filter=${slug(f.label)}`;
-          return (
-            <Link
-              key={f.label}
-              href={href}
-              aria-current={on ? "page" : undefined}
-              className={`rounded-full border px-3.5 py-1.5 text-[0.8125rem] transition-colors ${
-                on
-                  ? "border-ink bg-ink text-paper"
-                  : "border-line bg-paper text-mute hover:border-mute/50 hover:text-ink"
-              }`}
-            >
-              {f.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <FilterTabs
+        label="Filter payments"
+        tabs={FILTERS.map((f) => ({
+          label: f.label,
+          href:
+            f.label === "All"
+              ? "/app/activity"
+              : `/app/activity?filter=${slug(f.label)}`,
+          on: f.label === active.label,
+        }))}
+      />
 
       {!result.ok ? (
         <ErrorState error={result.error} />

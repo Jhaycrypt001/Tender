@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import { CheckoutIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
 import { Money, Timestamp } from "@/components/dash/money";
 import { InvoiceStatePill } from "@/components/dash/state-pill";
+import { FilterTabs } from "@/components/dash/filter-tabs";
 import { DataTable, type Row } from "@/components/dash/table";
 import { listInvoices } from "@/lib/api/invoices";
 import type { InvoiceStatus } from "@/lib/api/types";
@@ -45,6 +45,7 @@ export default async function CheckoutPage({
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Checkout"
         title="Bill anyone. Any chain."
         description="Create an invoice, hand the buyer a link, and watch it settle."
@@ -56,26 +57,14 @@ export default async function CheckoutPage({
           screen look broken rather than empty. */}
       {/* A segmented control, not loose pills: these are mutually exclusive
           views of one list, and a single track says so at a glance. */}
-      <nav
-        aria-label="Filter invoices"
-        className="mb-5 inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-line bg-paper p-1"
-      >
-        {FILTERS.map((f) => {
-          const on = f.label === active.label;
-          return (
-            <Link
-              key={f.label}
-              href={f.status ? `/app/checkout?status=${f.status}` : "/app/checkout"}
-              aria-current={on ? "page" : undefined}
-              className={`rounded-lg px-3.5 py-1.5 text-[0.8125rem] transition-colors ${
-                on ? "bg-ink text-paper" : "text-mute hover:bg-stone hover:text-ink"
-              }`}
-            >
-              {f.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <FilterTabs
+        label="Filter invoices"
+        tabs={FILTERS.map((f) => ({
+          label: f.label,
+          href: f.status ? `/app/checkout?status=${f.status}` : "/app/checkout",
+          on: f.label === active.label,
+        }))}
+      />
 
       {!result.ok ? (
         <ErrorState error={result.error} />

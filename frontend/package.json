@@ -12,6 +12,7 @@
     "@fontsource-variable/instrument-sans": "^5.3.0",
     "@fontsource/fraunces": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "country-flag-icons": "^1.6.20",
     "motion": "^13.4.1",
     "next": "15.5.4",
     "react": "^19.0.0",

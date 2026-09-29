@@ -41,6 +41,7 @@ export default async function InvoicePage({
     return (
       <PageShell>
         <PageHeader
+          back="/app/checkout"
           eyebrow="Get paid"
           title="Invoice"
           actions={
@@ -80,6 +81,7 @@ export default async function InvoicePage({
   return (
     <PageShell>
       <PageHeader
+        back="/app/checkout"
         eyebrow={`Invoice ${invoice.reference}`}
         title={`${invoice.amount_expected} ${invoice.currency}`}
         actions={<InvoiceStatePill status={invoice.status} />}

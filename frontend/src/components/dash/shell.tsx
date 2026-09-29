@@ -1,3 +1,5 @@
+import BackButton from "@/components/dash/back-button";
+
 /**
  * The page frame inside the dashboard: a titled header and a content column.
  *
@@ -24,11 +26,17 @@ export function PageShell({
 }
 
 export function PageHeader({
+  back,
   eyebrow,
   title,
   description,
   actions,
 }: {
+  /**
+   * Where Back goes when there is no in-app history to step through — the
+   * screen's logical parent. Omit it on Home, which has no parent.
+   */
+  back?: string;
   eyebrow?: string;
   title: string;
   description?: string;
@@ -37,6 +45,11 @@ export function PageHeader({
   return (
     <div className="mb-7 flex flex-col gap-5 sm:mb-9 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
+        {back && (
+          <div>
+            <BackButton fallback={back} />
+          </div>
+        )}
         {eyebrow && <p className="eyebrow mb-3.5 text-mute">{eyebrow}</p>}
         {/* A statement, not a label: each screen opens by saying what it is
             for in one short line, then the dim sub says how. */}

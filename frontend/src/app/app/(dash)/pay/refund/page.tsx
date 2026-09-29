@@ -28,6 +28,7 @@ export default async function RefundPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/pay"
         eyebrow="Pay · Refund"
         title="Refund a payment"
         description="Return a settled payment to the buyer who made it."

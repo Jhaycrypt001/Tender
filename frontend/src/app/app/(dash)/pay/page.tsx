@@ -47,6 +47,7 @@ export default function PayPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Pay"
         title="Money going back out."
         description="Refunds to buyers, payouts to suppliers, splits across a team."

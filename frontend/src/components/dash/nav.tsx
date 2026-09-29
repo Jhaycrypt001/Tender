@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TenderMark } from "@/components/logo";
+import CurrencyFlag from "@/components/dash/currency-flag";
 import {
   AskIcon,
   CloseIcon,
@@ -22,6 +23,8 @@ import {
   DropdownItem,
   DropdownPanel,
 } from "@/components/ui/animated-dropdown";
+import { GlowRail, GlowTab } from "@/components/ui/glow-menu";
+import { recordPath } from "@/lib/nav-history";
 
 /**
  * The dashboard header.
@@ -62,6 +65,9 @@ export default function DashNav({ session }: { session: Session }) {
   useEffect(() => {
     setOpen(null);
     setMobile(false);
+    // The header is mounted on every dashboard screen and outlives them all,
+    // which makes it the one place that sees every move — see nav-history.
+    recordPath(pathname);
   }, [pathname]);
 
   useEffect(() => {
@@ -126,16 +132,19 @@ export default function DashNav({ session }: { session: Session }) {
         {/* Tab rail. Hidden below xl: seven tabs plus the right-hand controls
             need real width, and collapsing earlier avoids a cramped middle
             state where labels truncate. */}
-        <nav aria-label="Dashboard" className="mx-auto hidden xl:block">
-          <ul className="flex items-center gap-0.5">
+        <GlowRail label="Dashboard" className="mx-auto hidden xl:block">
             {NAV.map((item) =>
               item.children ? (
                 <li key={item.href} className="relative">
-                  <DropdownTrigger
-                    item={item}
-                    active={isActive(pathname, item.href)}
-                    open={open === "pay"}
+                  <GlowTab
+                    icon={item.icon}
+                    label={item.label}
+                    active={isActive(pathname, item.href) || open === "pay"}
                     onClick={() => toggle("pay")}
+                    expanded={open === "pay"}
+                    trailing={
+                      <DropdownChevron open={open === "pay"} className="h-3 w-3" />
+                    }
                   />
                   <PayMenu
                     item={item}
@@ -145,12 +154,16 @@ export default function DashNav({ session }: { session: Session }) {
                 </li>
               ) : (
                 <li key={item.href}>
-                  <TabLink item={item} active={isActive(pathname, item.href)} />
+                  <GlowTab
+                    icon={item.icon}
+                    label={item.label}
+                    href={item.href}
+                    active={isActive(pathname, item.href)}
+                  />
                 </li>
               ),
             )}
-          </ul>
-        </nav>
+        </GlowRail>
 
         <div className="ml-auto flex items-center gap-1.5 xl:ml-0">
           {/* Ask — the natural-language query box, reachable everywhere. */}
@@ -173,8 +186,10 @@ export default function DashNav({ session }: { session: Session }) {
               onClick={() => toggle("currency")}
               aria-expanded={open === "currency"}
               aria-haspopup="listbox"
-              className="flex h-9 items-center gap-1.5 rounded-full border border-line px-3 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone"
+              aria-label={`Display currency: ${currency.label}`}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-line pl-1.5 pr-3 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone"
             >
+              <CurrencyFlag code={currency.code} className="h-6 w-6" />
               {currency.code} · {currency.symbol}
               <DropdownChevron
                 open={open === "currency"}
@@ -185,7 +200,7 @@ export default function DashNav({ session }: { session: Session }) {
               open={open === "currency"}
               role="listbox"
               label="Display currency"
-              className="absolute right-0 top-[calc(100%+0.5rem)] max-h-[19rem] w-[14rem] overflow-y-auto"
+              className="no-scrollbar absolute right-0 top-[calc(100%+0.5rem)] max-h-[21rem] w-[15rem] overflow-y-auto overscroll-contain"
             >
               <DropdownItem>
                 <p className="px-2.5 pb-1 pt-2 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-mute">
@@ -205,13 +220,17 @@ export default function DashNav({ session }: { session: Session }) {
                     aria-disabled={item.code !== currency.code}
                     disabled={item.code !== currency.code}
                     onClick={() => setOpen(null)}
-                    className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-[0.8125rem] transition-colors disabled:cursor-not-allowed ${
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[0.8125rem] transition-colors disabled:cursor-not-allowed ${
                       item.code === currency.code
                         ? "bg-stone text-ink"
                         : "text-mute"
                     }`}
                   >
-                    <span>{item.label}</span>
+                    <CurrencyFlag
+                      code={item.code}
+                      className={`h-5 w-5 ${item.code === currency.code ? "" : "opacity-70"}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     <span className="font-mono text-[0.6875rem] text-mute">
                       {item.code === currency.code ? item.code : "Soon"}
                     </span>
@@ -261,54 +280,6 @@ export default function DashNav({ session }: { session: Session }) {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/** Active tab is a filled ink pill; inactive is quiet until hovered. */
-function TabLink({ item, active }: { item: NavItem; active: boolean }) {
-  const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-[0.8125rem] transition-colors ${
-        active ? "bg-ink text-paper" : "text-mute hover:bg-stone hover:text-ink"
-      }`}
-    >
-      <Icon className="h-[1.0625rem] w-[1.0625rem]" />
-      {item.label}
-    </Link>
-  );
-}
-
-function DropdownTrigger({
-  item,
-  active,
-  open,
-  onClick,
-}: {
-  item: NavItem;
-  active: boolean;
-  open: boolean;
-  onClick: () => void;
-}) {
-  const Icon = item.icon;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={open}
-      aria-haspopup="menu"
-      className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-[0.8125rem] transition-colors ${
-        active || open
-          ? "bg-ink text-paper"
-          : "text-mute hover:bg-stone hover:text-ink"
-      }`}
-    >
-      <Icon className="h-[1.0625rem] w-[1.0625rem]" />
-      {item.label}
-      <DropdownChevron open={open} className="h-3.5 w-3.5" />
-    </button>
-  );
-}
 
 /** Each row carries a one-line description: these three verbs are close enough
  *  that a bare label leaves a merchant guessing which one they want. */

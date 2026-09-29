@@ -97,7 +97,7 @@ export default function BalanceCard({
   return (
     <section
       aria-label="Balance"
-      className="relative isolate flex min-h-[17.5rem] flex-col overflow-hidden rounded-[1.25rem] bg-ink p-6 text-paper md:min-h-[19rem] md:p-8"
+      className="relative isolate flex h-full min-h-[17.5rem] flex-col overflow-hidden rounded-[1.25rem] bg-ink p-6 text-paper md:min-h-[19rem] md:p-8"
     >
       {art ? (
         // On desktop the art sits in the right 62% of the card, sized by

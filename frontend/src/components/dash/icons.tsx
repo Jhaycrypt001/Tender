@@ -29,6 +29,15 @@ function Svg({ className = "", children }: IconProps & { children: React.ReactNo
   );
 }
 
+/** Back — a plain arrow pointing the way you came. */
+export function ArrowLeftIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M19 12H5.5M11 5.5 4.5 12l6.5 6.5" />
+    </Svg>
+  );
+}
+
 /** Home — a roof over a doorway. */
 export function HomeIcon(p: IconProps) {
   return (

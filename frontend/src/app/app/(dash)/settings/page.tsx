@@ -27,6 +27,7 @@ export default async function SettingsPage() {
     return (
       <PageShell>
         <PageHeader
+          back="/app/home"
           eyebrow="Settings"
           title="Where the money goes."
           description="Where money settles, and who this account belongs to."
@@ -41,6 +42,7 @@ export default async function SettingsPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Settings"
         title="Where the money goes."
         description="Where money settles, and who this account belongs to."

@@ -40,6 +40,7 @@ export default async function EarnPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/home"
         eyebrow="Earn"
         title="Make idle revenue work."
         description="Settled revenue put to work on Monad, instead of sitting still."

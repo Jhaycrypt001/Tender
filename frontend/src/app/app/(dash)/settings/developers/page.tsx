@@ -40,6 +40,7 @@ export default async function DevelopersPage() {
     return (
       <PageShell>
         <PageHeader
+          back="/app/settings"
           eyebrow="Settings · Developers"
           title="Wire Tender into your stack."
           description="How your server talks to Tender, and how Tender talks back."
@@ -54,6 +55,7 @@ export default async function DevelopersPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/settings"
         eyebrow="Settings · Developers"
         title="Wire Tender into your stack."
         description="How your server talks to Tender, and how Tender talks back."

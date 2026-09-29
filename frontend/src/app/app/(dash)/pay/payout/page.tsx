@@ -21,6 +21,7 @@ export default function PayoutPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/pay"
         eyebrow="Pay · Payout"
         title="Pay someone"
         description="Send settled revenue to a supplier, a contractor or your own wallet."

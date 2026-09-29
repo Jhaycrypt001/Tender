@@ -76,6 +76,202 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Glow card — components/ui/animated-glow-card.tsx
+   In `components`, not unlayered: unlayered CSS outranks every Tailwind
+   utility, and the card's wrapper still takes utility classes for its size.
+   ------------------------------------------------------------------------- */
+@layer components {
+  .card-canvas {
+    --glow-radius: 1.25rem;
+    --glow-period: 9s;
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* A sand bloom behind the card. Kept inside the card's own footprint so the
+     blur only just clears the edge and never washes over a neighbour. */
+  .card-backdrop {
+    position: absolute;
+    inset: 14% 6% 4% 34%;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      rgba(196, 133, 53, 0.55),
+      rgba(196, 133, 53, 0) 100%
+    );
+    filter: blur(38px);
+    opacity: 0.5;
+    animation: glow-breathe 6s ease-in-out infinite;
+  }
+
+  .glow-card {
+    position: relative;
+    height: 100%;
+    padding: 1px;
+    border-radius: calc(var(--glow-radius) + 1px);
+    /* The resting hairline the comet runs along. */
+    background: rgba(196, 133, 53, 0.22);
+  }
+
+  .card-content {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    border-radius: var(--glow-radius);
+  }
+
+  .border-element {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    animation-duration: var(--glow-period);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+    animation-iteration-count: infinite;
+  }
+
+  /* The glow: the same comet, blurred, then pushed back to near-opaque by
+     #unopaq so it reads as light rather than smudge. `background: inherit`
+     carries the strip's animated position along with it. */
+  .border-element::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    background: inherit;
+    filter: blur(5px) url(#unopaq);
+    opacity: 0.7;
+  }
+
+  /* Straight edges only — the strips stop where the corners start to round. */
+  .border-top,
+  .border-bottom {
+    left: var(--glow-radius);
+    right: var(--glow-radius);
+    height: 1px;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      #c48535 30%,
+      #f6dcaa 50%,
+      #c48535 70%,
+      transparent
+    );
+    background-size: 34% 100%;
+  }
+
+  .border-left,
+  .border-right {
+    top: var(--glow-radius);
+    bottom: var(--glow-radius);
+    width: 1px;
+    background-image: linear-gradient(
+      180deg,
+      transparent,
+      #c48535 30%,
+      #f6dcaa 50%,
+      #c48535 70%,
+      transparent
+    );
+    background-size: 100% 40%;
+  }
+
+  .border-top {
+    top: 0;
+    background-position: -50% 0;
+    animation-name: glow-trace-right;
+  }
+
+  .border-right {
+    right: 0;
+    background-position: 0 -50%;
+    animation-name: glow-trace-down;
+    /* Negative delays phase the four edges into one lap without a dead
+       first cycle: 0.70 of the period in, the top run has just finished. */
+    animation-delay: calc(var(--glow-period) * -0.7);
+  }
+
+  .border-bottom {
+    bottom: 0;
+    background-position: 150% 0;
+    animation-name: glow-trace-left;
+    animation-delay: calc(var(--glow-period) * -0.52);
+  }
+
+  .border-left {
+    left: 0;
+    background-position: 0 150%;
+    animation-name: glow-trace-up;
+    animation-delay: calc(var(--glow-period) * -0.22);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card-backdrop {
+      animation: none;
+    }
+
+    .border-element {
+      display: none;
+    }
+  }
+}
+
+/* Each edge owns a slice of the lap and sits off-strip for the rest of it:
+   top 0–30%, right 30–48%, bottom 48–78%, left 78–96%. */
+@keyframes glow-trace-right {
+  0% {
+    background-position: -50% 0;
+  }
+  30%,
+  100% {
+    background-position: 150% 0;
+  }
+}
+
+@keyframes glow-trace-down {
+  0% {
+    background-position: 0 -50%;
+  }
+  18%,
+  100% {
+    background-position: 0 150%;
+  }
+}
+
+@keyframes glow-trace-left {
+  0% {
+    background-position: 150% 0;
+  }
+  30%,
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+@keyframes glow-trace-up {
+  0% {
+    background-position: 0 150%;
+  }
+  18%,
+  100% {
+    background-position: 0 -50%;
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.04);
+  }
+}
+
 @layer utilities {
   /* Section rhythm — whitespace is the design, but 12vw was 173px a side at
      1440px and made every section read oversized at 100% zoom. */
@@ -119,6 +315,18 @@
       transparent 1px
     );
     background-size: 22px 22px;
+  }
+
+  /* Scrolls, but draws no bar. For short panels and chip rails where a
+     scrollbar is chrome that competes with the content: the panel still
+     scrolls by wheel, touch and keyboard, it just does not advertise it. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   /* Talise marks the corners of a block with a thin crosshair rather than

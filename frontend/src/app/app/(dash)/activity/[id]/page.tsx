@@ -33,6 +33,7 @@ export default async function PaymentPage({
     return (
       <PageShell>
         <PageHeader
+          back="/app/activity"
           eyebrow="Ledger"
           title="Payment"
           actions={
@@ -54,6 +55,7 @@ export default async function PaymentPage({
   return (
     <PageShell>
       <PageHeader
+        back="/app/activity"
         eyebrow={"Paid from " + chainLabel(p.from_chain)}
         title={p.amount_in + " in"}
         actions={<PaymentStatePill status={p.status} />}

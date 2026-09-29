@@ -16,6 +16,7 @@ export default function SplitPage() {
   return (
     <PageShell>
       <PageHeader
+        back="/app/pay"
         eyebrow="Pay · Split"
         title="Split a payment"
         description="Divide one amount across several addresses in a single flow."
