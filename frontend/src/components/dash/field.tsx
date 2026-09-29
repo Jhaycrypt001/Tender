@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { AnimatedSelect } from "@/components/ui/animated-dropdown";
 
 /**
  * Form inputs.
@@ -11,6 +12,11 @@ import { useId } from "react";
  * ⚠️ Errors come from the API's `ApiError.fields`, keyed by field name — the
  * server validates with the shared schema and the client renders what it says.
  * There is no second, hand-rolled validation layer to drift out of sync with it.
+ *
+ * The one exception to "native" is `Select`, which is the animated dropdown so
+ * it matches every other dropdown in the dashboard. It still posts a named
+ * value through a hidden input, so the forms above it do not know the
+ * difference.
  */
 
 function Shell({
@@ -223,27 +229,17 @@ export function Select({
 
   return (
     <Shell id={id} label={label} hint={hint} error={error} required={required}>
-      <select
+      {/* No `required` to forward: the value always starts as one of the
+          options, so the field can never post empty. */}
+      <AnimatedSelect
         id={id}
         name={name}
-        required={required}
+        options={options}
         defaultValue={defaultValue}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
-        className={`${INPUT} ${border(error)} appearance-none bg-[length:1rem] bg-[right_0.875rem_center] bg-no-repeat pr-10`}
-        style={{
-          // Inline SVG chevron: one less network request than an icon
-          // component, and it inherits nothing that could be overridden.
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8783' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-        }}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        invalid={Boolean(error)}
+        describedBy={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
+        className={`${INPUT} ${border(error)}`}
+      />
     </Shell>
   );
 }

@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { TenderMark } from "@/components/logo";
 import {
   AskIcon,
-  ChevronDownIcon,
   CloseIcon,
   MenuIcon,
   SettingsIcon,
@@ -18,6 +17,11 @@ import {
   type DisplayCurrency,
   type NavItem,
 } from "@/lib/dash-nav";
+import {
+  DropdownChevron,
+  DropdownItem,
+  DropdownPanel,
+} from "@/components/ui/animated-dropdown";
 
 /**
  * The dashboard header.
@@ -25,7 +29,8 @@ import {
  * Three popovers live here — the Pay dropdown, the currency picker and the
  * avatar menu — and they share one piece of machinery (`useDismiss`) rather
  * than each growing their own listeners. All three close on Escape, on an
- * outside click, and on navigation.
+ * outside click, and on navigation. They also share one motion with the form
+ * selects, from `components/ui/animated-dropdown`.
  *
  * The header is one component instead of three because the popovers are
  * mutually exclusive: opening one must close the others, which is far simpler
@@ -132,7 +137,11 @@ export default function DashNav({ session }: { session: Session }) {
                     open={open === "pay"}
                     onClick={() => toggle("pay")}
                   />
-                  {open === "pay" && <PayMenu item={item} pathname={pathname} />}
+                  <PayMenu
+                    item={item}
+                    pathname={pathname}
+                    open={open === "pay"}
+                  />
                 </li>
               ) : (
                 <li key={item.href}>
@@ -167,18 +176,18 @@ export default function DashNav({ session }: { session: Session }) {
               className="flex h-9 items-center gap-1.5 rounded-full border border-line px-3 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone"
             >
               {currency.code} · {currency.symbol}
-              <ChevronDownIcon
-                className={`h-3.5 w-3.5 text-mute transition-transform ${
-                  open === "currency" ? "rotate-180" : ""
-                }`}
+              <DropdownChevron
+                open={open === "currency"}
+                className="h-3.5 w-3.5 text-mute"
               />
             </button>
-            {open === "currency" && (
-              <div
-                role="listbox"
-                aria-label="Display currency"
-                className="absolute right-0 top-[calc(100%+0.5rem)] max-h-[19rem] w-[14rem] overflow-y-auto rounded-2xl border border-line bg-paper p-1.5 shadow-[0_18px_40px_-12px_rgba(18,17,17,0.22)]"
-              >
+            <DropdownPanel
+              open={open === "currency"}
+              role="listbox"
+              label="Display currency"
+              className="absolute right-0 top-[calc(100%+0.5rem)] max-h-[19rem] w-[14rem] overflow-y-auto"
+            >
+              <DropdownItem>
                 <p className="px-2.5 pb-1 pt-2 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-mute">
                   Display currency
                 </p>
@@ -186,9 +195,10 @@ export default function DashNav({ session }: { session: Session }) {
                   Amounts show in the asset they settle in. Other currencies
                   need a live FX rate, which is not connected yet.
                 </p>
-                {DISPLAY_CURRENCIES.map((item) => (
+              </DropdownItem>
+              {DISPLAY_CURRENCIES.map((item) => (
+                <DropdownItem key={item.code}>
                   <button
-                    key={item.code}
                     type="button"
                     role="option"
                     aria-selected={item.code === currency.code}
@@ -206,9 +216,9 @@ export default function DashNav({ session }: { session: Session }) {
                       {item.code === currency.code ? item.code : "Soon"}
                     </span>
                   </button>
-                ))}
-              </div>
-            )}
+                </DropdownItem>
+              ))}
+            </DropdownPanel>
           </div>
 
           {/* Avatar */}
@@ -223,7 +233,7 @@ export default function DashNav({ session }: { session: Session }) {
             >
               <Avatar session={session} />
             </button>
-            {open === "avatar" && <AvatarMenu session={session} />}
+            <AvatarMenu session={session} open={open === "avatar"} />
           </div>
 
           {/* Mobile trigger */}
@@ -295,37 +305,45 @@ function DropdownTrigger({
     >
       <Icon className="h-[1.0625rem] w-[1.0625rem]" />
       {item.label}
-      <ChevronDownIcon
-        className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-      />
+      <DropdownChevron open={open} className="h-3.5 w-3.5" />
     </button>
   );
 }
 
 /** Each row carries a one-line description: these three verbs are close enough
  *  that a bare label leaves a merchant guessing which one they want. */
-function PayMenu({ item, pathname }: { item: NavItem; pathname: string }) {
+function PayMenu({
+  item,
+  pathname,
+  open,
+}: {
+  item: NavItem;
+  pathname: string;
+  open: boolean;
+}) {
   return (
-    <div
+    <DropdownPanel
+      open={open}
       role="menu"
-      className="absolute left-1/2 top-[calc(100%+0.5rem)] w-[17.5rem] -translate-x-1/2 rounded-2xl border border-line bg-paper p-1.5 shadow-[0_18px_40px_-12px_rgba(18,17,17,0.22)]"
+      className="absolute left-1/2 top-[calc(100%+0.5rem)] w-[17.5rem] -translate-x-1/2"
     >
       {item.children?.map((child) => (
-        <Link
-          key={child.href}
-          href={child.href}
-          role="menuitem"
-          className={`block rounded-xl px-3 py-2.5 transition-colors ${
-            isActive(pathname, child.href) ? "bg-stone" : "hover:bg-stone"
-          }`}
-        >
-          <span className="block text-[0.875rem] text-ink">{child.label}</span>
-          <span className="mt-0.5 block text-[0.75rem] leading-snug text-mute">
-            {child.desc}
-          </span>
-        </Link>
+        <DropdownItem key={child.href}>
+          <Link
+            href={child.href}
+            role="menuitem"
+            className={`block rounded-xl px-3 py-2.5 transition-colors ${
+              isActive(pathname, child.href) ? "bg-stone" : "hover:bg-stone"
+            }`}
+          >
+            <span className="block text-[0.875rem] text-ink">{child.label}</span>
+            <span className="mt-0.5 block text-[0.75rem] leading-snug text-mute">
+              {child.desc}
+            </span>
+          </Link>
+        </DropdownItem>
       ))}
-    </div>
+    </DropdownPanel>
   );
 }
 
@@ -351,48 +369,55 @@ function Avatar({ session }: { session: Session }) {
   );
 }
 
-function AvatarMenu({ session }: { session: Session }) {
+function AvatarMenu({ session, open }: { session: Session; open: boolean }) {
   return (
-    <div
+    <DropdownPanel
+      open={open}
       role="menu"
-      className="absolute right-0 top-[calc(100%+0.5rem)] w-[16rem] rounded-2xl border border-line bg-paper p-1.5 shadow-[0_18px_40px_-12px_rgba(18,17,17,0.22)]"
+      className="absolute right-0 top-[calc(100%+0.5rem)] w-[16rem]"
     >
-      <div className="px-3 py-2.5">
+      <DropdownItem className="px-3 py-2.5">
         <p className="truncate text-[0.875rem] text-ink">{session.name}</p>
         <p className="truncate text-[0.75rem] text-mute">{session.email}</p>
-      </div>
+      </DropdownItem>
       <div className="my-1 h-px bg-line" />
-      <Link
-        href="/app/settings"
-        role="menuitem"
-        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[0.8125rem] text-ink transition-colors hover:bg-stone"
-      >
-        <SettingsIcon className="h-4 w-4 text-mute" />
-        Settings
-      </Link>
-      <Link
-        href="/app/settings/developers"
-        role="menuitem"
-        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[0.8125rem] text-ink transition-colors hover:bg-stone"
-      >
-        <span className="w-4 text-center font-mono text-[0.6875rem] text-mute">
-          {"{}"}
-        </span>
-        Developers
-      </Link>
+      <DropdownItem>
+        <Link
+          href="/app/settings"
+          role="menuitem"
+          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[0.8125rem] text-ink transition-colors hover:bg-stone"
+        >
+          <SettingsIcon className="h-4 w-4 text-mute" />
+          Settings
+        </Link>
+      </DropdownItem>
+      <DropdownItem>
+        <Link
+          href="/app/settings/developers"
+          role="menuitem"
+          className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-[0.8125rem] text-ink transition-colors hover:bg-stone"
+        >
+          <span className="w-4 text-center font-mono text-[0.6875rem] text-mute">
+            {"{}"}
+          </span>
+          Developers
+        </Link>
+      </DropdownItem>
       <div className="my-1 h-px bg-line" />
       {/* A real form POST, not a link: signing out changes state, and a GET
           that mutates is fetchable by anything that prefetches. */}
-      <form action="/app/signout" method="post">
-        <button
-          type="submit"
-          role="menuitem"
-          className="w-full rounded-xl px-3 py-2 text-left text-[0.8125rem] text-ink transition-colors hover:bg-stone"
-        >
-          Sign out
-        </button>
-      </form>
-    </div>
+      <DropdownItem>
+        <form action="/app/signout" method="post">
+          <button
+            type="submit"
+            role="menuitem"
+            className="w-full rounded-xl px-3 py-2 text-left text-[0.8125rem] text-ink transition-colors hover:bg-stone"
+          >
+            Sign out
+          </button>
+        </form>
+      </DropdownItem>
+    </DropdownPanel>
   );
 }
 
