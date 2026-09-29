@@ -30,6 +30,22 @@ The frontend has been built to handle:
 
 Fix 1 first. Nothing else matters until two people can sign in and see different accounts.
 
+### Audit, 2026-09-29
+
+- **All 24 calls the frontend makes have a matching backend route**, SSE included. `npm run typecheck` passes, which covers `contract.check.ts` against the current frontend types.
+- **The backend tests were not run.** They need Postgres on 5434, and Docker was down on this machine. Run `npm run setup && npm test` and post the result.
+- **Chain count doesn't match.** The landing page says "31+ chains". `aurora/chains.ts` offers 7: Bitcoin, Solana, Tron, Ethereum, Base, Arbitrum, Monad. Either add the Aurora chains we can support, or tell the frontend owner the real number so the copy says it. Judges will check.
+- **Screens with nothing behind them yet.** Each one says so on screen, and none fakes a result:
+
+| Screen | What the backend has today | What it would need |
+|---|---|---|
+| Earn | `positions` returns `[]`; `deposit` returns 501 | Aurora Intents Connect into a Monad position |
+| Ramps / Cash out | `corridors` returns `[]` | An off-ramp partner |
+| Pay → Payout, Pay → Split | nothing | A payout route. It moves real money, so it needs its own design |
+| Display currency (EUR, NGN…) | USD only (`display_total`) | A live FX rate source |
+
+For the hackathon, the core flow in §5 matters more than any of these. Leave them honestly empty rather than half-building one.
+
 ---
 
 ## 1. Link a Google sign-in to a merchant (blocker)

@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: "Tender · Get paid in any coin. Settle on Monad.",
   description:
-    "Your customer pays with whatever they already hold: Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
+    "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, no gas.",
   openGraph: {
     title: "Tender · Get paid in any coin. Settle on Monad.",
     description:

@@ -17,7 +17,7 @@ export const nav = {
 export const hero = {
   eyebrow: "Live on Monad · 31+ chains",
   title: ["Get paid in any coin.", "Settle on Monad."],
-  sub: "Your customer pays with whatever they already hold: Bitcoin, Solana, USDT on Tron. You receive one asset on Monad. No bridges, no network switching, no gas.",
+  sub: "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, no gas.",
   primary: { label: "Get started", href: "/app" },
   secondary: { label: "Read the docs", href: "/docs" },
   // Goldsand runs one quiet qualifier under the button pair, not a chip row.
