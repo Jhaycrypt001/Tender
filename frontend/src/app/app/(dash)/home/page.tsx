@@ -33,7 +33,7 @@ const RECENT = 5;
  * The balance card's art. Generated separately and dropped in by hand; until
  * the file exists the card draws its own CSS ground, so nothing here breaks.
  */
-const CARD_ART = "/img/dash/balance-card.png";
+const CARD_ART = "/img/card.png";
 
 /**
  * The overview.

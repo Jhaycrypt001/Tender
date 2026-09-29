@@ -41,7 +41,12 @@ export type BalanceCardProps = {
    */
   addressKnown?: boolean;
   verified: boolean;
-  /** Public path of the generated card art, or null until it is on disk. */
+  /**
+   * Public path of the card art, or null until it is on disk. The art is a
+   * stack of gold discs on the right third of a near-black ground, so the card
+   * keeps every figure and control in the left column and gives the right side
+   * to the stack.
+   */
   art?: string | null;
 };
 
@@ -95,51 +100,47 @@ export default function BalanceCard({
       className="relative isolate flex min-h-[17.5rem] flex-col overflow-hidden rounded-[1.25rem] bg-ink p-6 text-paper md:min-h-[19rem] md:p-8"
     >
       {art ? (
-        <Image
-          src={art}
-          alt=""
-          fill
-          priority
-          sizes="(min-width: 1024px) 44rem, 100vw"
-          className="-z-20 object-cover object-right"
-        />
+        // On desktop the art sits in the right 62% of the card, sized by
+        // height so the whole stack shows, and its black left edge is masked
+        // into the card's ink so there is no seam. On a phone the column IS
+        // the card, so the stack drops back to a dim glow behind the figures.
+        <div
+          aria-hidden="true"
+          className="absolute inset-y-0 right-0 -z-20 w-full [mask-image:linear-gradient(90deg,transparent,#000_30%)] md:w-[62%]"
+        >
+          <Image
+            src={art}
+            alt=""
+            fill
+            priority
+            sizes="(min-width: 1024px) 30rem, 100vw"
+            className="object-cover object-[100%_40%] opacity-30 md:opacity-100"
+          />
+        </div>
       ) : (
         <FallbackArt />
       )}
-      {/* The scrim keeps the figures legible whatever the art does on the
-          left. It fades out toward the right, where the art is the point. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,#121111_0%,rgba(18,17,17,0.86)_42%,rgba(18,17,17,0.15)_100%)]"
-      />
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <h2 className="font-mono text-[0.6875rem] uppercase leading-none tracking-[0.24em] text-paper/55">
-            Settled on Monad
-          </h2>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-pressed={hidden}
-            aria-label={hidden ? "Show balance" : "Hide balance"}
-            className="-m-1.5 rounded-full p-1.5 text-paper/45 transition-colors hover:text-paper"
-          >
-            {hidden ? (
-              <EyeOffIcon className="h-4 w-4" />
-            ) : (
-              <EyeIcon className="h-4 w-4" />
-            )}
-          </button>
-        </div>
-        {ticker && (
-          <span className="shrink-0 rounded-full border border-paper/20 px-3 py-1.5 font-mono text-[0.625rem] uppercase leading-none tracking-[0.14em] text-paper/70">
-            {ticker} · Monad
-          </span>
-        )}
+      <div className="flex items-center gap-2.5">
+        <h2 className="font-mono text-[0.6875rem] uppercase leading-none tracking-[0.24em] text-paper/55">
+          Settled on Monad
+        </h2>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={hidden}
+          aria-label={hidden ? "Show balance" : "Hide balance"}
+          className="-m-1.5 rounded-full p-1.5 text-paper/45 transition-colors hover:text-paper"
+        >
+          {hidden ? (
+            <EyeOffIcon className="h-4 w-4" />
+          ) : (
+            <EyeIcon className="h-4 w-4" />
+          )}
+        </button>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 md:max-w-[58%]">
         {error ? (
           <>
             <p className={`${HERO} text-paper/30`}>—</p>
@@ -170,13 +171,11 @@ export default function BalanceCard({
         {!error && !hidden && <SubLine others={others} unsettled={unsettled} />}
       </div>
 
-      <div className="mt-auto flex flex-col gap-5 pt-8 sm:flex-row sm:items-end sm:justify-between">
-        {addressKnown ? (
-          <AddressRow address={address} verified={verified} />
-        ) : (
-          <span />
-        )}
-        <div className="flex shrink-0 gap-2">
+      {/* Actions and the address stay in the left column too: on desktop
+          the right side is the disc stack, and buttons over gold read as
+          stickers, not controls. */}
+      <div className="mt-auto flex flex-col gap-4 pt-8 md:max-w-[58%]">
+        <div className="flex gap-2">
           <Cta href="/app/checkout/new" tone="paper">
             Get paid
           </Cta>
@@ -184,6 +183,7 @@ export default function BalanceCard({
             Pay out
           </Cta>
         </div>
+        {addressKnown && <AddressRow address={address} verified={verified} />}
       </div>
     </section>
   );
@@ -273,8 +273,7 @@ function AddressRow({
 }
 
 /**
- * The card's ground until the generated art is dropped into
- * `public/img/dash/balance-card.png`: a sand glow and a set of concentric
+ * The card's ground if `public/img/card.png` is ever missing: a sand glow and a set of concentric
  * rings on the right — many chains closing in on one point. Pure CSS, so the
  * card is finished today and the render only upgrades it.
  */
