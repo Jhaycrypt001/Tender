@@ -200,7 +200,7 @@ model Merchant {
   feeBps             Int      @default(40)
   webhookUrl         String?
   webhookSecret      String
-  apiKeyHash         String   // argon2. NEVER store the key itself.
+  // API keys live in the ApiKey table (hash only, argon2): NEVER store a key itself.
   createdAt          DateTime @default(now())
 
   invoices  Invoice[]
@@ -603,9 +603,9 @@ Order matters. Beats 6 and 7 are what separate this from every other entry.
 
 ---
 
-## 16. Implementation status — 2026-09-26
+## 16. Implementation status — 2026-09-26 (see §17 for the 2026-10-02 update)
 
-What is built, what was decided while building it, and what is honestly not possible yet. Everything below is covered by the test suite (110 tests: unit, integration against a real Postgres + Redis, and a fake Aurora) unless it says otherwise.
+What is built, what was decided while building it, and what is honestly not possible yet. Everything below is covered by the test suite (110 tests at the time; 164 by 2026-10-02, see §17: unit, integration against a real Postgres + Redis, and a fake Aurora) unless it says otherwise.
 
 ### Built
 
@@ -628,7 +628,7 @@ What is built, what was decided while building it, and what is honestly not poss
 
 ### Why BullMQ was not used
 
-The spec chose Redis + BullMQ. It was replaced by a Postgres **outbox** because a status change (Postgres) and a BullMQ job (Redis) cannot share a transaction: commit-then-enqueue can lose a webhook on a crash; enqueue-then-commit can announce a payment that was never recorded. The outbox writes the status change and its webhook row in one transaction, delivered with `SKIP LOCKED` claims and stored backoff. The poller is a periodic scan, not a job queue. `bullmq` remains installed but unused — remove it, or add a relay if its tooling is wanted.
+The spec chose Redis + BullMQ. It was replaced by a Postgres **outbox** because a status change (Postgres) and a BullMQ job (Redis) cannot share a transaction: commit-then-enqueue can lose a webhook on a crash; enqueue-then-commit can announce a payment that was never recorded. The outbox writes the status change and its webhook row in one transaction, delivered with `SKIP LOCKED` claims and stored backoff. The poller is a periodic scan, not a job queue. `bullmq` was installed but unused and has been removed (2026-10-02).
 
 ### Decisions made while building
 
@@ -655,3 +655,44 @@ The "`OPERATION_FAILED` is not auto-refunded; recovery is explicit (retry/withdr
 - **Ramps.** No off-ramp partner: `GET /v1/ramps/corridors` returns `[]`.
 - **`tk_test_` sandbox keys**, promised at `/docs`. Aurora has no testnet for persistent addresses.
 - **A real end-to-end payment.** Still required: ~$2 from Solana to a live invoice. It verifies payout matching and the deposit → settled path on camera.
+
+---
+
+## 17. Implementation status — 2026-10-02
+
+What changed after §16. 164 tests pass (unit, integration against real Postgres + Redis, fake Aurora). Separately, `npm run e2e:local` ran the whole merchant flow against a local API and worker and the **real** Aurora API, three times in a row, 50 of 50 checks each, moving no money.
+
+### Built since §16
+
+| Area | What exists |
+|---|---|
+| **Google sign-in to merchant** | `POST /internal/merchants/resolve` (dashboard server only). Upserts on the Google `sub`, never on email. `Merchant.googleSub` is unique. If the sign-in email already belongs to another merchant it is stored as `name+<sub>@domain`, so a new sign-in can never take over an existing account. |
+| **Platform key** | `TENDER_PLATFORM_KEY` (`tp_` + 32 random bytes, api only). `requireMerchant` accepts `Bearer tk_live_…` **or** `Bearer tp_…` plus `X-Tender-Merchant`. Constant-time compare; a missing or unknown merchant id is 401, never 404; every platform call logs the merchant it acted for; its own per-merchant rate-limit bucket; redacted from logs. |
+| **API keys** | `ApiKey` table (hash only). `GET/POST /v1/merchant/api-keys`, `DELETE /v1/merchant/api-keys/:id`, `POST /v1/merchant/webhook/secret`. Keys shown once, max 10 active, `lastUsedAt` written at most once a minute, revoked keys stop at once. The migration copied every existing key over before dropping `Merchant.apiKeyHash`. |
+| **Webhook deliveries** | `GET /v1/merchant/webhook/deliveries?status=&limit=`: `delivered`, `retrying`, `failed` (every retry used). Lets a merchant see which events never arrived. |
+| **Webhook signature v2** | `X-Tender-Signature-V2: sha256=<hmac of "<timestamp>.<body>">`, sent alongside the unchanged v1 header. Covers the timestamp, so it cannot be altered or replayed past `WEBHOOK_TOLERANCE_SECONDS` (300). Each retry is re-signed with its own timestamp. `verifyWebhookV2` in `lib/crypto.ts` is the reference verifier. |
+| **Link preview** | `GET /public/links/:token`: label, amount (null if open), currency, merchant name, active. Creates nothing, does not count as a use. |
+| **30 chains** | `aurora/chains.ts` has all 30 (every `depositChain` Aurora accepts except Stellar). Each `asset` was read from Aurora's live token list (`npm run aurora:tokens`). |
+| **Operations** | `Dockerfile` (one image, API and worker), `docs/DEPLOY.md`, worker gauges `tender_poll_lag_seconds`, `tender_webhook_dead_letters`, `tender_chain_minimums_age_seconds`, a loud log line when Aurora answers 401/403, `npm run aurora:measure`, `npm run e2e:local`. |
+
+### Decisions made since §16
+
+- **Default chains are 17, not 7.** Every EVM chain (they share one address, so no extra Aurora call) plus Bitcoin, Solana and Tron. The other 13 non-EVM chains are opt-in per invoice through `chains`, because each is its own family and costs one more mint call.
+- **Addresses are minted one family at a time.** Aurora serialises creation per `sender` and answers `429 A concurrent request is creating this deposit address` to concurrent mints for the same invoice. Fired in parallel, the last family could exhaust its 3 retries and the invoice failed with a 502 (seen live on 2026-10-02). Sequential costs about 3 seconds for the default 4 families and cannot collide. This supersedes the "if it becomes a problem, mint sequentially" note in §1.
+- **Minimums survive a bad network.** A full 30-chain measurement takes 7 to 13 minutes, not 2 to 3. One chain failing is retried once and then left out; it no longer aborts the run. On a cold start the worker publishes each chain as it is measured, so `/public/chains` answers after the first chain instead of 503 for the whole run. With a previous catalogue present it is left untouched until the new one is complete.
+- **A Prisma setting was pinned.** `importFileExtension = "js"` in the schema. Without it, `prisma generate` run in `npm ci` before the tsconfig exists emitted `./internal/class.ts` imports that do not exist in `dist`, and the compiled server could not start. Tests and `tsx` never showed it.
+
+### Facts learned from Aurora (2026-09-30 to 2026-10-02)
+
+- **Persistent deposit address creation is an entitlement, not a bug.** It returned `403 Persistent deposit address creation is not enabled for this API key` for every chain, destination, recipient and sender. Aurora asked us to create an organization in the Client Portal and move the key into it, then enabled the feature. Existing addresses and reading deposits worked throughout. The key with the feature is the one in the `Tender` organization.
+- **Only Stellar needs a memo** (Aurora support confirmed). `mintAll` still refuses any family that returns one.
+- **There is no rate limit as such** (Aurora support), but they asked for expected volume.
+- **Monad as a destination is under maintenance** on Aurora's side (NEAR Intents status). Dry quotes to Monad USDC fail from every origin, so minimums cannot be measured and no payment can settle until it returns. Aurora says deposits made during the maintenance settle when it ends. There is no ETA.
+- **Ramp's Monad USDC is the same token Aurora settles in** (`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`), checked 2026-10-02. Relevant only to the post-hackathon off-ramp (`docs/OFFRAMP.md`).
+
+### Still not built or not proven
+
+- **A real end-to-end payment** (about $2 from Solana to a live invoice). Blocked on Monad. It still has to confirm payout matching, the PENDING to DETECTED to SETTLED path, the webhook, the underpayment refund and a payment link opened from a phone.
+- **Earn / Intents Connect, Ramps, `tk_test_` keys:** unchanged from §16. Ramps is planned for after the hackathon (`docs/OFFRAMP.md`).
+- **Not deployed.** The image builds and runs locally; see `docs/DEPLOY.md`.
+- **Backups and alert rules** are the database host's and the metrics stack's job; nothing here configures them.

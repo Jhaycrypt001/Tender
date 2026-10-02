@@ -47,6 +47,32 @@ Fix 1 first. Nothing else matters until two people can sign in and see different
 
 For the hackathon, the core flow in §5 matters more than any of these. Leave them honestly empty rather than half-building one.
 
+### Update, 2026-10-02 (backend)
+
+The audit above is kept as written; this is what changed since. 164 backend tests pass, and `npm run e2e:local` ran the whole merchant flow against a local API and worker and the **real** Aurora API (3 runs, 50 of 50 checks each, no money moved).
+
+| Gap | Status |
+|---|---|
+| 1. Google sign-in to merchant | ✅ **Done.** `POST /internal/merchants/resolve` plus the platform key (`TENDER_PLATFORM_KEY`) and `X-Tender-Merchant`, as designed in §1. Two Google accounts see two merchants; one cannot read the other's invoices (404). Details for the frontend are in `backend/NOTES-FOR-FRONTEND.md`, items 10 and 11. |
+| 2. API-key endpoints | ✅ **Done.** List, create, revoke, and webhook-secret rotation, as in §2, plus `GET /v1/merchant/webhook/deliveries` so a merchant can see failed deliveries (items 12 and 14). |
+| 3. Deployed | ⏳ **Not deployed.** The Docker image builds and runs locally and `backend/docs/DEPLOY.md` is the runbook. This still needs a host. |
+| 4. 30 chains | ✅ **Done.** All 30 are in `aurora/chains.ts`, with ids that match `frontend/src/lib/chains.ts` (a test checks this). The default for an invoice is 17 chains (every EVM chain plus Bitcoin, Solana, Tron); the other 13 are opt-in through `chains` (item 15). |
+
+Also closed:
+
+- **The §4 ask** is done: `GET /public/links/:token` (item 13). The frontend can show the merchant name, label and amount before the button.
+- **The audit's untested backend** was run: all tests pass.
+- **`/public/chains` 503 on cold start** now fills in chain by chain instead of 503 for the whole measurement.
+- **Webhook signature v2** (§6) is added alongside v1 and unchanged for existing merchants: `X-Tender-Signature-V2` signs `timestamp.body`. The `/docs` page should show the verifier (`verifyWebhookV2` in `backend/src/lib/crypto.ts`).
+
+New things to know:
+
+- **Aurora gated persistent deposit addresses.** Creating new addresses returned `403 … not enabled for this API key` until Aurora enabled it for our Client Portal organization. The key in use now is the one in the `Tender` organization.
+- **Monad as a destination is under maintenance on Aurora's side.** Quotes to Monad fail from every origin, so minimums cannot be measured (`/public/chains` stays 503) and **no payment can settle yet**. Aurora says deposits made during it settle when it ends. There is no ETA. Everything in §5 that needs a settled payment waits on this.
+- **Addresses are minted one family at a time**, because Aurora answers 429 to concurrent mints for the same invoice. Creating an invoice takes about 3 seconds.
+
+Still open: a real settled payment and the §5 demo on a deployed stack, the frontend wiring for items 10 to 15, backups and alert rules (the host's job), and everything in the "Screens with nothing behind them" table (Ramps is planned for after the hackathon, see `docs/OFFRAMP.md`).
+
 ---
 
 ## 1. Link a Google sign-in to a merchant (blocker)
