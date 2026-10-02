@@ -13,6 +13,10 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // Pinned: Prisma otherwise infers this from tsconfig.json, and `prisma generate`
+  // runs in `postinstall` before a Docker build has copied it, which emitted
+  // `./internal/class.ts` imports that do not exist in dist.
+  importFileExtension = "js"
 }
 
 datasource db {
@@ -23,6 +27,8 @@ model Merchant {
   id                 String   @id @default(cuid())
   name               String
   email              String   @unique
+  /// Google account id (`sub`), permanent. Null for merchants made with the operator CLI.
+  googleSub          String?  @unique
   /// Monad (chain 143). Unusable for settlement until settlementVerified is true.
   settlementAddress  String?
   /// Aurora asset id or symbol on Monad, e.g. "USDC".
@@ -31,15 +37,29 @@ model Merchant {
   feeBps             Int      @default(40)
   webhookUrl         String?
   webhookSecret      String
-  /// argon2id hash. The key itself is shown once and never stored.
-  apiKeyHash         String
-  /// First characters of the key, for lookup and for display ("tk_live_ab12…").
-  apiKeyPrefix       String   @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   invoices Invoice[]
   links    PaymentLink[]
+  apiKeys  ApiKey[]
+}
+
+/// A merchant API key. The key itself is shown once and never stored: only its
+/// argon2id hash. A merchant can hold several at once, so rotating is: create
+/// the new key, deploy it, revoke the old one, with no downtime in between.
+model ApiKey {
+  id         String    @id
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  /// First characters of the key, for lookup and for display ("tk_live_ab12…").
+  prefix     String    @unique
+  hash       String
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([merchantId])
 }
 
 model Invoice {

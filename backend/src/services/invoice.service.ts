@@ -161,21 +161,26 @@ async function mintAll(
   args: { invoiceId: string; families: string[]; recipient: string; asset: string },
 ) {
   try {
-    return await Promise.all(
-      args.families.map(async (family) => {
-        const minted = await aurora.mintAddress({
-          recipient: args.recipient,
-          // The invoice id as `sender` gives every invoice its own addresses (constraint #6).
-          sender: args.invoiceId,
-          depositChain: family,
-          destinationChain: SETTLEMENT_CHAIN,
-          destinationAsset: args.asset,
-        });
-        // A memo-bearing chain would lose funds sent without it, and the contract cannot carry one.
-        if (minted.memo) throw new AuroraError("bad_request", `family ${family} requires a memo; not supported`);
-        return { family, address: minted.depositAddress };
-      }),
-    );
+    // ONE AT A TIME. Aurora serialises address creation per `sender`: a second
+    // mint for the same invoice while one is running is answered 429 "A concurrent
+    // request is creating this deposit address". Fired in parallel, the last family
+    // ran out of its 3 retries and the whole invoice failed with a 502 (seen live,
+    // 2026-10-02). Sequential costs about half a second per family and cannot collide.
+    const minted: { family: string; address: string }[] = [];
+    for (const family of args.families) {
+      const res = await aurora.mintAddress({
+        recipient: args.recipient,
+        // The invoice id as `sender` gives every invoice its own addresses (constraint #6).
+        sender: args.invoiceId,
+        depositChain: family,
+        destinationChain: SETTLEMENT_CHAIN,
+        destinationAsset: args.asset,
+      });
+      // A memo-bearing chain would lose funds sent without it, and the contract cannot carry one.
+      if (res.memo) throw new AuroraError("bad_request", `family ${family} requires a memo; not supported`);
+      minted.push({ family, address: res.depositAddress });
+    }
+    return minted;
   } catch (err) {
     if (err instanceof AuroraError) {
       throw new ApiError(502, "upstream", "Could not create deposit addresses right now. Nothing was charged; retry the request.");

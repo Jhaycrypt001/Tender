@@ -1,6 +1,6 @@
 import type { Redis } from "ioredis";
 import { CHAINS, SETTLEMENT_CHAIN, type ChainInfo } from "../aurora/chains.js";
-import type { AuroraClient } from "../aurora/client.js";
+import { AuroraError, type AuroraClient } from "../aurora/client.js";
 import type { Token } from "../aurora/types.js";
 import type { Logger } from "../lib/logger.js";
 import { Decimal } from "../lib/money.js";
@@ -51,7 +51,18 @@ const PROBE_SENDER = "tender-minimum-probe";
 
 export async function measureCatalogue(
   aurora: QuoteClient,
-  opts: { recipient: string; marginBps: number; logger: Logger; spacingMs?: number },
+  opts: {
+    recipient: string;
+    marginBps: number;
+    logger: Logger;
+    spacingMs?: number;
+    /** Pause before retrying a chain after a network or upstream failure. Default 3s. */
+    retryDelayMs?: number;
+    /** Measure only these chain ids (diagnostics). */
+    only?: readonly string[];
+    /** Called after each chain with everything measured so far, so a long run can publish early. */
+    onProgress?: (partial: ChainCatalogue) => void | Promise<void>;
+  },
 ): Promise<ChainCatalogue> {
   const tokens = await aurora.tokens();
   const destination = tokens.find((t) => t.blockchain === SETTLEMENT_CHAIN && t.symbol === "USDC");
@@ -60,7 +71,8 @@ export async function measureCatalogue(
   // A valid origin-chain address per family, to receive the (never-sent)
   // refund in each dry quote. Minting is idempotent: same inputs, same address.
   const refundTo = new Map<string, string>();
-  for (const family of new Set(CHAINS.map((c) => c.family))) {
+  const wanted = opts.only ? CHAINS.filter((c) => opts.only!.includes(c.id)) : CHAINS;
+  for (const family of new Set(wanted.map((c) => c.family))) {
     const minted = await aurora.mintAddress({
       recipient: opts.recipient,
       sender: PROBE_SENDER,
@@ -71,40 +83,63 @@ export async function measureCatalogue(
     refundTo.set(family, minted.depositAddress);
   }
 
+  const route = (chain: ChainInfo) => ({ destination: destination.assetId, recipient: opts.recipient, refundTo: refundTo.get(chain.family)! });
   const chains: ChainQuote[] = [];
-  for (const chain of CHAINS) {
-    const assets = assetsFor(chain, tokens);
-    const refund = refundTo.get(chain.family)!;
-    let worstUsd: Decimal | null = null;
-    let eta: number | null = null;
-
-    for (const asset of assets) {
-      const found = await smallestRoutable(
-        aurora,
-        asset,
-        { destination: destination.assetId, recipient: opts.recipient, refundTo: refund },
-        opts.spacingMs ?? QUOTE_SPACING_MS,
-      );
-      if (!found) {
-        opts.logger.warn({ chain: chain.id, asset: asset.symbol }, "could not measure a minimum");
-        continue;
+  for (const chain of wanted) {
+    // A full run is ~7 minutes for 30 chains, so one network blip must cost one
+    // chain, never the whole run: retry that chain once, then leave it out.
+    let found: { worstUsd: Decimal; eta: number | null } | null = null;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        found = await measureChain(aurora, chain, tokens, route(chain), opts);
+        break;
+      } catch (err) {
+        if (!(err instanceof AuroraError)) throw err;
+        opts.logger.warn({ chain: chain.id, attempt, kind: err.kind, err: err.message }, "measuring a chain failed");
+        if (!err.retryable || attempt >= 2) break;
+        await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 3_000));
       }
-      if (!worstUsd || found.usd.gt(worstUsd)) worstUsd = found.usd;
-      if (found.etaSeconds !== null) eta = Math.max(eta ?? 0, found.etaSeconds);
     }
 
     // A chain we could not measure is left out rather than given a guess.
-    if (!worstUsd) continue;
-    const withMargin = worstUsd.mul(new Decimal(1).add(new Decimal(opts.marginBps).div(10_000)));
+    if (!found) continue;
+    const withMargin = found.worstUsd.mul(new Decimal(1).add(new Decimal(opts.marginBps).div(10_000)));
     chains.push({
       id: chain.id,
       name: chain.name,
       asset: chain.asset,
       minimum: withMargin.toDecimalPlaces(2, Decimal.ROUND_UP).toFixed(2),
-      etaSeconds: eta,
+      etaSeconds: found.eta,
     });
+    try {
+      await opts.onProgress?.({ measuredAt: new Date().toISOString(), chains: [...chains] });
+    } catch (err) {
+      opts.logger.warn({ err }, "publishing partial minimums failed; continuing");
+    }
   }
   return { measuredAt: new Date().toISOString(), chains };
+}
+
+/** The highest floor across the assets measured on one chain, or null if none could be measured. Throws AuroraError on a network or upstream failure. */
+async function measureChain(
+  aurora: QuoteClient,
+  chain: ChainInfo,
+  tokens: Token[],
+  route: { destination: string; recipient: string; refundTo: string },
+  opts: { logger: Logger; spacingMs?: number },
+): Promise<{ worstUsd: Decimal; eta: number | null } | null> {
+  let worstUsd: Decimal | null = null;
+  let eta: number | null = null;
+  for (const asset of assetsFor(chain, tokens)) {
+    const found = await smallestRoutable(aurora, asset, route, opts.spacingMs ?? QUOTE_SPACING_MS);
+    if (!found) {
+      opts.logger.warn({ chain: chain.id, asset: asset.symbol }, "could not measure a minimum");
+      continue;
+    }
+    if (!worstUsd || found.usd.gt(worstUsd)) worstUsd = found.usd;
+    if (found.etaSeconds !== null) eta = Math.max(eta ?? 0, found.etaSeconds);
+  }
+  return worstUsd ? { worstUsd, eta } : null;
 }
 
 function assetsFor(chain: ChainInfo, tokens: Token[]): Token[] {

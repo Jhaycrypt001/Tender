@@ -1,6 +1,7 @@
 import type { z } from "zod";
+import { deliveryStatus } from "./merchant.service.js";
 import type * as S from "../../contract/schemas.js";
-import type { Invoice, InvoiceAddress, Merchant, Payment } from "../generated/prisma/client.js";
+import type { ApiKey, Invoice, WebhookDelivery, InvoiceAddress, Merchant, Payment } from "../generated/prisma/client.js";
 import { chainById } from "../aurora/chains.js";
 import { Decimal } from "../lib/money.js";
 
@@ -88,6 +89,24 @@ export function toPayment(p: Payment): Wire<typeof S.Payment> {
     status: p.status,
     first_seen_at: p.firstSeenAt.toISOString(),
     settled_at: p.settledAt?.toISOString() ?? null,
+  };
+}
+
+export function toApiKeySummary(k: ApiKey): Wire<typeof S.ApiKeySummary> {
+  return { id: k.id, prefix: k.prefix, created_at: k.createdAt.toISOString(), last_used_at: k.lastUsedAt?.toISOString() ?? null };
+}
+
+export function toWebhookDelivery(d: WebhookDelivery): Wire<typeof S.WebhookDelivery> {
+  return {
+    id: d.id,
+    event: d.event,
+    invoice_id: d.invoiceId,
+    status: deliveryStatus(d),
+    attempts: d.attempts,
+    last_error: d.lastError,
+    next_retry_at: d.nextRetryAt?.toISOString() ?? null,
+    delivered_at: d.deliveredAt?.toISOString() ?? null,
+    created_at: d.createdAt.toISOString(),
   };
 }
 

@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import type { Dispatcher } from "undici";
 import { fetch as undiciFetch } from "undici";
-import { signWebhook } from "../lib/crypto.js";
+import { signWebhook, signWebhookV2 } from "../lib/crypto.js";
 import { isPublicAddress, publicOnlyDispatcher } from "../lib/safe-http.js";
 
 /**
@@ -9,16 +9,16 @@ import { isPublicAddress, publicOnlyDispatcher } from "../lib/safe-http.js";
  * the delivery worker.
  *
  * Headers:
- *   X-Tender-Signature  sha256=<hmac of the raw body>   — the scheme published at /docs
- *   X-Tender-Timestamp  unix seconds of THIS attempt
- *   X-Tender-Event-Id   the event id, for at-least-once dedupe
+ *   X-Tender-Signature     sha256=<hmac of the raw body>   v1, the scheme published at /docs
+ *   X-Tender-Signature-V2  sha256=<hmac of "<timestamp>.<raw body>">   v2, covers the timestamp
+ *   X-Tender-Timestamp     unix seconds of THIS attempt
+ *   X-Tender-Event-Id      the event id, for at-least-once dedupe
  *
- * ⚠️ The published scheme signs the body only, so the timestamp header is not
- * covered by the signature. The body's own `created_at` IS signed; a merchant
- * that wants tamper-proof replay protection should check that instead — but
- * note a retried event keeps its original `created_at`. A v2 scheme that
- * signs `timestamp.body` would close this; it is a change to a published
- * contract, so it is flagged rather than made.
+ * v1 signs the body only, so the timestamp header is not covered by it: it can
+ * be altered or replayed. v2 signs `timestamp.body`, so it cannot, and a
+ * captured request stops verifying after `WEBHOOK_TOLERANCE_SECONDS`. Both are
+ * sent on every attempt, so existing merchants keep working and can move to v2
+ * when they are ready. Each retry is re-signed with its own timestamp.
  */
 
 export type SendResult = { ok: true; status: number } | { ok: false; status?: number; error: string };
@@ -53,6 +53,7 @@ export async function sendWebhook(url: string, secret: string, payload: { id: st
         "content-type": "application/json",
         "user-agent": "Tender-Webhooks/1",
         "x-tender-signature": signWebhook(body, secret),
+        "x-tender-signature-v2": signWebhookV2(body, timestamp, secret),
         "x-tender-timestamp": String(timestamp),
         "x-tender-event-id": payload.id,
       },

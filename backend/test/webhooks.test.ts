@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Agent } from "undici";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { verifyWebhook } from "../src/lib/crypto.js";
+import { signWebhook, signWebhookV2, verifyWebhook, verifyWebhookV2, WEBHOOK_TOLERANCE_SECONDS } from "../src/lib/crypto.js";
 import { createLogger } from "../src/lib/logger.js";
 import { assertSafeWebhookUrl, isPublicAddress } from "../src/lib/safe-http.js";
 import { sendWebhook } from "../src/services/webhook.service.js";
@@ -84,12 +84,74 @@ describe("sendWebhook", () => {
     expect(verifyWebhook(hit!.body, hit!.headers["x-tender-signature"] as string, "whsec_secret")).toBe(true);
   });
 
+  it("also sends v2, which signs the timestamp too, and keeps v1 unchanged for existing merchants", async () => {
+    const payload = { id: "evt_v2", event: "invoice.settled", data: { status: "SETTLED" } };
+    await sendWebhook(receiverUrl, "whsec_secret", payload, { dispatcher: loopback });
+    const [hit] = received;
+    const sig2 = hit!.headers["x-tender-signature-v2"] as string;
+    const ts = hit!.headers["x-tender-timestamp"] as string;
+    expect(sig2).toMatch(/^sha256=[0-9a-f]{64}$/);
+    expect(sig2).not.toBe(hit!.headers["x-tender-signature"]);
+    expect(verifyWebhookV2(hit!.body, sig2, ts, "whsec_secret")).toBe(true);
+    // v1 still verifies exactly as the published /docs snippet does.
+    expect(verifyWebhook(hit!.body, hit!.headers["x-tender-signature"] as string, "whsec_secret")).toBe(true);
+  });
+
+  it("re-signs every attempt with its own timestamp", async () => {
+    const payload = { id: "evt_retry" };
+    await sendWebhook(receiverUrl, "whsec_secret", payload, { dispatcher: loopback, now: new Date("2026-10-02T12:00:00Z") });
+    await sendWebhook(receiverUrl, "whsec_secret", payload, { dispatcher: loopback, now: new Date("2026-10-02T12:10:00Z") });
+    const [a, b] = received;
+    expect(a!.headers["x-tender-timestamp"]).not.toBe(b!.headers["x-tender-timestamp"]);
+    expect(a!.headers["x-tender-signature-v2"]).not.toBe(b!.headers["x-tender-signature-v2"]);
+    // v1 is body-only, so it is identical across attempts: exactly the weakness v2 fixes.
+    expect(a!.headers["x-tender-signature"]).toBe(b!.headers["x-tender-signature"]);
+  });
+
   it("treats a non-2xx, including a redirect, as a failure", async () => {
     for (const code of [500, 404, 302]) {
       respondWith = code;
       const res = await sendWebhook(receiverUrl, "s", { id: "evt_1" }, { dispatcher: loopback });
       expect(res).toMatchObject({ ok: false, status: code });
     }
+  });
+});
+
+describe("verifyWebhookV2", () => {
+  const secret = "whsec_secret";
+  const body = JSON.stringify({ id: "evt_1", event: "invoice.settled" });
+  const now = new Date("2026-10-02T12:00:00Z");
+  const ts = String(Math.floor(now.getTime() / 1000));
+  const good = signWebhookV2(body, ts, secret);
+
+  it("accepts a correct signature inside the tolerance window", () => {
+    expect(verifyWebhookV2(body, good, ts, secret, { now })).toBe(true);
+    const edge = new Date(now.getTime() + WEBHOOK_TOLERANCE_SECONDS * 1000);
+    expect(verifyWebhookV2(body, good, ts, secret, { now: edge })).toBe(true);
+  });
+
+  it("rejects a tampered timestamp: this is what v1 could not do", () => {
+    const later = String(Number(ts) + 60);
+    expect(verifyWebhookV2(body, good, later, secret, { now })).toBe(false);
+  });
+
+  it("rejects a captured request replayed after the tolerance, and one from the future", () => {
+    const stale = new Date(now.getTime() + (WEBHOOK_TOLERANCE_SECONDS + 1) * 1000);
+    expect(verifyWebhookV2(body, good, ts, secret, { now: stale })).toBe(false);
+    const early = new Date(now.getTime() - (WEBHOOK_TOLERANCE_SECONDS + 1) * 1000);
+    expect(verifyWebhookV2(body, good, ts, secret, { now: early })).toBe(false);
+  });
+
+  it("rejects a changed body, a wrong secret, and a malformed signature or timestamp", () => {
+    expect(verifyWebhookV2(body + " ", good, ts, secret, { now })).toBe(false);
+    expect(verifyWebhookV2(body, good, ts, "whsec_other", { now })).toBe(false);
+    expect(verifyWebhookV2(body, "sha256=abc", ts, secret, { now })).toBe(false);
+    expect(verifyWebhookV2(body, "", ts, secret, { now })).toBe(false);
+    for (const bad of ["", "abc", "12.5", "-5", "1e9", " 1790000000"]) expect(verifyWebhookV2(body, good, bad, secret, { now }), bad).toBe(false);
+  });
+
+  it("is not satisfied by the v1 signature", () => {
+    expect(verifyWebhookV2(body, signWebhook(body, secret), ts, secret, { now })).toBe(false);
   });
 });
 

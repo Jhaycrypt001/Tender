@@ -38,6 +38,17 @@ const schema = z.object({
   /** Monad RPC, used only to verify smart-contract settlement wallets (ERC-1271). */
   MONAD_RPC_URL: z.url().default("https://rpc.monad.xyz"),
 
+  /**
+   * Lets the dashboard's server act for one merchant at a time (see
+   * docs/INTEGRATION.md §1). Unset disables the platform path entirely.
+   * It can act as ANY merchant: keep it in the API env and the dashboard's
+   * server env only, never in a browser bundle.
+   */
+  TENDER_PLATFORM_KEY: z
+    .string()
+    .regex(/^tp_[A-Za-z0-9_-]{43,}$/, "must be tp_ followed by at least 43 URL-safe characters (32 random bytes, base64url)")
+    .optional(),
+
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),
   /** Port for the worker process's own /metrics endpoint. */

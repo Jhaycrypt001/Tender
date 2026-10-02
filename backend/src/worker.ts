@@ -13,7 +13,8 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { createLogger } from "./lib/logger.js";
 import { registry } from "./lib/metrics.js";
-import { measureCatalogue, saveCatalogue } from "./services/chains.service.js";
+import { registerWorkerGauges } from "./lib/worker-gauges.js";
+import { ChainCatalogueReader, measureCatalogue, saveCatalogue } from "./services/chains.service.js";
 import { startLoop } from "./workers/loop.js";
 import { Poller } from "./workers/poller.js";
 import { WebhookWorker } from "./workers/webhook.worker.js";
@@ -62,6 +63,8 @@ const poller = new Poller({
 
 let closing = false;
 
+registerWorkerGauges({ db, catalogue: new ChainCatalogueReader(redis, 0) });
+
 poller.start();
 
 const webhookLog = logger.child({ component: "webhooks" });
@@ -100,10 +103,17 @@ async function refreshCatalogue() {
       return;
     }
     const started = Date.now();
+    // A full run takes ~7 minutes for 30 chains. With nothing cached yet (a cold
+    // start, or after the cache expired) /public/chains would answer 503 for all
+    // of it, so publish each chain as it is measured. With a previous catalogue
+    // in place, leave it alone until the new one is complete: a partial result
+    // must never replace a full one.
+    const hadCatalogue = (await new ChainCatalogueReader(redis, 0).get()) !== null;
     const catalogue = await measureCatalogue(quoteClient, {
       recipient: merchant.settlementAddress,
       marginBps: config.MINIMUM_MARGIN_BPS,
       logger: catalogueLog,
+      onProgress: hadCatalogue ? undefined : (partial) => saveCatalogue(redis, partial),
     });
     await saveCatalogue(redis, catalogue);
     catalogueLog.info(

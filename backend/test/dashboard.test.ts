@@ -76,6 +76,49 @@ describe("payment links", () => {
     expect(pub.json().amount_expected).toBe("5.00");
   });
 
+  it("previews a link without creating an invoice or counting a use, and leaks nothing private", async () => {
+    const m = await merchant(t.db, { name: "Acme Store", email: "secret-ops@acme.test" });
+    const fixed = (await t.app.inject({ method: "POST", url: "/v1/links", headers: m.auth, payload: { label: "T-shirt", amount: "25.00", currency: "USD" } })).json();
+    const open = (await t.app.inject({ method: "POST", url: "/v1/links", headers: m.auth, payload: { label: "Tip jar", currency: "USDC" } })).json();
+
+    const before = await t.db.invoice.count();
+    // A chat app fetching it three times to draw a preview must change nothing.
+    for (let i = 0; i < 3; i++) {
+      const res = await t.app.inject({ method: "GET", url: `/public/links/${fixed.token}` });
+      expect(res.statusCode).toBe(200);
+      expect(S.PublicLink.parse(res.json())).toEqual({ label: "T-shirt", amount: "25.00", currency: "USD", merchant_name: "Acme Store", active: true });
+      // Exactly the five public fields: no ids, email, settlement address or use count.
+      expect(Object.keys(res.json()).sort()).toEqual(["active", "amount", "currency", "label", "merchant_name"]);
+      expect(res.body).not.toMatch(/secret-ops|0x4CAD|lnk_|mer_|uses|cm[a-z0-9]{20}/);
+    }
+    expect(await t.db.invoice.count()).toBe(before);
+    const listed = await t.app.inject({ method: "GET", url: "/v1/links", headers: m.auth });
+    expect(S.paginated(S.PaymentLink).parse(listed.json()).data.every((l) => l.uses === 0)).toBe(true);
+
+    // Open-amount links say so with a null amount, and carry their currency.
+    const preview = (await t.app.inject({ method: "GET", url: `/public/links/${open.token}` })).json();
+    expect(preview).toMatchObject({ amount: null, currency: "USDC", label: "Tip jar" });
+  });
+
+  it("previews an inactive link as active:false, while opening it is still 404", async () => {
+    const m = await merchant(t.db);
+    const link = (await t.app.inject({ method: "POST", url: "/v1/links", headers: m.auth, payload: { label: "Old sale", amount: "9.00", currency: "USD" } })).json();
+    await t.db.paymentLink.update({ where: { token: link.token }, data: { active: false } });
+    const preview = await t.app.inject({ method: "GET", url: `/public/links/${link.token}` });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().active).toBe(false);
+    expect((await t.app.inject({ method: "POST", url: `/public/links/${link.token}` })).statusCode).toBe(404);
+  });
+
+  it("404s the preview for a malformed or unknown token, and does not share the strict open limit", async () => {
+    expect((await t.app.inject({ method: "GET", url: "/public/links/pl_AAAAAAAAAAAAAAAAAAAAAAAAAAA" })).statusCode).toBe(404);
+    expect((await t.app.inject({ method: "GET", url: "/public/links/not-a-token" })).statusCode).toBe(404);
+    // 15 previews from one IP: the POST limit is 10/min, the preview must not be bound by it.
+    const codes = new Set<number>();
+    for (let i = 0; i < 15; i++) codes.add((await t.app.inject({ method: "GET", url: "/public/links/pl_AAAAAAAAAAAAAAAAAAAAAAAAAAA" })).statusCode);
+    expect([...codes]).toEqual([404]);
+  });
+
   it("404s on unknown links", async () => {
     const res = await t.app.inject({ method: "POST", url: "/public/links/pl_AAAAAAAAAAAAAAAAAAAAAAAAAAA" });
     expect(res.statusCode).toBe(404);

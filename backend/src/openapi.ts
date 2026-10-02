@@ -36,6 +36,8 @@ type Op = {
   description?: string;
   tag: string;
   auth: boolean;
+  /** Called with the dashboard's platform key (`tp_…`), not a merchant key. */
+  platform?: boolean;
   params?: string[];
   query?: Schema;
   body?: Schema;
@@ -59,12 +61,12 @@ function operation(op: Op) {
     ...(op.params ?? []).map((name) => ({ name, in: "path", required: true, schema: { type: "string" } })),
     ...(op.query ? queryParameters(op.query) : []),
   ];
-  const errors = [...new Set([...(op.auth ? [401] : []), ...(op.errors ?? []), 429])];
+  const errors = [...new Set([...(op.auth || op.platform ? [401] : []), ...(op.errors ?? []), 429])];
   return {
     tags: [op.tag],
     summary: op.summary,
     ...(op.description ? { description: op.description } : {}),
-    security: op.auth ? [{ merchantKey: [] }] : [],
+    security: op.platform ? [{ platformKey: [] }] : op.auth ? [{ merchantKey: [] }, { platformKey: [] }] : [],
     ...(parameters.length ? { parameters } : {}),
     ...(op.body ? { requestBody: { required: true, content: { "application/json": { schema: json(op.body, "input") } } } } : {}),
     responses: {
@@ -142,6 +144,17 @@ export const OPERATIONS: Record<string, Op> = {
     ok: { status: 200, schema: z.array(S.Chain) },
     errors: [503],
   },
+  "GET /public/links/:token": {
+    tag: "Public (checkout)",
+    auth: false,
+    summary: "A payment link, as the buyer may see it before opening it",
+    description:
+      "Who is being paid, for what and how much (`amount` is null for open-amount links). Creates nothing and does not count as a use. " +
+      "An inactive link returns 200 with `active: false`; a malformed or unknown token is 404.",
+    params: ["token"],
+    ok: { status: 200, schema: S.PublicLink },
+    errors: [404],
+  },
   "POST /public/links/:token": {
     tag: "Public (checkout)",
     auth: false,
@@ -150,6 +163,19 @@ export const OPERATIONS: Record<string, Op> = {
     body: OpenLinkBody,
     ok: { status: 201, schema: OpenLinkResult },
     errors: [400, 404, 409, 502],
+  },
+
+  /* Dashboard server only ------------------------------------------------ */
+  "POST /internal/merchants/resolve": {
+    tag: "Internal (dashboard server)",
+    auth: false,
+    platform: true,
+    summary: "Find or create the merchant for a Google sign-in",
+    description:
+      "Called by the dashboard's server with `Authorization: Bearer <TENDER_PLATFORM_KEY>`. Upserts on `google_sub`, never on email. " +
+      "201 when the merchant was just created, 200 when it already existed. A new merchant cannot take payments until it verifies a settlement address.",
+    body: S.ResolveMerchantInput,
+    ok: { status: 200, schema: S.Merchant, description: "Existing merchant (201 when newly created)" },
   },
 
   /* Merchant — invoices -------------------------------------------------- */
@@ -243,6 +269,47 @@ export const OPERATIONS: Record<string, Op> = {
     ok: { status: 200, schema: S.Merchant },
     errors: [400],
   },
+  "GET /v1/merchant/api-keys": {
+    tag: "Merchant",
+    auth: true,
+    summary: "List active API keys (prefix only)",
+    ok: { status: 200, schema: S.ApiKeyList },
+  },
+  "POST /v1/merchant/api-keys": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Issue an API key",
+    description: "The `key` is returned ONCE. A merchant may hold up to 10 active keys, so rotating is: create, deploy, revoke the old one.",
+    ok: { status: 201, schema: S.CreatedApiKey },
+    errors: [409],
+  },
+  "DELETE /v1/merchant/api-keys/:id": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Revoke an API key",
+    description: "Takes effect immediately. 404 if the key is not this merchant's.",
+    params: ["id"],
+    ok: { status: 204, description: "Revoked" },
+    errors: [404],
+  },
+  "GET /v1/merchant/webhook/deliveries": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Recent webhook deliveries",
+    description:
+      "Newest first. `status`: `delivered`, `retrying` (attempts left), or `failed` (every retry used; it will not be sent again). " +
+      "Use `?status=failed` to find the events your server never received.",
+    query: S.ListWebhookDeliveriesQuery,
+    ok: { status: 200, schema: S.WebhookDeliveryList },
+    errors: [400],
+  },
+  "POST /v1/merchant/webhook/secret": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Rotate the webhook signing secret",
+    description: "The new secret is returned ONCE and replaces the old one immediately; update your verifier first or deliveries will fail verification.",
+    ok: { status: 201, schema: S.RotatedWebhookSecret },
+  },
   "POST /v1/merchant/webhook/test": {
     tag: "Merchant",
     auth: true,
@@ -326,9 +393,16 @@ export function buildOpenApiDocument() {
         "Public routes are what the buyer checkout calls. Money is always a decimal **string**; the wire is **snake_case**.",
     },
     components: {
-      securitySchemes: { merchantKey: { type: "http", scheme: "bearer", description: "Merchant API key (tk_live_…)" } },
+      securitySchemes: {
+        merchantKey: { type: "http", scheme: "bearer", description: "Merchant API key (tk_live_…)" },
+        platformKey: {
+          type: "http",
+          scheme: "bearer",
+          description: "Dashboard platform key (tp_…). On /v1 routes, also send `X-Tender-Merchant: mer_…`. Server-side only.",
+        },
+      },
     },
-    tags: ["Invoices", "Payments", "Merchant", "Links", "Ramps & Earn", "Public (checkout)", "System"].map((name) => ({ name })),
+    tags: ["Invoices", "Payments", "Merchant", "Links", "Ramps & Earn", "Public (checkout)", "Internal (dashboard server)", "System"].map((name) => ({ name })),
     paths,
   };
 }

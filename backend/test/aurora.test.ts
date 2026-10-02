@@ -32,6 +32,30 @@ describe("AuroraClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("logs a 403 loudly, without the API key, and does not retry it", async () => {
+    const fetch = vi.fn(async () => json(403, { message: "Persistent deposit address creation is not enabled for this API key" }));
+    const errors: Record<string, unknown>[] = [];
+    const logger = createLogger("fatal", false);
+    logger.error = ((obj: Record<string, unknown>) => errors.push(obj)) as typeof logger.error;
+    const aurora = new AuroraClient({ baseUrl: "https://aurora.test", apiKey: KEY, logger, fetch, maxAttempts: 3 });
+    await expect(aurora.mintAddress(MINT_INPUT)).rejects.toBeInstanceOf(AuroraError);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ status: 403 });
+    expect(String(errors[0]!.message)).toContain("not enabled for this API key");
+    expect(JSON.stringify(errors)).not.toContain(KEY);
+  });
+
+  it("does not log a refused quote as an error: that is how minimums are measured", async () => {
+    const fetch = vi.fn(async () => json(400, { message: "Failed to get quote" }));
+    const errors: unknown[] = [];
+    const logger = createLogger("fatal", false);
+    logger.error = ((obj: unknown) => errors.push(obj)) as typeof logger.error;
+    const aurora = new AuroraClient({ baseUrl: "https://aurora.test", apiKey: KEY, logger, fetch, maxAttempts: 3 });
+    await expect(aurora.dryQuote({ originAsset: "a", destinationAsset: "b", amount: "1", recipient: "0x1", refundTo: "x" })).resolves.toBeNull();
+    expect(errors).toHaveLength(0);
+  });
+
   it("retries 429 and 5xx, then succeeds", async () => {
     const { aurora, fetch } = client([json(429, { message: "busy" }), json(502, {}), json(200, MINTED)]);
     await expect(aurora.mintAddress(MINT_INPUT)).resolves.toEqual(MINTED);
@@ -84,7 +108,10 @@ describe("chain families", () => {
   it("maps Aurora codes to Tender names", () => {
     expect(tenderChainName("sol")).toBe("solana");
     expect(tenderChainName("arb")).toBe("arbitrum");
-    expect(tenderChainName("zec")).toBe("zec");
+    expect(tenderChainName("zec")).toBe("zcash");
+    expect(tenderChainName("bsc")).toBe("bnb");
+    // A code we do not serve (Stellar needs a memo) passes through unchanged.
+    expect(tenderChainName("stellar")).toBe("stellar");
     expect(tenderChainName(null)).toBe("unknown");
   });
 });

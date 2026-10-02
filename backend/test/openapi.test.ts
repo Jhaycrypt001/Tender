@@ -29,7 +29,8 @@ describe("Swagger / OpenAPI", () => {
     expect(body.openapi).toBe("3.1.0");
     expect(body.paths["/v1/invoices"].post.requestBody).toBeDefined();
     expect(body.paths["/public/invoices/{token}"].get.security).toEqual([]);
-    expect(body.paths["/v1/merchant"].get.security).toEqual([{ merchantKey: [] }]);
+    expect(body.paths["/v1/merchant"].get.security).toEqual([{ merchantKey: [] }, { platformKey: [] }]);
+    expect(body.paths["/internal/merchants/resolve"].post.security).toEqual([{ platformKey: [] }]);
 
     // A contract detail survives into the document: amounts are strings with the decimal pattern.
     const invoice = body.paths["/v1/invoices"].post.responses["201"].content["application/json"].schema;

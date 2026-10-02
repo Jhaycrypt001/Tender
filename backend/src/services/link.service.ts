@@ -41,12 +41,32 @@ export async function listLinks(db: Db, merchantId: string, cursor: string | und
   return { page, hasMore, nextCursor: hasMore ? (page.at(-1)?.id ?? null) : null };
 }
 
+const LINK_TOKEN = /^pl_[0-9A-Za-z]{27}$/;
+
+/**
+ * What the buyer may see before opening a link. Read-only: it creates no
+ * invoice and does not touch `uses`. An inactive link is still returned, with
+ * `active: false`, so the page can say it was turned off rather than 404.
+ */
+export async function getPublicLink(db: Db, token: string): Promise<z.output<typeof S.PublicLink>> {
+  if (!LINK_TOKEN.test(token)) throw notFound("Payment link");
+  const link = await db.paymentLink.findUnique({ where: { token }, include: { merchant: { select: { name: true } } } });
+  if (!link) throw notFound("Payment link");
+  return {
+    label: link.label,
+    amount: link.amount ? amount(link.amount) : null,
+    currency: link.currency,
+    merchant_name: link.merchant.name,
+    active: link.active,
+  };
+}
+
 /**
  * A buyer opens a link: create their invoice. The link's fixed amount wins;
  * an open-amount link takes the buyer's.
  */
 export async function openLink(deps: InvoiceDeps, token: string, buyerAmount: string | undefined) {
-  if (!/^pl_[0-9A-Za-z]{27}$/.test(token)) throw notFound("Payment link");
+  if (!LINK_TOKEN.test(token)) throw notFound("Payment link");
   const link = await deps.db.paymentLink.findUnique({ where: { token }, include: { merchant: true } });
   if (!link || !link.active) throw notFound("Payment link");
 

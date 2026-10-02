@@ -14,6 +14,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import type { AuroraClient } from "./aurora/client.js";
 import { requireMerchant } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { internalRoutes } from "./routes/internal.js";
 import { invoiceRoutes } from "./routes/invoices.js";
 import { merchantRoutes } from "./routes/merchants.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
@@ -115,11 +116,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   healthRoutes(app, deps);
   publicRoutes(app, { ...deps, ttlMinutes: config.INVOICE_TTL_MINUTES });
+  internalRoutes(app, { db: deps.db, platformKey: config.TENDER_PLATFORM_KEY });
 
-  // Everything under /v1 requires a merchant API key. The hook is scoped to
+  // Everything under /v1 requires a merchant API key (or the dashboard's platform key). The hook is scoped to
   // this plugin, so it can never leak onto /public or /health.
   await app.register(async (merchantScope) => {
-    requireMerchant(merchantScope, deps.db);
+    requireMerchant(merchantScope, deps.db, config.TENDER_PLATFORM_KEY);
     merchantRoutes(merchantScope, { db: deps.db, redis: deps.redis, chain: deps.chain });
     paymentRoutes(merchantScope, { db: deps.db });
     dashboardRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, ttlMinutes: config.INVOICE_TTL_MINUTES });

@@ -19,6 +19,9 @@ export const SETTLEMENT = "0x4CAD8fac813f7436Bac414D2C9426363567EFE7f";
 // Database 1, never 0: tests must not touch the dev cache (the chain catalogue lives there).
 export const REDIS_URL = process.env.TEST_REDIS_URL ?? "redis://localhost:6379/1";
 
+/** `tp_` + 32 random bytes as base64url: what the dashboard server is given. */
+export const PLATFORM_KEY = "tp_Zx3kQ9vLmN2pR7sT1uW5yA8cE4gH6jK0bD-fI_oXqUz";
+
 /** Asset ids and prices the fake price feed knows. */
 export const ASSETS = {
   USDC_BASE: { id: "nep141:base-usdc.test", decimals: 6, price: 1 },
@@ -88,6 +91,7 @@ export async function setupApp(): Promise<TestContext> {
     LOG_LEVEL: "fatal",
     DATABASE_URL: TEST_DATABASE_URL,
     AURORA_API_KEY: "test",
+    TENDER_PLATFORM_KEY: PLATFORM_KEY,
   });
   const db = createDb(TEST_DATABASE_URL);
   const aurora = fakeAurora();
@@ -106,7 +110,7 @@ export async function teardown(t: TestContext) {
 
 export async function resetDb(db: Db) {
   await db.$executeRawUnsafe(
-    `TRUNCATE "RecoveryTask", "Payment", "InvoiceEvent", "InvoiceAddress", "Invoice", "WebhookDelivery", "PaymentLink", "Merchant" CASCADE`,
+    `TRUNCATE "RecoveryTask", "Payment", "InvoiceEvent", "InvoiceAddress", "Invoice", "WebhookDelivery", "PaymentLink", "ApiKey", "Merchant" CASCADE`,
   );
 }
 

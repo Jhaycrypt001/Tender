@@ -115,6 +115,57 @@ export const Merchant = z.object({
   created_at: Timestamp,
 });
 
+/**
+ * Dashboard server → API, once per sign-in (docs/INTEGRATION.md §1). Not part
+ * of the browser-facing contract, so it has no counterpart in the frontend types.
+ */
+export const ResolveMerchantInput = z.object({
+  google_sub: z.string().min(1).max(64),
+  email: z.email().max(254),
+  name: z.string().max(200).optional(),
+});
+
+/**
+ * Merchant API keys (Settings → Developers). The plaintext `key` appears once,
+ * in the create response, and can never be read back.
+ */
+export const ApiKeySummary = z.object({
+  id: z.string(),
+  prefix: z.string().describe("First characters of the key, for recognising it: \"tk_live_ab12cd34\""),
+  created_at: Timestamp,
+  last_used_at: Timestamp.nullable(),
+});
+export const ApiKeyList = z.object({ data: z.array(ApiKeySummary) });
+export const CreatedApiKey = z.object({
+  id: z.string(),
+  key: z.string().describe("Shown ONCE. Store it now."),
+  prefix: z.string(),
+  created_at: Timestamp,
+});
+export const RotatedWebhookSecret = z.object({ webhook_secret: z.string().describe("Shown ONCE. The previous secret stops verifying immediately.") });
+
+/**
+ * One webhook delivery, for Settings → Developers. `retrying` has attempts left;
+ * `failed` has used every retry and will not be sent again.
+ */
+export const WebhookDeliveryStatus = z.enum(["delivered", "retrying", "failed"]);
+export const WebhookDelivery = z.object({
+  id: z.string(),
+  event: z.string(),
+  invoice_id: z.string(),
+  status: WebhookDeliveryStatus,
+  attempts: z.number().int(),
+  last_error: z.string().nullable(),
+  next_retry_at: Timestamp.nullable(),
+  delivered_at: Timestamp.nullable(),
+  created_at: Timestamp,
+});
+export const WebhookDeliveryList = z.object({ data: z.array(WebhookDelivery) });
+export const ListWebhookDeliveriesQuery = z.object({
+  status: WebhookDeliveryStatus.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
 export const UpdateMerchantInput = z.object({
   settlement_address: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "must be an EVM address").optional(),
   settlement_asset: z.string().min(1).optional(),
@@ -176,6 +227,19 @@ export const RampCorridor = z.object({
 /* -------------------------------------------------------------------------- */
 /* Public (buyer-facing, unauthenticated)                                      */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * What a stranger holding a payment link may see before opening it. Built
+ * field by field: no merchant id, email, settlement address or use count.
+ * Reading it creates nothing and does not count as a use.
+ */
+export const PublicLink = z.object({
+  label: z.string(),
+  amount: Amount.nullable().describe("null for an open-amount link: the buyer chooses"),
+  currency: z.string(),
+  merchant_name: z.string(),
+  active: z.boolean().describe("false once the merchant has turned the link off"),
+});
 
 /** What a stranger holding the checkout link may see. Nothing merchant-private. */
 export const PublicInvoice = z.object({

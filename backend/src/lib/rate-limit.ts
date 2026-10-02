@@ -6,7 +6,8 @@ import { apiKeyPrefix } from "../services/merchant.service.js";
 /**
  * Per-minute limits, stored in Redis so they hold across API instances.
  *
- * Public routes are limited per client IP. The tightest limits sit on the two
+ * Public routes are limited per client IP. Platform-key traffic (the dashboard) is
+ * limited per acted-for merchant, and never shares a bucket with merchant keys. The tightest limits sit on the two
  * that cost something real on every call: opening a payment link mints
  * Aurora addresses, and submit-tx calls Aurora. Merchant routes are limited
  * per API key (by its non-secret prefix), so one noisy integration cannot
@@ -16,7 +17,12 @@ type Group = { name: string; max: number };
 
 function groupFor(req: FastifyRequest): Group {
   const url = req.routeOptions.url ?? req.url;
-  if (url === "/public/links/:token") return { name: "link-open", max: 10 };
+  if (url.startsWith("/internal/")) return { name: "internal", max: 120 };
+  // The dashboard's platform key fronts every signed-in merchant, so it is
+  // limited per merchant it acts for, at its own ceiling.
+  if (req.headers.authorization?.startsWith("Bearer tp_")) return { name: "platform", max: 1200 };
+  // Only the POST mints addresses. The GET preview is free, so it shares the ordinary public limit.
+  if (url === "/public/links/:token" && req.method === "POST") return { name: "link-open", max: 10 };
   if (url === "/public/invoices/:token/submit-tx") return { name: "submit-tx", max: 10 };
   if (url === "/public/invoices/:token/events") return { name: "sse", max: 30 };
   if (url.startsWith("/public/")) return { name: "public", max: 120 };
@@ -24,6 +30,10 @@ function groupFor(req: FastifyRequest): Group {
 }
 
 function identity(req: FastifyRequest, group: Group): string {
+  if (group.name === "platform") {
+    const id = req.headers["x-tender-merchant"];
+    return `merchant:${typeof id === "string" ? id.slice(0, 40) : "none"}`;
+  }
   if (group.name === "merchant") {
     const key = req.headers.authorization?.split(" ")[1];
     if (key) return `key:${apiKeyPrefix(key)}`;

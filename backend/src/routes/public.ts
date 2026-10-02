@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AuroraClient } from "../aurora/client.js";
 import type { Db } from "../db/client.js";
 import { getPublicInvoice } from "../services/invoice.service.js";
-import { openLink } from "../services/link.service.js";
+import { getPublicLink, openLink } from "../services/link.service.js";
 import { describeEta, type ChainCatalogueReader } from "../services/chains.service.js";
 import { effectiveStatus, toPublicInvoice } from "../services/serialize.js";
 import type { InvoiceStream } from "../services/stream.js";
@@ -106,6 +106,16 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
     const status = effectiveStatus(invoice);
     send({ status, at: new Date().toISOString() });
     if (!OPEN_STATUSES.has(status)) close();
+  });
+
+  /**
+   * What a buyer sees before opening a payment link: who they are paying and
+   * how much. Creates nothing and is not counted as a use, so chat apps that
+   * fetch links to draw a preview are harmless. Additive, optional to use.
+   */
+  app.get("/public/links/:token", async (req) => {
+    const { token } = TokenParams.parse(req.params);
+    return getPublicLink(deps.db, token);
   });
 
   /**

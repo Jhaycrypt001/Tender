@@ -12,6 +12,8 @@ export function loggerOptions(level: string, pretty: boolean): LoggerOptions {
         "req.headers.authorization",
         "headers.authorization",
         "*.apiKey",
+        "*.platformKey",
+        "*.TENDER_PLATFORM_KEY",
         "*.api_key",
         "*.webhookSecret",
         "*.secret",

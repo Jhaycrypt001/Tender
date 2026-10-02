@@ -8,7 +8,8 @@
  * address. Use it only for an address you own; merchants signing up through
  * the product prove control with the signature challenge instead (§8).
  *
- * The printed key goes in the frontend's TENDER_API_KEY. It cannot be shown
+ * The printed key is for a merchant's own server (Bearer tk_live_…). The dashboard
+ * uses TENDER_PLATFORM_KEY instead. The key cannot be shown
  * again — only its hash is stored.
  */
 import { parseArgs } from "node:util";

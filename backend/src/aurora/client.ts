@@ -178,7 +178,15 @@ export class AuroraClient {
         const error =
           err instanceof AuroraError ? err : new AuroraError("network", `${route}: ${(err as Error).message}`);
         timer({ outcome: error.kind });
-        if (!error.retryable) throw error;
+        if (!error.retryable) {
+          // A refused quote is routine (it is how minimums are measured), but a
+          // 401/403 is a key or plan problem that no retry fixes: say so plainly,
+          // or the merchant only ever sees a generic "retry" 502.
+          if (error.status === 401 || error.status === 403) {
+            this.opts.logger.error({ route, status: error.status, message: error.message }, "aurora rejected the API key: check its permissions");
+          }
+          throw error;
+        }
         lastError = error;
         this.opts.logger.warn({ route, attempt, kind: error.kind, status: error.status }, "aurora request failed");
       }

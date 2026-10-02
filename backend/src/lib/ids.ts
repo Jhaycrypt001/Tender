@@ -30,3 +30,4 @@ export const eventId = () => `evt_${base62(17)}`; // ~101 bits
 export const checkoutToken = () => `chk_${base62(27)}`; // ~160 bits
 export const linkId = () => `lnk_${base62(17)}`; // ~101 bits
 export const linkToken = () => `pl_${base62(27)}`; // ~160 bits: public, in the link URL
+export const apiKeyId = () => `key_${base62(17)}`; // ~101 bits: shown in Settings, used in DELETE /v1/merchant/api-keys/:id

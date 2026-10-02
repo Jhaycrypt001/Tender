@@ -64,8 +64,35 @@ describe("POST /v1/invoices", () => {
   it("accepts every supported chain by default", async () => {
     const m = await merchant(t.db);
     const inv = S.Invoice.parse((await create(m.auth)).json());
-    expect(inv.addresses.map((a) => a.chain).sort()).toEqual(["arbitrum", "base", "bitcoin", "ethereum", "monad", "solana", "tron"]);
+    // Every EVM chain (they share one address) plus Bitcoin, Solana and Tron. The other
+    // non-EVM chains are opt-in: each costs its own Aurora mint call per invoice.
+    expect(inv.addresses.map((a) => a.chain).sort()).toEqual([
+      "adi", "arbitrum", "avalanche", "base", "berachain", "bitcoin", "bnb", "ethereum", "gnosis",
+      "monad", "optimism", "plasma", "polygon", "scroll", "solana", "tron", "xlayer",
+    ]);
     expect(t.aurora.mintAddress).toHaveBeenCalledTimes(4); // evm, sol, btc, tron
+  });
+
+  it("mints one family at a time, because Aurora answers 429 to concurrent mints for the same sender", async () => {
+    const m = await merchant(t.db);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const real = t.aurora.mintAddress.getMockImplementation()!;
+    t.aurora.mintAddress.mockImplementation(async (input) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 15));
+      inFlight--;
+      return real(input);
+    });
+    try {
+      const res = await create(m.auth, { ...ORDER, reference: "sequential-1", chains: ["bitcoin", "solana", "tron", "base"] });
+      expect(res.statusCode).toBe(201);
+      expect(maxInFlight).toBe(1);
+      expect(t.aurora.mintAddress).toHaveBeenCalledTimes(4);
+    } finally {
+      t.aurora.mintAddress.mockImplementation(real);
+    }
   });
 
   it("is idempotent on reference: a retry returns the same invoice and mints nothing", async () => {
