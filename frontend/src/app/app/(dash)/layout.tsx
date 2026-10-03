@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import DashNav from "@/components/dash/nav";
 import { FrameMark } from "@/components/dash/shell";
 import { SESSION_COOKIE, decodeSession } from "@/lib/auth";
+import { accountsEnabled } from "@/lib/api/server";
 
 /**
  * The signed-in dashboard.
@@ -30,7 +31,10 @@ export default async function DashLayout({
   const jar = await cookies();
   const session = decodeSession(jar.get(SESSION_COOKIE)?.value);
 
-  if (!session) redirect("/app");
+  // No session, or one from before accounts were linked (no merchant id): back
+  // to sign-in. Every API call acts for `session.merchantId`, so a session
+  // without one would only show "not linked" errors on every screen.
+  if (!session || (accountsEnabled() && !session.merchantId)) redirect("/app");
 
   return (
     <div className="flex min-h-dvh flex-col bg-stone">

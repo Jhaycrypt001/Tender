@@ -46,4 +46,13 @@ export type Checks = [
   Assert<Matches<Out<typeof S.InvoiceEvent>, Wire.InvoiceEvent>>,
   Assert<Matches<Out<typeof S.ListInvoicesQuery>, Wire.ListInvoicesQuery>>,
   Assert<Matches<Out<typeof S.ListPaymentsQuery>, Wire.ListPaymentsQuery>>,
+  // Added 2026-10-02: API keys, webhook deliveries, link preview.
+  Assert<Matches<Out<typeof S.ApiKeySummary>, Wire.ApiKeySummary>>,
+  Assert<Matches<Out<typeof S.ApiKeyList>, Wire.ApiKeyList>>,
+  Assert<Matches<Out<typeof S.CreatedApiKey>, Wire.CreatedApiKey>>,
+  Assert<Matches<Out<typeof S.RotatedWebhookSecret>, Wire.RotatedWebhookSecret>>,
+  Assert<Matches<Out<typeof S.WebhookDeliveryStatus>, Wire.WebhookDeliveryStatus>>,
+  Assert<Matches<Out<typeof S.WebhookDelivery>, Wire.WebhookDelivery>>,
+  Assert<Matches<Out<typeof S.WebhookDeliveryList>, Wire.WebhookDeliveryList>>,
+  Assert<Matches<Out<typeof S.PublicLink>, Wire.PublicLink>>,
 ];

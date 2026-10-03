@@ -47,7 +47,10 @@ export async function recoverPaymentAction(
     revalidatePath(`/app/activity/${id}`);
     revalidatePath("/app/activity");
     return {
-      ok: "Withdrawal requested. The funds are being returned to your settlement address — this screen updates as it progresses.",
+      // Not "the funds are being returned": nothing has moved. Aurora has no
+      // withdrawal API for deposit addresses, so the backend attaches a
+      // ready-to-file support case to the recovery notes and keeps watching.
+      ok: "Withdrawal requested. A support case for Aurora, naming your settlement address, is in this payment's recovery notes. The payment stays open until Aurora completes it; this screen updates if it settles.",
     };
   }
 

@@ -9,6 +9,7 @@ import {
   createInvoiceAction,
   type CreateState,
 } from "@/app/app/(dash)/checkout/actions";
+import { CHAIN_IDS, DEFAULT_CHAIN_IDS, chainLabel } from "@/lib/chains";
 
 /**
  * The create-invoice form.
@@ -28,33 +29,43 @@ const EMPTY: CreateState = {};
 type ChainOption = { id: string; name: string; minimum?: string };
 
 /**
- * The fallback chain list.
- *
- * ⚠️ Used ONLY when `GET /public/chains` is unreachable — which today is
- * always, because the backend does not exist yet. These are the demo set from
- * the plan, and they are labels for checkboxes, NOT data presented as fact: no
- * minimum and no settlement estimate is shown from here, because those numbers
- * must come from the API or not be shown at all.
+ * Where the chain list came from:
+ *  - live: measured by the backend, with minimums;
+ *  - measuring: the backend is up but has no minimums yet (a 503);
+ *  - not_connected: no API in this environment;
+ *  - unavailable: the API failed to answer.
  */
-const FALLBACK: ChainOption[] = [
-  { id: "bitcoin", name: "Bitcoin" },
-  { id: "solana", name: "Solana" },
-  { id: "base", name: "Base" },
-  { id: "ethereum", name: "Ethereum" },
-  { id: "arbitrum", name: "Arbitrum" },
-  { id: "tron", name: "Tron" },
-];
+export type ChainListState = "live" | "measuring" | "not_connected" | "unavailable";
+
+/**
+ * The fallback chain list: every chain the backend accepts, by name only.
+ *
+ * ⚠️ Used ONLY when there is no live list. They are labels for checkboxes, NOT
+ * data presented as fact: no minimum and no settlement estimate is shown from
+ * here, because those numbers must come from the API or not be shown at all.
+ */
+const FALLBACK: ChainOption[] = CHAIN_IDS.map((id) => ({ id, name: chainLabel(id) }));
+
+const LIST_NOTE: Record<Exclude<ChainListState, "live">, string> = {
+  measuring:
+    "Minimums for each chain are still being measured, so none are shown yet. You can still create the invoice; the buyer's page shows minimums once they are known.",
+  not_connected:
+    "This is the full chain list. The live list, with each chain's minimum, loads once the API is connected.",
+  unavailable:
+    "The live chain list could not be loaded just now, so minimums are not shown. You can still create the invoice.",
+};
 
 export function CreateInvoiceForm({
   chains,
-  /** True when the list above is a fallback rather than live API data. */
-  usingFallback,
+  listState,
 }: {
   chains: ChainOption[];
-  usingFallback: boolean;
+  listState: ChainListState;
 }) {
   const [state, action] = useActionState(createInvoiceAction, EMPTY);
   const list = chains.length > 0 ? chains : FALLBACK;
+  const defaults = list.filter((c) => DEFAULT_CHAIN_IDS.has(c.id));
+  const extras = list.filter((c) => !DEFAULT_CHAIN_IDS.has(c.id));
   const v = state.values ?? {};
 
   return (
@@ -69,23 +80,27 @@ export function CreateInvoiceForm({
             <AmountField
               label="Amount"
               name="amount_expected"
-              currency="USDC"
+              currency="USD"
               required
               defaultValue={v.amount_expected}
               error={state.fields?.amount_expected}
               hint="Digits only — 49.00, not $49."
             />
+            {/* ⚠️ This is what the AMOUNT is priced in, which the backend accepts
+                only as USD or USDC. It is not what the merchant receives: that is
+                the settlement asset (USDC, USDT0 or MON on Monad), set once in
+                Settings. Offering USDT or MON here made the backend refuse the
+                invoice with a validation error. */}
             <Select
-              label="Settlement currency"
+              label="Priced in"
               name="currency"
               required
-              defaultValue={v.currency || "USDC"}
+              defaultValue={v.currency || "USD"}
               error={state.fields?.currency}
-              hint="What you receive on Monad, whatever the buyer sends."
+              hint="What the amount is in. You are paid in your settlement asset on Monad, set in Settings."
               options={[
+                { value: "USD", label: "USD" },
                 { value: "USDC", label: "USDC" },
-                { value: "USDT", label: "USDT" },
-                { value: "MON", label: "MON" },
               ]}
             />
           </div>
@@ -133,32 +148,26 @@ export function CreateInvoiceForm({
           <fieldset>
             <legend className="sr-only">Chains this invoice accepts</legend>
             <ul className="flex flex-col gap-1.5">
-              {list.map((c) => (
-                <li key={c.id}>
-                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-line px-3.5 py-3 text-[0.9375rem] transition-colors hover:border-mute/50 has-[:checked]:border-ink has-[:checked]:bg-ink has-[:checked]:text-paper">
-                    <span className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        name="chains"
-                        value={c.id}
-                        defaultChecked
-                        className="size-4 accent-ink"
-                      />
-                      {c.name}
-                    </span>
-                    {/* Only rendered when the API supplied it. A minimum is a
-                        number a merchant may quote to a buyer, so it is never
-                        invented locally. */}
-                    {c.minimum && (
-                      <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-mute">
-                        MIN <UsdMinimum amount={c.minimum} />
-                      </span>
-                    )}
-                  </label>
-                </li>
+              {defaults.map((c) => (
+                <ChainBox key={c.id} chain={c} checked />
               ))}
             </ul>
           </fieldset>
+
+          {extras.length > 0 && (
+            <fieldset className="mt-5 border-t border-line pt-4">
+              <legend className="eyebrow float-left mb-2 w-full text-mute">Also available</legend>
+              <p className="clear-both mb-3 text-[0.8125rem] leading-relaxed text-mute">
+                Each of these gets its own deposit address, so every one you
+                tick adds about a second to creating the invoice.
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {extras.map((c) => (
+                  <ChainBox key={c.id} chain={c} checked={false} />
+                ))}
+              </ul>
+            </fieldset>
+          )}
 
           {state.fields?.chains && (
             <p role="alert" className="mt-3 text-[0.8125rem] text-ink">
@@ -169,10 +178,9 @@ export function CreateInvoiceForm({
             </p>
           )}
 
-          {usingFallback && (
+          {listState !== "live" && (
             <p className="mt-4 border-t border-line pt-3 text-[0.8125rem] leading-relaxed text-mute">
-              This is the planned chain list. The live list, with each chain&rsquo;s
-              minimum, loads once the API is connected.
+              {LIST_NOTE[listState]}
             </p>
           )}
         </Card>
@@ -199,5 +207,32 @@ export function CreateInvoiceForm({
         </Card>
       </div>
     </form>
+  );
+}
+
+/** One chain checkbox. Both groups render through this, so they cannot drift apart. */
+function ChainBox({ chain, checked }: { chain: ChainOption; checked: boolean }) {
+  return (
+    <li>
+      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-line px-3.5 py-3 text-[0.9375rem] transition-colors hover:border-mute/50 has-[:checked]:border-ink has-[:checked]:bg-ink has-[:checked]:text-paper">
+        <span className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            name="chains"
+            value={chain.id}
+            defaultChecked={checked}
+            className="size-4 accent-ink"
+          />
+          {chain.name}
+        </span>
+        {/* Only rendered when the API supplied it. A minimum is a number a
+            merchant may quote to a buyer, so it is never invented locally. */}
+        {chain.minimum && (
+          <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-mute">
+            MIN <UsdMinimum amount={chain.minimum} />
+          </span>
+        )}
+      </label>
+    </li>
   );
 }

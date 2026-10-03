@@ -8,9 +8,10 @@ import type { ChainId } from "@/lib/api/types";
  * Creating an invoice.
  *
  * ⚠️ This runs on the server, and it is the reason the form is uncontrolled
- * native inputs rather than client state: `TENDER_API_KEY` can create invoices
- * and move settlement, so the call that uses it must never be reachable from
- * the browser. The form posts here; the key never leaves the server.
+ * native inputs rather than client state: `TENDER_PLATFORM_KEY` can create
+ * invoices for any merchant, so the call that uses it must never be reachable
+ * from the browser. The form posts here; the key never leaves the server, and
+ * the merchant it acts for comes from the signed session, not the form.
  */
 
 export type CreateState = {

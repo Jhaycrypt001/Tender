@@ -1,15 +1,27 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { testWebhook, updateMerchant } from "@/lib/api/merchant";
+import {
+  createApiKey,
+  revokeApiKey,
+  rotateWebhookSecret,
+  testWebhook,
+  updateMerchant,
+} from "@/lib/api/merchant";
 
 /**
- * Developer settings writes.
+ * Developer settings writes: the webhook endpoint, API keys and the webhook
+ * signing secret.
  *
- * Only the webhook endpoint is editable here. API keys are NOT: see the note
- * in `page.tsx` — there is no key endpoint in the §5 contract, and inventing
- * a client-side key would be worse than showing none.
+ * ⚠️ A new key or secret is returned from its action ONCE, in that action's
+ * state, and is never written anywhere else: not a cookie, not a cache, not a
+ * log. The merchant copies it then or rotates again. Every action acts for the
+ * signed-in merchant only, because `request()` takes the merchant from the
+ * signed session, never from the form.
  */
+
+const NOT_CONNECTED =
+  "The Tender API is not connected in this environment, so this cannot be done yet.";
 
 export type WebhookState = {
   fields?: Record<string, string>;
@@ -103,12 +115,98 @@ export async function testWebhookAction(
   }
 
   // The API reports whether the endpoint ANSWERED, which is not the same as
-  // the request having been sent. Both outcomes are reported plainly; a
-  // "sent!" confirmation for an endpoint that 500ed would be a lie.
-  return result.data.delivered
-    ? { ok: "Your endpoint answered. Deliveries should arrive normally." }
-    : {
-        error:
-          "We sent the event but your endpoint did not answer. Check it is reachable and returns a 2xx.",
-      };
+  // the request having been sent. Both outcomes are reported plainly, with
+  // what actually came back; a "sent!" for an endpoint that 500ed would be a lie.
+  const { delivered, status_code, error } = result.data;
+  if (delivered) {
+    return {
+      ok: `Your endpoint answered ${status_code ?? "2xx"}. Deliveries should arrive normally.`,
+    };
+  }
+  if (status_code !== null) {
+    return {
+      error: `Your endpoint answered ${status_code}, not a 2xx. Tender counts that as a failed delivery and retries real events.`,
+    };
+  }
+  return {
+    error: `Your endpoint did not answer${error ? ` (${error})` : ""}. Check it is reachable from the internet over https.`,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* API keys                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type CreateKeyState = {
+  error?: string;
+  /** The new key. Present in this one response only. */
+  created?: { id: string; key: string; prefix: string };
+};
+
+export async function createKeyAction(
+  _prev: CreateKeyState,
+  _form: FormData,
+): Promise<CreateKeyState> {
+  const result = await createApiKey();
+
+  if (!result.ok) {
+    const { error } = result;
+    if (error.kind === "not_configured") return { error: NOT_CONNECTED };
+    if (error.status === 409) {
+      return { error: "You already have 10 active keys. Revoke one you no longer use, then create a new one." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/app/settings/developers");
+  const { id, key, prefix } = result.data;
+  return { created: { id, key, prefix } };
+}
+
+export type RevokeKeyState = { error?: string; ok?: string };
+
+/** Key ids are opaque, but never anything other than this shape. */
+const KEY_ID = /^key_[0-9A-Za-z]{1,64}$/;
+
+export async function revokeKeyAction(
+  _prev: RevokeKeyState,
+  form: FormData,
+): Promise<RevokeKeyState> {
+  const id = String(form.get("id") ?? "");
+  if (!KEY_ID.test(id)) return { error: "That key could not be identified. Reload the page and try again." };
+
+  const result = await revokeApiKey(id);
+
+  if (!result.ok) {
+    const { error } = result;
+    if (error.kind === "not_configured") return { error: NOT_CONNECTED };
+    if (error.kind === "not_found") {
+      revalidatePath("/app/settings/developers");
+      return { error: "That key was already revoked." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/app/settings/developers");
+  return { ok: "Key revoked. Requests made with it now fail with 401." };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Webhook signing secret                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type RotateSecretState = { error?: string; secret?: string };
+
+export async function rotateSecretAction(
+  _prev: RotateSecretState,
+  _form: FormData,
+): Promise<RotateSecretState> {
+  const result = await rotateWebhookSecret();
+
+  if (!result.ok) {
+    if (result.error.kind === "not_configured") return { error: NOT_CONNECTED };
+    return { error: result.error.message };
+  }
+
+  return { secret: result.data.webhook_secret };
 }

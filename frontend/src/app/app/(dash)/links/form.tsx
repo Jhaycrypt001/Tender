@@ -54,12 +54,12 @@ export function LinkForm() {
           defaultValue={v.currency || "USDC"}
           error={state.fields?.currency}
           hint="What the amount is priced in. Buyers still pay with any coin."
+          // Only what the backend accepts for a link (USD or USDC): any other
+          // value comes back as a validation error after the merchant has
+          // already filled the form in. EUR and GBP return with a live FX rate.
           options={[
             { value: "USDC", label: "USDC" },
-            { value: "USDT", label: "USDT" },
             { value: "USD", label: "USD" },
-            { value: "EUR", label: "EUR" },
-            { value: "GBP", label: "GBP" },
           ]}
         />
 

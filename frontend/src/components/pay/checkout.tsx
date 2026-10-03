@@ -442,8 +442,8 @@ function Resolved({
       good: true,
     },
     UNDERPAID: {
-      title: "Payment returned",
-      body: "What arrived was below the minimum for that chain, so it was sent back to the address it came from automatically. Nothing was taken.",
+      title: "Payment incomplete",
+      body: `Less than the amount due arrived. A deposit below the chain's minimum is sent back to the address it came from automatically; anything above it reached ${invoice.merchant_name}. Contact ${invoice.merchant_name} about the difference.`,
       good: false,
     },
     EXPIRED: {

@@ -59,6 +59,16 @@ export async function refundAction(
           "Refunds cannot be sent yet — the Tender API is not connected in this environment.",
       };
     }
+    // 501 is the backend saying refunds do not exist for this payment, not that
+    // something broke: Aurora's deposit addresses have no refund route. Nothing
+    // was sent, and the merchant needs to know that rather than see a failure.
+    if (error.status === 501) {
+      return {
+        paymentId,
+        message:
+          "Refunds aren't available for this payment, so nothing was sent. To return the money, send it from your settlement wallet to the buyer.",
+      };
+    }
     return { paymentId, message: error.message };
   }
 

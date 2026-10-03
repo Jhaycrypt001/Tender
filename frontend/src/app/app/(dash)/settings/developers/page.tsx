@@ -4,7 +4,13 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { ReadOnlyField } from "@/components/dash/field";
 import { CopyValue } from "@/components/dash/copy";
-import { getMerchant } from "@/lib/api/merchant";
+import { DataTable, type Column, type Row } from "@/components/dash/table";
+import { FilterTabs } from "@/components/dash/filter-tabs";
+import { Timestamp } from "@/components/dash/money";
+import { getMerchant, listApiKeys, listWebhookDeliveries } from "@/lib/api/merchant";
+import type { WebhookDelivery, WebhookDeliveryStatus } from "@/lib/api/types";
+import { ApiKeysPanel } from "./keys";
+import { SigningSecretPanel } from "./secret";
 import { WebhookPanel } from "./webhook";
 
 export const metadata = { title: "Developers · Tender" };
@@ -15,26 +21,28 @@ export const dynamic = "force-dynamic";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api.tender.to";
 
 /**
- * Developer settings.
+ * Developer settings: the endpoint, the webhook, API keys, the signing secret,
+ * and which webhook deliveries never arrived.
  *
- * ⚠️ There is no API-key management on this screen, and that is deliberate.
- *
- * The §5 contract has no key endpoint — no create, no list, no rotate. A key
- * could therefore only be shown here by inventing one in the browser, and a
- * credential that the server has never seen authenticates nothing: the
- * merchant would paste it into their backend, every request would 401, and
- * they would have no way to tell a fake key from a revoked one. Worse, the
- * one key this app *does* hold is `TENDER_API_KEY`, which is Tender's own
- * server-side credential and must never reach a browser — rendering "your API
- * key" on a page is exactly how that leaks.
- *
- * So this screen ships the two things that are real today — the endpoint a
- * merchant calls, and the webhook Tender delivers to — and states plainly that
- * key management is not available yet. An honest gap reads as unfinished; a
- * fabricated key reads as finished right up until it costs someone a payment.
+ * ⚠️ Keys and the signing secret are shown ONCE, by the action that creates
+ * them, and never read back: the server keeps only a hash of a key. The list
+ * here is prefixes only. None of these keys is what the dashboard itself uses
+ * (that is the platform key, server-side), so revoking them all never locks
+ * the merchant out of this page.
  */
-export default async function DevelopersPage() {
-  const result = await getMerchant();
+export default async function DevelopersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deliveries?: string }>;
+}) {
+  const { deliveries: filterParam } = await searchParams;
+  const filter = DELIVERY_FILTERS.find((f) => f.value === filterParam)?.value;
+
+  const [result, keys, deliveries] = await Promise.all([
+    getMerchant(),
+    listApiKeys(),
+    listWebhookDeliveries(filter),
+  ]);
 
   if (!result.ok) {
     return (
@@ -105,24 +113,106 @@ export default async function DevelopersPage() {
       </div>
 
       <div className="mt-7">
-        <SectionHeader label="API keys" />
-        <Card tone="quiet">
-          {/* The honest empty state. See the note at the top of this file for
-              why there is no key here to show. */}
-          <p className="text-[0.9375rem] leading-relaxed">
-            Key management is not available yet.
-          </p>
-          <p className="mt-3 max-w-[60ch] text-[0.875rem] leading-relaxed text-mute">
-            Creating, rotating and revoking keys lands with the API. Until then
-            your key is issued directly — a key shown on this page before the
-            server can mint one would authenticate nothing.
-          </p>
-          <p className="mt-4 border-t border-line pt-3 text-[0.8125rem] leading-relaxed text-mute">
-            When it ships, a key will be shown once at creation and never
-            again. Store it somewhere you can read it back.
-          </p>
-        </Card>
+        <SectionHeader label="Keys and secrets" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {keys.ok ? <ApiKeysPanel keys={keys.data.data} /> : <ErrorState error={keys.error} />}
+          <SigningSecretPanel />
+        </div>
+      </div>
+
+      <div className="mt-7">
+        <SectionHeader label="Webhook deliveries" />
+        <FilterTabs
+          label="Filter deliveries"
+          tabs={[
+            { label: "All", href: "/app/settings/developers", on: !filter },
+            ...DELIVERY_FILTERS.map((f) => ({
+              label: f.label,
+              href: `/app/settings/developers?deliveries=${f.value}`,
+              on: filter === f.value,
+            })),
+          ]}
+        />
+        {deliveries.ok ? (
+          <DataTable
+            caption="Recent webhook deliveries"
+            columns={DELIVERY_COLUMNS}
+            rows={deliveries.data.data.map(deliveryRow)}
+            empty={
+              <Card tone="quiet">
+                <p className="text-[0.875rem] leading-relaxed text-mute">
+                  {filter === "failed"
+                    ? "No failed deliveries. Every event Tender gave up on would be listed here."
+                    : filter
+                      ? `No ${filter} deliveries.`
+                      : "No deliveries yet. They appear here once a payment changes state and your endpoint is set."}
+                </p>
+              </Card>
+            }
+          />
+        ) : (
+          <ErrorState error={deliveries.error} />
+        )}
       </div>
     </PageShell>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Webhook deliveries                                                          */
+/* -------------------------------------------------------------------------- */
+
+const DELIVERY_FILTERS: { value: WebhookDeliveryStatus; label: string }[] = [
+  { value: "failed", label: "Failed" },
+  { value: "retrying", label: "Retrying" },
+  { value: "delivered", label: "Delivered" },
+];
+
+const DELIVERY_COLUMNS: Column[] = [
+  { key: "event", label: "Event" },
+  { key: "status", label: "Status" },
+  { key: "attempts", label: "Attempts", align: "right" },
+  { key: "error", label: "Last error", secondary: true },
+  { key: "when", label: "When" },
+];
+
+/**
+ * Failed is the only loud state: those events will never be sent again, so the
+ * merchant has to act (fix the endpoint, then reconcile from Activity).
+ */
+const STATUS_STYLE: Record<WebhookDeliveryStatus, { label: string; className: string }> = {
+  delivered: { label: "Delivered", className: "border-sand/25 bg-sand/12 text-[#8a5c1d]" },
+  retrying: { label: "Retrying", className: "border-ink/12 bg-ink/[0.06] text-ink" },
+  failed: { label: "Failed", className: "border-ink bg-ink text-paper" },
+};
+
+function deliveryRow(d: WebhookDelivery): Row {
+  const s = STATUS_STYLE[d.status];
+  return {
+    id: d.id,
+    cells: {
+      event: (
+        <span className="flex flex-col">
+          <code className="font-mono text-[0.8125rem]">{d.event}</code>
+          <span className="font-mono text-[0.75rem] text-mute">{d.invoice_id}</span>
+        </span>
+      ),
+      status: (
+        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[0.75rem] ${s.className}`}>
+          {s.label}
+        </span>
+      ),
+      attempts: <span className="tabular-nums">{d.attempts}</span>,
+      error: d.last_error ? <span className="text-[0.8125rem] text-mute">{d.last_error}</span> : null,
+      when: d.delivered_at ? (
+        <Timestamp value={d.delivered_at} />
+      ) : d.next_retry_at ? (
+        <span className="text-[0.8125rem]">
+          next try <Timestamp value={d.next_retry_at} />
+        </span>
+      ) : (
+        <Timestamp value={d.created_at} />
+      ),
+    },
+  };
 }

@@ -18,8 +18,14 @@ const EMPTY: RecoveryState = {};
  *
  * ⚠️ Retry is the quiet button and withdraw is the loud one, which is the
  * opposite of how it looks. Retry is the cheap, reversible attempt — try
- * settling again. Withdraw is the exit: it gives up on settling and returns
- * the funds. The heavier styling belongs on the one that ends the attempt.
+ * settling again. Withdraw is the exit: it gives up on settling. The heavier
+ * styling belongs on the one that ends the attempt.
+ *
+ * ⚠️ "Request withdrawal", never "Withdraw to my address": Aurora has no
+ * withdrawal API for deposit addresses, so Tender cannot move these funds
+ * itself. The backend records the destination and attaches a ready-to-file
+ * Aurora support case to the payment's recovery notes; the task stays OPEN
+ * until Aurora completes it. A label promising instant funds would be a lie.
  */
 export function RecoveryActions({
   paymentId,
@@ -44,8 +50,10 @@ export function RecoveryActions({
 
       <p className="text-[0.875rem] leading-relaxed">
         The deposit arrived, but settling it onward did not complete. The funds
-        are not lost and they are not refunded automatically — you choose what
-        happens next.
+        are not lost and they are not refunded automatically. Try settling
+        again, or request a withdrawal: Tender prepares the support case for
+        Aurora with your settlement address, and this payment stays open until
+        Aurora completes it.
       </p>
 
       <p className="mt-3 rounded-xl border border-paper/12 bg-paper/[0.06] px-3.5 py-2.5 font-mono text-[0.75rem] leading-relaxed">
@@ -87,10 +95,10 @@ export function RecoveryActions({
           <Submit
             name="intent"
             value="withdraw"
-            pendingLabel="Withdrawing…"
+            pendingLabel="Requesting…"
             className="bg-sand text-ink hover:bg-sand/90 disabled:bg-sand/40"
           >
-            Withdraw to my address
+            Request withdrawal
           </Submit>
         </div>
       )}

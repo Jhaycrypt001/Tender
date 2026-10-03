@@ -50,3 +50,21 @@ const CHAIN_LABEL: Record<string, string> = {
 export function chainLabel(id: string): string {
   return CHAIN_LABEL[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
 }
+
+/** Every chain the backend accepts, in display order. */
+export const CHAIN_IDS: readonly string[] = Object.keys(CHAIN_LABEL);
+
+/**
+ * What an invoice accepts when the merchant does not choose: every EVM chain
+ * (they share ONE deposit address, so they cost nothing extra) plus Bitcoin,
+ * Solana and Tron. Mirrors `DEFAULT_CHAINS` in `backend/src/aurora/chains.ts`.
+ *
+ * Every other chain is its own deposit address, minted one at a time, so each
+ * one ticked adds roughly a second to creating the invoice. That is why they
+ * are offered but not pre-ticked.
+ */
+export const DEFAULT_CHAIN_IDS: ReadonlySet<string> = new Set([
+  "ethereum", "base", "arbitrum", "optimism", "polygon", "bnb", "avalanche",
+  "monad", "gnosis", "scroll", "berachain", "plasma", "xlayer", "adi",
+  "bitcoin", "solana", "tron",
+]);

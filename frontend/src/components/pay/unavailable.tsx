@@ -7,6 +7,25 @@
  * this page is reached before any payment is possible.
  */
 export default function Unavailable({ kind }: { kind: string }) {
+  if (kind === "link_inactive") {
+    // The link exists, but the seller switched it off. Distinct from "not
+    // valid": the buyer did nothing wrong and the seller is the one to ask.
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-[34rem] flex-col items-center justify-center px-5 py-12 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-line bg-paper">
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-mute" />
+        </div>
+        <h1 className="mt-7 font-display text-[1.75rem] leading-tight tracking-[-0.02em]">
+          This payment link was turned off
+        </h1>
+        <p className="mt-3 text-[0.9375rem] leading-relaxed text-mute">
+          The seller is no longer taking payments through this link. Nothing was
+          sent and nothing was taken. Ask them for a new link.
+        </p>
+      </div>
+    );
+  }
+
   const notFound = kind === "not_found";
 
   return (

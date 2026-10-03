@@ -111,9 +111,9 @@ export const INVOICE_STATUS_HELP: Record<InvoiceStatus, string> = {
   OVERPAID:
     "Settled, and the buyer sent more than the invoice asked for. The excess is recorded against this invoice.",
   UNDERPAID:
-    "Less than the minimum arrived, so it was refunded to the sender automatically. You have not been paid.",
+    "Less than the amount arrived before the invoice closed. A deposit below the chain minimum was refunded to the sender automatically; anything above it reached your address — see the payments below.",
   EXPIRED: "The deadline passed with nothing received.",
   CANCELLED: "You cancelled this invoice before it was paid.",
   NEEDS_RECOVERY:
-    "The deposit succeeded but the routing step failed afterwards, so it was NOT auto-refunded. The funds are recoverable — retry or withdraw from the payment below.",
+    "The deposit succeeded but the routing step failed afterwards, so it was NOT auto-refunded. Retry settling, or request a withdrawal (Tender prepares the support case for Aurora) from the payment below.",
 };

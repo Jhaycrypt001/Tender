@@ -2,20 +2,23 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, decodeSession, isConfigured } from "@/lib/auth";
+import { accountsEnabled } from "@/lib/api/server";
 import { TenderMark } from "@/components/logo";
-import { GoogleIcon } from "@/components/icons";
+import SignInButton from "./sign-in-button";
 
 export const metadata: Metadata = {
   title: "Sign in · Tender",
   description: "Sign in to your Tender merchant account.",
 };
 
+// Messages for `?error=` links. The sign-in button shows its own errors inline;
+// these remain for any link that still arrives with one.
 const ERRORS: Record<string, string> = {
-  cancelled: "Sign-in was cancelled. Try again when you're ready.",
-  bad_state: "That sign-in link expired. Please try again.",
-  exchange_failed: "Google couldn't complete the sign-in. Please try again.",
   not_configured:
-    "Google sign-in isn't connected yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env.local.",
+    "Sign-in isn't connected yet. Add NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET to .env.",
+  account_unavailable:
+    "You're signed in with Google, but we couldn't open your Tender account. Please try again in a moment.",
+  signin_failed: "Sign-in didn't complete. Please try again.",
 };
 
 export default async function AppSignIn({
@@ -23,14 +26,17 @@ export default async function AppSignIn({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  // Already signed in — skip the card entirely.
+  // Already signed in — skip the card entirely. A session from before accounts
+  // were linked (no merchant id) is treated as signed out, so signing in again
+  // replaces it with one that acts for the right merchant.
   const jar = await cookies();
-  if (decodeSession(jar.get(SESSION_COOKIE)?.value)) {
+  const session = decodeSession(jar.get(SESSION_COOKIE)?.value);
+  if (session && (session.merchantId || !accountsEnabled())) {
     redirect("/app/welcome");
   }
 
   const { error } = await searchParams;
-  const message = error ? ERRORS[error] ?? ERRORS.exchange_failed : null;
+  const message = error ? ERRORS[error] ?? ERRORS.signin_failed : null;
   const configured = isConfigured();
 
   return (
@@ -72,31 +78,7 @@ export default async function AppSignIn({
             </p>
           ) : null}
 
-          {configured ? (
-            <a
-              href="/app/start"
-              className="mt-7 flex w-full items-center justify-center gap-3 rounded-xl bg-ink px-6 py-4 font-mono text-[0.8125rem] tracking-[0.12em] text-paper transition-colors duration-300 hover:bg-ink/90"
-            >
-              <GoogleIcon className="h-[1.125rem] w-[1.125rem]" />
-              CONTINUE WITH GOOGLE
-            </a>
-          ) : (
-            <div className="mt-7">
-              <button
-                type="button"
-                disabled
-                className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl bg-ink/30 px-6 py-4 font-mono text-[0.8125rem] tracking-[0.12em] text-paper"
-              >
-                <GoogleIcon className="h-[1.125rem] w-[1.125rem]" />
-                CONTINUE WITH GOOGLE
-              </button>
-              <p className="mt-3 text-center text-[0.75rem] leading-relaxed text-ink/50">
-                Add your Google OAuth credentials to{" "}
-                <code className="font-mono text-ink/70">.env.local</code> to
-                enable sign-in.
-              </p>
-            </div>
-          )}
+          <SignInButton configured={configured} />
         </div>
       </div>
 

@@ -103,10 +103,15 @@ export function WebhookPanel({ url }: { url: string }) {
         <p className="text-[0.8125rem] leading-relaxed text-mute">
           Every delivery carries{" "}
           <code className="font-mono text-[0.75rem] text-ink">
-            X-Tender-Signature
+            X-Tender-Signature-V2
           </code>
-          . Verify it against your raw body before trusting the payload, and
-          dedupe on the event id — deliveries are at-least-once.
+          , which signs the timestamp and the raw body together. Verify it, and
+          reject deliveries more than 5 minutes old, before trusting the
+          payload. Dedupe on the event id: deliveries are at-least-once. See{" "}
+          <a href="/docs#webhooks" className="text-ink underline decoration-sand underline-offset-4">
+            the docs
+          </a>
+          .
         </p>
       </div>
     </Card>

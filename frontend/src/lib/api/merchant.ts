@@ -1,10 +1,15 @@
-import { request } from "./client";
+import { request } from "./server";
 import type {
+  ApiKeyList,
   ApiResult,
   Balance,
+  CreatedApiKey,
   Merchant,
+  RotatedWebhookSecret,
   SettlementChallenge,
   UpdateMerchantInput,
+  WebhookDeliveryList,
+  WebhookDeliveryStatus,
 } from "./types";
 
 /**
@@ -66,9 +71,61 @@ export function verifySettlement(
   });
 }
 
+/** What the API says happened when it fired a test event. */
+export type WebhookTestResult = {
+  /** True only when the endpoint answered with a 2xx. */
+  delivered: boolean;
+  /** The endpoint's HTTP status, or null when it never answered at all. */
+  status_code: number | null;
+  /** Why it failed, when it did: a timeout, a refused connection, a non-2xx. */
+  error?: string;
+  event_id: string;
+};
+
 /** Fire a test event at the merchant's webhook URL. */
-export function testWebhook(): Promise<ApiResult<{ delivered: boolean }>> {
-  return request<{ delivered: boolean }>("/v1/merchant/webhook/test", {
+export function testWebhook(): Promise<ApiResult<WebhookTestResult>> {
+  return request<WebhookTestResult>("/v1/merchant/webhook/test", {
     method: "POST",
+  });
+}
+
+/* --------------------------------------------------------------------------
+   API keys and the webhook secret.
+
+   ⚠️ A key or secret is in the CREATE response and nowhere else, ever. The
+   screen shows it once; nothing here caches or stores it.
+   -------------------------------------------------------------------------- */
+
+/** Active keys, newest first. Prefixes only. */
+export function listApiKeys(): Promise<ApiResult<ApiKeyList>> {
+  return request<ApiKeyList>("/v1/merchant/api-keys");
+}
+
+/** Issue a key. The plaintext `key` is in this response only. At most 10 active (409). */
+export function createApiKey(): Promise<ApiResult<CreatedApiKey>> {
+  return request<CreatedApiKey>("/v1/merchant/api-keys", { method: "POST" });
+}
+
+/** Revoke a key. It stops working at once. 404 if it is not this merchant's. */
+export function revokeApiKey(id: string): Promise<ApiResult<void>> {
+  return request<void>(`/v1/merchant/api-keys/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Replace the webhook signing secret. The old one stops verifying immediately. */
+export function rotateWebhookSecret(): Promise<ApiResult<RotatedWebhookSecret>> {
+  return request<RotatedWebhookSecret>("/v1/merchant/webhook/secret", {
+    method: "POST",
+  });
+}
+
+/** Recent webhook deliveries, newest first. `failed` = every retry used. */
+export function listWebhookDeliveries(
+  status?: WebhookDeliveryStatus,
+  limit = 25,
+): Promise<ApiResult<WebhookDeliveryList>> {
+  return request<WebhookDeliveryList>("/v1/merchant/webhook/deliveries", {
+    query: { status, limit },
   });
 }

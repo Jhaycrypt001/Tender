@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Money } from "@/components/dash/money";
 import Unavailable from "@/components/pay/unavailable";
 import { openPaymentLink } from "@/lib/api/public";
+import type { PublicLink } from "@/lib/api/types";
 
 /** Plain decimal, up to 8 places. The backend re-checks; this only saves a round trip. */
 const AMOUNT = /^\d{1,12}(\.\d{1,8})?$/;
@@ -25,14 +27,22 @@ const AMOUNT = /^\d{1,12}(\.\d{1,8})?$/;
  *   - `router.replace`, not `push`: Back from the checkout must not land here
  *     again and invite a second tap, which would mint a second invoice.
  *
- * The backend has no read route for a link, so the page cannot know up front
- * whether the amount is fixed. It asks without one first: a fixed link opens
- * straight away; an open-amount link answers with a field error on `amount`,
- * and only then does the amount step appear.
+ * `preview` is the link as the buyer may see it (who is paid, for what, how
+ * much), read on the server before render. With it, the page names the seller
+ * and the amount before the buyer taps anything, and an open-amount link shows
+ * its amount field (with the currency) straight away. Without it (the read
+ * failed), the page still works the old way: it asks without an amount first,
+ * and a field error on `amount` is the signal to ask the buyer for one.
  */
-export default function OpenLink({ token }: { token: string }) {
+export default function OpenLink({
+  token,
+  preview = null,
+}: {
+  token: string;
+  preview?: PublicLink | null;
+}) {
   const router = useRouter();
-  const [needsAmount, setNeedsAmount] = useState(false);
+  const [needsAmount, setNeedsAmount] = useState(preview ? preview.amount === null : false);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -78,21 +88,46 @@ export default function OpenLink({ token }: { token: string }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[28rem] flex-col justify-center px-5 py-12">
-      <p className="eyebrow text-mute">Payment link</p>
-      <h1 className="mt-4 font-display text-[2rem] leading-[1.05] tracking-[-0.03em] md:text-[2.5rem]">
-        Pay with the coin you already hold.
-      </h1>
-      <p className="mt-4 text-[0.9375rem] leading-relaxed text-mute">
-        Bitcoin, Solana, a stablecoin: pick what is in your wallet on the next
-        screen and send it. No bridging, no swapping, no gas to buy. Nothing
-        moves until you send.
-      </p>
+      {preview ? (
+        <>
+          <p className="eyebrow text-mute">Pay {preview.merchant_name}</p>
+          <h1 className="mt-4 font-display text-[2rem] leading-[1.05] tracking-[-0.03em] md:text-[2.5rem]">
+            {preview.label}
+          </h1>
+          <div className="mt-5">
+            {preview.amount ? (
+              <Money amount={preview.amount} currency={preview.currency} size="xl" />
+            ) : (
+              <p className="text-[0.9375rem] leading-relaxed text-mute">
+                You choose the amount, in {preview.currency}.
+              </p>
+            )}
+          </div>
+          <p className="mt-4 text-[0.9375rem] leading-relaxed text-mute">
+            Pay with the coin you already hold: Bitcoin, Solana, a stablecoin.
+            Pick it on the next screen. No bridging, no swapping, no gas to buy.
+            Nothing moves until you send.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="eyebrow text-mute">Payment link</p>
+          <h1 className="mt-4 font-display text-[2rem] leading-[1.05] tracking-[-0.03em] md:text-[2.5rem]">
+            Pay with the coin you already hold.
+          </h1>
+          <p className="mt-4 text-[0.9375rem] leading-relaxed text-mute">
+            Bitcoin, Solana, a stablecoin: pick what is in your wallet on the next
+            screen and send it. No bridging, no swapping, no gas to buy. Nothing
+            moves until you send.
+          </p>
+        </>
+      )}
 
       <form onSubmit={open} className="mt-8" noValidate>
         {needsAmount && (
           <div className="mb-4">
             <label htmlFor="link-amount" className="eyebrow text-mute">
-              Amount
+              Amount{preview ? ` (${preview.currency})` : ""}
             </label>
             <input
               id="link-amount"

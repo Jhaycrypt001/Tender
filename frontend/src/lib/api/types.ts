@@ -261,6 +261,53 @@ export type SettlementChallenge = {
   expires_at: Timestamp;
 };
 
+/**
+ * A merchant API key as listed in Settings → Developers. Never the key itself:
+ * only its first characters, so the merchant can recognise which one it is.
+ */
+export type ApiKeySummary = {
+  id: string;
+  /** e.g. "tk_live_ab12cd34". */
+  prefix: string;
+  created_at: Timestamp;
+  /** Null until the key is first used. Updated at most once a minute. */
+  last_used_at: Timestamp | null;
+};
+
+export type ApiKeyList = { data: ApiKeySummary[] };
+
+/**
+ * A key that was just created. ⚠️ `key` is in this response and nowhere else,
+ * ever: show it once, with a copy button, and never store it.
+ */
+export type CreatedApiKey = {
+  id: string;
+  key: string;
+  prefix: string;
+  created_at: Timestamp;
+};
+
+/** ⚠️ Shown once. The previous secret stops verifying immediately. */
+export type RotatedWebhookSecret = { webhook_secret: string };
+
+/** `retrying` has attempts left; `failed` used every retry and is not sent again. */
+export type WebhookDeliveryStatus = "delivered" | "retrying" | "failed";
+
+/** One webhook delivery, so a merchant can see which events never arrived. */
+export type WebhookDelivery = {
+  id: string;
+  event: string;
+  invoice_id: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  last_error: string | null;
+  next_retry_at: Timestamp | null;
+  delivered_at: Timestamp | null;
+  created_at: Timestamp;
+};
+
+export type WebhookDeliveryList = { data: WebhookDelivery[] };
+
 /* -------------------------------------------------------------------------- */
 /* Links, Earn, Ramps                                                         */
 /* -------------------------------------------------------------------------- */
@@ -331,6 +378,21 @@ export type PublicInvoice = {
   merchant_name: string;
   addresses: InvoiceAddress[];
   redirect_url?: string | null;
+};
+
+/**
+ * What a buyer may see about a payment link before opening it. Reading it
+ * creates nothing and does not count as a use, so it is safe to fetch on page
+ * load (unlike opening the link, which mints an invoice).
+ */
+export type PublicLink = {
+  label: string;
+  /** Null for an open-amount link: the buyer chooses. */
+  amount: Amount | null;
+  currency: string;
+  merchant_name: string;
+  /** False once the merchant has turned the link off. */
+  active: boolean;
 };
 
 /** One supported chain, from GET /public/chains. */

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { getChains } from "@/lib/api/public";
-import { CreateInvoiceForm } from "./form";
+import { CreateInvoiceForm, type ChainListState } from "./form";
 
 export const metadata = { title: "New invoice · Tender" };
 
@@ -26,6 +26,20 @@ export default async function NewInvoicePage() {
       }))
     : [];
 
+  // Why there may be no live list. A 503 is the backend saying it has not
+  // measured minimums yet (after a cold start, or while a destination chain is
+  // in maintenance on Aurora's side). That is "not yet", not a failure, and
+  // invoices can still be created.
+  const listState: ChainListState = result.ok
+    ? chains.length > 0
+      ? "live"
+      : "measuring"
+    : result.error.kind === "not_configured"
+      ? "not_connected"
+      : result.error.status === 503
+        ? "measuring"
+        : "unavailable";
+
   return (
     <PageShell>
       <PageHeader
@@ -42,7 +56,7 @@ export default async function NewInvoicePage() {
           </Link>
         }
       />
-      <CreateInvoiceForm chains={chains} usingFallback={!result.ok} />
+      <CreateInvoiceForm chains={chains} listState={listState} />
     </PageShell>
   );
 }

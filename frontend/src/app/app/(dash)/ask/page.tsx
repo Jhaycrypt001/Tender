@@ -131,7 +131,7 @@ const QUESTIONS: Question[] = [
     query: { invoice_status: "NEEDS_RECOVERY" },
     zero: "Nothing needs you. No payment is stuck.",
     caveat:
-      "The deposit arrived but the onward settlement did not complete. This is not refunded automatically — it needs you to retry or withdraw it from the payment page.",
+      "The deposit arrived but the onward settlement did not complete. This is not refunded automatically — retry it, or request a withdrawal, from the payment page.",
   },
   {
     slug: "refunded",

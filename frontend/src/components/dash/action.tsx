@@ -82,18 +82,23 @@ export function Action({
   variant = "quiet",
   className = "",
   ariaLabel,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   variant?: Variant;
   className?: string;
   ariaLabel?: string;
+  /** Blocks the click, e.g. while a request this button started is running. */
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
+      aria-busy={disabled || undefined}
+      disabled={disabled}
       className={`${BASE} ${VARIANT[variant]} ${className}`}
     >
       {children}

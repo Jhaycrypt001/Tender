@@ -1,5 +1,5 @@
 import { publicBase, publicRequest } from "./client";
-import type { ApiResult, Chain, PublicInvoice } from "./types";
+import type { ApiResult, Chain, PublicInvoice, PublicLink } from "./types";
 
 /**
  * The public, unauthenticated API — everything the buyer checkout calls.
@@ -21,6 +21,18 @@ export function getPublicInvoice(
   return publicRequest<PublicInvoice>(
     `/public/invoices/${encodeURIComponent(token)}`,
   );
+}
+
+/**
+ * What a payment link is for, before it is opened: who is being paid, for
+ * what, and how much (`amount` is null when the buyer chooses).
+ *
+ * Read-only: it creates nothing and does not count as a use, so unlike
+ * `openPaymentLink` it is safe to call on page load, chat-app crawlers
+ * included. An inactive link still answers, with `active: false`.
+ */
+export function getPublicLink(token: string): Promise<ApiResult<PublicLink>> {
+  return publicRequest<PublicLink>(`/public/links/${encodeURIComponent(token)}`);
 }
 
 /**

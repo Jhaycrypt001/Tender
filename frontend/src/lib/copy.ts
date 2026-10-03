@@ -198,7 +198,7 @@ export const anywhere = {
     },
     {
       title: "Underpayment is a state, not a ticket",
-      body: "Short payments are refunded automatically and your webhook says so. Nobody has to open a support thread.",
+      body: "A short payment gets its own state and a webhook, never a support thread. A deposit below the chain minimum is refunded automatically; anything above it is yours, recorded against the invoice.",
     },
   ],
   cta: { label: "Read the docs", href: "/docs" },
@@ -325,7 +325,7 @@ export const faq = {
     },
     {
       q: "What happens if a customer underpays?",
-      a: "It's a first-class state, not an error. Deposits below the minimum are refunded automatically by the quote deadline, and the invoice moves to UNDERPAID. You get a webhook either way, so your system always knows.",
+      a: "It's a first-class state, not an error. If less than the amount has arrived when the invoice closes, it moves to UNDERPAID and you get a webhook. A deposit below the chain minimum is refunded to the buyer automatically; anything above it reached your address, and the invoice's payments show exactly what arrived.",
     },
     {
       q: "Does my customer need to connect anything?",

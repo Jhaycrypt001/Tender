@@ -134,7 +134,7 @@ export const docs = {
       {
         name: "UNDERPAID",
         terminal: true,
-        desc: "Less than the minimum arrived. Refunded automatically by the quote deadline.",
+        desc: "Less than the amount arrived before the invoice closed. A deposit below the chain minimum is refunded automatically; anything above it reached your address — see the invoice's payments.",
       },
       {
         name: "EXPIRED",
@@ -185,17 +185,22 @@ export const docs = {
 }`,
     verify: `import { createHmac, timingSafeEqual } from "node:crypto";
 
+// headers: X-Tender-Signature-V2 and X-Tender-Timestamp.
 // Verify against the RAW body: parsing first changes the bytes.
-export function verify(rawBody: string, header: string, secret: string) {
+export function verify(rawBody: string, signature: string, timestamp: string, secret: string) {
+  // Reject replays: the timestamp is signed, so it cannot be faked.
+  if (!/^\\d+$/.test(timestamp)) return false;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+
   const expected = "sha256=" + createHmac("sha256", secret)
-    .update(rawBody)
+    .update(\`\${timestamp}.\${rawBody}\`)
     .digest("hex");
 
-  const a = Buffer.from(header);
+  const a = Buffer.from(signature);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }`,
-    note: "The signature arrives as X-Tender-Signature. Reject anything older than five minutes to prevent replay.",
+    note: "Use X-Tender-Signature-V2: it signs the timestamp together with the body, so a delivery older than five minutes can be rejected safely. Each retry is re-signed with a fresh timestamp. The older X-Tender-Signature (body only) is still sent for existing integrations.",
   },
 
   faq: {
@@ -212,10 +217,6 @@ export function verify(rawBody: string, header: string, secret: string) {
       {
         q: "What happens if a buyer pays twice?",
         a: "Each deposit is processed independently. The first settles the invoice; the second is recorded and reported as an overpayment.",
-      },
-      {
-        q: "Is there a sandbox?",
-        a: "Yes. Keys prefixed tk_test_ run against test chains and never move real funds. The API surface is identical.",
       },
     ],
   },

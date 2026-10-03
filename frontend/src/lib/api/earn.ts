@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { request } from "./server";
 import type { Amount, ApiResult, EarnPosition } from "./types";
 
 /**

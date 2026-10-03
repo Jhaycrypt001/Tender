@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TenderMark } from "@/components/logo";
+import { SignOutForm } from "@/components/auth/sign-out";
 import CurrencyFlag from "@/components/dash/currency-flag";
 import {
   AskIcon,
@@ -376,17 +377,13 @@ function AvatarMenu({ session, open }: { session: Session; open: boolean }) {
       </DropdownItem>
       <div className="my-1 h-px bg-line" />
       {/* A real form POST, not a link: signing out changes state, and a GET
-          that mutates is fetchable by anything that prefetches. */}
+          that mutates is fetchable by anything that prefetches. It also ends
+          the Privy session, which a plain form post would leave open. */}
       <DropdownItem>
-        <form action="/app/signout" method="post">
-          <button
-            type="submit"
-            role="menuitem"
-            className="w-full rounded-xl px-3 py-2 text-left text-[0.8125rem] text-ink transition-colors hover:bg-stone"
-          >
-            Sign out
-          </button>
-        </form>
+        <SignOutForm
+          role="menuitem"
+          className="w-full rounded-xl px-3 py-2 text-left text-[0.8125rem] text-ink transition-colors hover:bg-stone"
+        />
       </DropdownItem>
     </DropdownPanel>
   );
@@ -503,14 +500,7 @@ function MobileSheet({
             <SettingsIcon className="h-4 w-4 text-mute" />
             Settings
           </Link>
-          <form action="/app/signout" method="post">
-            <button
-              type="submit"
-              className="w-full rounded-xl px-3 py-2 text-left text-[0.875rem] text-ink transition-colors hover:bg-stone"
-            >
-              Sign out
-            </button>
-          </form>
+          <SignOutForm className="w-full rounded-xl px-3 py-2 text-left text-[0.875rem] text-ink transition-colors hover:bg-stone" />
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Checkout from "@/components/pay/checkout";
 import OpenLink from "@/components/pay/open-link";
 import Unavailable from "@/components/pay/unavailable";
-import { getPublicInvoice, invoiceEventsUrl } from "@/lib/api/public";
+import { getPublicInvoice, getPublicLink, invoiceEventsUrl } from "@/lib/api/public";
 
 /**
  * The buyer checkout, at /pay/<token>.
@@ -43,7 +43,14 @@ export default async function PayPage({
 
   if (token.startsWith("pl_")) {
     if (!LINK_TOKEN.test(token)) return <Unavailable kind="not_found" />;
-    return <OpenLink token={token} />;
+    // Who is being paid, and how much, before the buyer commits to anything.
+    // Read-only, so it is safe on page load. Any failure other than "no such
+    // link" falls back to the plain page: a preview is a courtesy, and a hiccup
+    // fetching it must never stop someone paying.
+    const preview = await getPublicLink(token);
+    if (!preview.ok && preview.error.kind === "not_found") return <Unavailable kind="not_found" />;
+    if (preview.ok && !preview.data.active) return <Unavailable kind="link_inactive" />;
+    return <OpenLink token={token} preview={preview.ok ? preview.data : null} />;
   }
 
   const result = await getPublicInvoice(token);

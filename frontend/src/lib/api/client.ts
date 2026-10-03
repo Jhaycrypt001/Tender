@@ -6,17 +6,19 @@ import type { ApiError, ApiErrorKind, ApiResult } from "./types";
  * Everything in `src/lib/api/` funnels through `request()`. When a path moves
  * or an auth header changes, exactly one file changes.
  *
- * ⚠️ SECURITY — WHY MOST OF THIS IS SERVER-ONLY.
+ * ⚠️ SECURITY — WHY THE MERCHANT HALF LIVES IN `./server`.
  *
- * Merchant routes authenticate with `Authorization: Bearer <merchant_api_key>`.
- * That key can create invoices and move settlement. If it ever reaches the
- * browser, anyone who opens devtools on the dashboard can read it out of the
- * JS bundle and act as that merchant.
+ * Merchant routes authenticate with `Authorization: Bearer <TENDER_PLATFORM_KEY>`
+ * plus `X-Tender-Merchant: <merchant id>`. The platform key can act as ANY
+ * merchant. If it ever reaches the browser, anyone who opens devtools on the
+ * dashboard can read it out of the JS bundle and act as every merchant at once.
  *
- * So the rule is:
+ * So this file holds only what is safe in the browser: the shared transport and
+ * `publicRequest()`. The authenticated `request()` is in `./server`, which reads
+ * the signed session cookie and so can only run on the server. The rule is:
  *
- *   - Merchant reads  → server components, calling `request()` directly.
- *   - Merchant writes → route handlers under `src/app/api/`, which attach the
+ *   - Merchant reads  → server components, calling `request()` from `./server`.
+ *   - Merchant writes → server actions and route handlers, which attach the
  *                       key server-side and proxy onward.
  *   - The browser only ever talks to our own origin, never to the API with a key.
  *
@@ -28,12 +30,17 @@ import type { ApiError, ApiErrorKind, ApiResult } from "./types";
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /**
- * Server-only base and key. `process.env` reads for these must never be
- * inlined into client code — they are not NEXT_PUBLIC_ prefixed, so Next
- * leaves them undefined in the browser bundle rather than exposing them.
+ * Server-side base. Not NEXT_PUBLIC_ prefixed, so Next leaves it undefined in
+ * the browser bundle. The platform key is read in `./server`, never here.
  */
-const SERVER_BASE = process.env.TENDER_API_URL ?? PUBLIC_BASE;
-const MERCHANT_KEY = process.env.TENDER_API_KEY ?? "";
+export const SERVER_BASE = process.env.TENDER_API_URL ?? PUBLIC_BASE;
+
+/**
+ * How a merchant call authenticates: the platform key, and which merchant it
+ * acts for. `merchantId` is omitted only for the `/internal/*` routes, which
+ * act for no merchant (finding the merchant for a sign-in is one of them).
+ */
+export type MerchantAuth = { key: string; merchantId?: string };
 
 /** How long to wait before giving up on a request. */
 const TIMEOUT_MS = 15_000;
@@ -56,11 +63,9 @@ function kindForStatus(status: number): ApiErrorKind {
   return "unknown";
 }
 
-type RequestOptions = {
+export type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
-  /** Merchant API key. Server-side only; omitted for public routes. */
-  auth?: boolean;
   /** Idempotency-Key header. Set it on every create that a user could retry. */
   idempotencyKey?: string;
   /** Query parameters. Undefined and null values are dropped, not serialised. */
@@ -90,11 +95,15 @@ function buildUrl(
   return qs ? `${url}?${qs}` : url;
 }
 
-async function send<T>(
+/**
+ * The transport. `auth` is null for public routes. Exported for `./server`
+ * only; call `request()` or `publicRequest()` instead.
+ */
+export async function send<T>(
   base: string,
   path: string,
   options: RequestOptions,
-  key: string,
+  auth: MerchantAuth | null,
 ): Promise<ApiResult<T>> {
   /**
    * The normal state today. The backend is not deployed yet, so rather than
@@ -111,19 +120,20 @@ async function send<T>(
     };
   }
 
-  if (options.auth && !key) {
+  if (auth && !auth.key) {
     return {
       ok: false,
       error: err(
         "not_configured",
-        "No merchant API key configured. Set TENDER_API_KEY on the server.",
+        "No platform key configured. Set TENDER_PLATFORM_KEY on the server.",
       ),
     };
   }
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (options.auth) headers["Authorization"] = `Bearer ${key}`;
+  if (auth) headers["Authorization"] = `Bearer ${auth.key}`;
+  if (auth?.merchantId) headers["X-Tender-Merchant"] = auth.merchantId;
   if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
 
   // AbortSignal.timeout would be terser, but an explicit controller lets us
@@ -186,27 +196,14 @@ async function send<T>(
 }
 
 /**
- * Authenticated call against a merchant route.
- *
- * ⚠️ SERVER ONLY. Calling this from a client component ships the merchant key
- * into the browser bundle. Use a server component or a route handler.
- */
-export function request<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<ApiResult<T>> {
-  return send<T>(SERVER_BASE, path, { ...options, auth: true }, MERCHANT_KEY);
-}
-
-/**
  * Unauthenticated call against a `/public/*` route.
  * Safe in the browser — this is what the buyer checkout uses.
  */
 export function publicRequest<T>(
   path: string,
-  options: Omit<RequestOptions, "auth"> = {},
+  options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
-  return send<T>(PUBLIC_BASE, path, { ...options, auth: false }, "");
+  return send<T>(PUBLIC_BASE, path, options, null);
 }
 
 /** The public API base, for building an SSE URL. Empty when unconfigured. */
