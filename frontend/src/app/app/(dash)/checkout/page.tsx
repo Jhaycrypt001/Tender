@@ -49,7 +49,15 @@ export default async function CheckoutPage({
         eyebrow="Checkout"
         title="Bill anyone. Any chain."
         description="Create an invoice, hand the buyer a link, and watch it settle."
-        actions={<NewInvoiceButton />}
+        actions={
+          <>
+            {/* In person: the customer scans or taps at the till. */}
+            <Cta href="/app/checkout/counter" tone="outline">
+              Counter
+            </Cta>
+            <NewInvoiceButton />
+          </>
+        }
       />
 
       {/* Filters render whether or not the request succeeded: they are

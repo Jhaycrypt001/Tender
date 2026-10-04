@@ -11,6 +11,7 @@ import {
 } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { QRCode } from "@/components/pay/qr";
+import { NfcWrite } from "@/components/dash/nfc-write";
 import { getInvoice } from "@/lib/api/invoices";
 import { APP_URL } from "@/lib/auth";
 import { chainLabel } from "@/lib/chains";
@@ -117,6 +118,13 @@ export default async function InvoicePage({
                 Expires <Timestamp value={invoice.expires_at} />. After that the
                 link stops accepting payment.
               </p>
+
+              {/* Buyer in the room: put the link on a sticker they can tap. */}
+              {(invoice.status === "PENDING" || invoice.status === "DETECTED") && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <NfcWrite url={payUrl} label="Write to NFC sticker" />
+                </div>
+              )}
             </div>
           </div>
         </Card>

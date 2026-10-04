@@ -7,6 +7,7 @@ import { Money, Timestamp } from "@/components/dash/money";
 import { listLinks } from "@/lib/api/links";
 import { APP_URL } from "@/lib/auth";
 import { LinkForm } from "./form";
+import { LinkTools } from "./tools";
 
 export const metadata = { title: "Links · Tender" };
 
@@ -79,6 +80,9 @@ export default async function LinksPage() {
                         </code>
                         <CopyValue value={url} label="Copy link" />
                       </div>
+
+                      {/* A paused link would put a dead code on a counter. */}
+                      {link.active && <LinkTools url={url} label={link.label} />}
 
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line pt-2.5 text-[0.8125rem] text-mute">
                         <span>

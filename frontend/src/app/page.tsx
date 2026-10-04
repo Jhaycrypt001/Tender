@@ -6,6 +6,7 @@ import Comparison from "@/components/sections/comparison";
 import Showcase from "@/components/sections/showcase";
 import Capabilities from "@/components/sections/capabilities";
 import HowItWorks from "@/components/sections/how-it-works";
+import InPerson from "@/components/sections/in-person";
 import Anywhere from "@/components/sections/anywhere";
 import Card from "@/components/sections/card";
 import SettleLive from "@/components/sections/settle-live";
@@ -31,6 +32,7 @@ export default function Home() {
       <Showcase />
       <Capabilities />
       <HowItWorks />
+      <InPerson />
       <Anywhere />
       <Card />
       <SettleLive />

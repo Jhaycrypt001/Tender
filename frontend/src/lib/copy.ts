@@ -178,6 +178,30 @@ export const capabilities = {
   ],
 } as const;
 
+/** In person: the counter screen and NFC stickers, for merchants with a till. */
+export const inPerson = {
+  eyebrow: "In person",
+  heading: "Scan or tap to pay at the counter",
+  body: "Key in the amount and turn the screen round. Your customer scans the code with their camera, or taps an NFC sticker, and pays from the wallet already on their phone.",
+  points: [
+    {
+      title: "Scan with any camera",
+      body: "No app to install and nothing to connect. The phone's own camera opens the checkout.",
+    },
+    {
+      title: "Tap an NFC sticker",
+      body: "Write a sale, or a reusable link, onto a cheap NFC sticker. Any modern phone opens it with a tap, iPhone included.",
+    },
+    {
+      title: "Paid, right on the screen",
+      body: "The counter flips to Paid the moment the payment settles on Monad. Every sale is an ordinary invoice, with the same webhook.",
+    },
+  ],
+  note: "Writing a sticker needs Chrome on Android. Reading one works on any NFC phone.",
+  cta: { label: "Open the counter", href: "/app/checkout/counter" },
+  example: { amount: "12.50", label: "Scan or tap to pay" },
+} as const;
+
 /** Item 4 — the dark "Pay anyone, anywhere" phone + checklist section. */
 export const anywhere = {
   eyebrow: "Move money",
@@ -332,6 +356,10 @@ export const faq = {
       a: "Never. They see an amount and a QR code, and they send from whatever wallet or exchange they already use. There is no connect step, no signature request, and no network switching prompt.",
     },
     {
+      q: "Can I take payments in person?",
+      a: "Yes. The counter screen in your dashboard turns a phone, tablet or laptop into a till: key in the amount, and the customer scans the code or taps an NFC sticker, then pays from their own wallet. Writing a sticker needs Chrome on Android; any NFC phone, iPhone included, can tap it.",
+    },
+    {
       q: "Do I need MON to receive payments?",
       a: "No. Gas is abstracted end to end. Neither you nor your customer needs to acquire the destination chain's native token for a payment to settle.",
     },
@@ -359,9 +387,7 @@ export const footer = {
     "Tender is an any-chain crypto checkout. Your buyer pays from the wallet they already have; you are settled in one asset on Monad.",
   cta: { label: "Get started", href: "/app" },
   social: [
-    { label: "X", href: "#x" },
     { label: "GitHub", href: "#github" },
-    { label: "Farcaster", href: "#farcaster" },
   ],
   columns: [
     {
