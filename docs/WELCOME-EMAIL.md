@@ -68,7 +68,7 @@ Send **one** email, to `merchant.email`, when `created === true`.
 |---|---|
 | Subject | `You're in. Set where your money lands.` |
 | From | `Tender <hello@tenderr.xyz>` (see DNS below) |
-| Reply-to | a real inbox you read |
+| Reply-to | `alamujude25@gmail.com` — a real inbox, read daily |
 | Primary CTA | `https://tenderr.xyz/app/settings` — set settlement address |
 | Must contain | a plain-text alternative + an unsubscribe-ish footer line |
 
@@ -107,13 +107,17 @@ credential in an inbox forever.
 
 Free tier is 3,000 emails/month, 100/day — far more than enough.
 
-1. Sign up at resend.com, add the sending domain.
-2. Add the DKIM + SPF records it gives you to the domain's DNS.
-3. **Wait for it to verify before testing.** Sending from an unverified domain
-   lands in spam or is rejected outright.
+**This part is already done.** `tenderr.xyz` is added in Resend and its DKIM +
+SPF records are verified, so sending works today. The API key comes to you
+separately — it is not in this repo and must never be committed.
 
-Until the domain is verified, Resend allows sending to **your own address
-only** via `onboarding@resend.dev`. That's enough to develop against.
+Resend shows the domain as **"Partially Verified"**. That is expected and not a
+problem: the only record still pending is **MX**, which exists for Resend's
+*inbound* mail feature. We don't receive mail at `tenderr.xyz` — see the
+reply-to note below — so nothing about sending is blocked by it.
+
+If you want to develop before the key reaches you, Resend lets you send to
+**your own address only** via `onboarding@resend.dev`.
 
 ### 2. Config
 
@@ -122,8 +126,14 @@ In `src/config.ts`, alongside the other secrets — **optional**:
 ```ts
 RESEND_API_KEY: z.string().min(1).optional(),
 EMAIL_FROM: z.string().default("Tender <hello@tenderr.xyz>"),
+EMAIL_REPLY_TO: z.string().default("alamujude25@gmail.com"),
 APP_URL: z.url().default("https://tenderr.xyz"),
 ```
+
+`tenderr.xyz` can **send** but cannot **receive** — the MX record is for Resend's
+inbound feature, which we're not relying on. So the reply-to is a Gmail that is
+actually read. The footer invites a reply ("Not you? Reply and tell us"), and an
+invitation to reply into a black hole is worse than no invitation at all.
 
 No key → no email, and sign-in still works normally. Same pattern as the
 assistant route in `docs/ASSISTANT.md`. Set it in Railway only.
@@ -264,6 +274,7 @@ const resend = new Resend(config.RESEND_API_KEY);
 await resend.emails.send({
   from: config.EMAIL_FROM,
   to: merchant.email,
+  replyTo: config.EMAIL_REPLY_TO,
   subject: "You're in. Set where your money lands.",
   html,
   text,
@@ -283,9 +294,11 @@ what the user typed.
 
 ## Testing
 
-1. `RESEND_API_KEY` set, `EMAIL_FROM` left as the default `onboarding@resend.dev`
-   while the domain is still verifying.
+1. `RESEND_API_KEY` set in Railway. `EMAIL_FROM` can stay on its default
+   (`hello@tenderr.xyz`) — the domain is verified for sending.
 2. Sign in with a Google account that has **never** used Tender. Check the inbox.
+   Hit reply on the email and confirm it addresses `EMAIL_REPLY_TO`, not the
+   from-address — replies to `hello@tenderr.xyz` go nowhere.
 3. Sign out and back in with the same account → **no second email**
    (`created` is false). This is the one regression that matters.
 4. Unset `RESEND_API_KEY`, restart, sign in with another new account → sign-in
@@ -294,7 +307,9 @@ what the user typed.
    500s, the enqueue isn't wrapped in try/catch.
 6. Open it in Gmail **and** Outlook, on desktop and phone. Outlook is where
    table-less layouts fall apart.
-7. Check it isn't in spam. If it is, the DNS records aren't verified yet.
+7. Check it isn't in spam. DKIM and SPF are verified, so if it still lands there
+   the cause is the content or the from-address, not DNS — don't go re-checking
+   records.
 
 Worth a vitest: the template renders with a name containing `<` and `&`
 without producing broken HTML.
