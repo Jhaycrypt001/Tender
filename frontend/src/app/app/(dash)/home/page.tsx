@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { PageShell, SectionHeader } from "@/components/dash/shell";
@@ -32,8 +30,11 @@ export const dynamic = "force-dynamic";
 const RECENT = 5;
 
 /**
- * The balance card's art. Generated separately and dropped in by hand; until
- * the file exists the card draws its own CSS ground, so nothing here breaks.
+ * The balance card's art, committed under `public/`.
+ *
+ * ⚠️ Never gate this on `fs.existsSync`. On Vercel, `public/` is served from
+ * the CDN and is not on the server function's disk, so the check is always
+ * false in production and the card silently falls back to its CSS rings.
  */
 const CARD_ART = "/img/card.png";
 
@@ -58,11 +59,6 @@ export default async function HomePage() {
   const first = session?.name.trim().split(/\s+/)[0] ?? "";
   const m = merchant.ok ? merchant.data : null;
 
-  // Checked on the server, per request: dropping the PNG in is the whole
-  // upgrade, with no code change and no broken-image flash before it exists.
-  const art = fs.existsSync(path.join(process.cwd(), "public", CARD_ART))
-    ? CARD_ART
-    : null;
 
   return (
     <PageShell>
@@ -93,7 +89,7 @@ export default async function HomePage() {
               address={m?.settlement_address}
               addressKnown={merchant.ok}
               verified={m?.settlement_verified ?? false}
-              art={art}
+              art={CARD_ART}
             />
           </Card>
         </CardCanvas>
