@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { nav } from "@/lib/copy";
 import Button from "./button";
+import { TenderMark } from "./logo";
 
 export default function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -35,8 +36,9 @@ export default function Nav() {
       <div className="shell flex h-[62px] items-center justify-between gap-6">
         <Link
           href="/"
-          className="font-display text-[1.4rem] leading-none tracking-[-0.03em]"
+          className="flex items-center gap-2 font-display text-[1.4rem] leading-none tracking-[-0.03em]"
         >
+          <TenderMark className="h-[1.375rem] w-[1.375rem] text-ink" />
           Tender
         </Link>
 
