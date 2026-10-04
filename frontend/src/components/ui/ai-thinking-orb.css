@@ -1,0 +1,522 @@
+/*
+ * MorphOrb styles. Everything is `mo-` prefixed so nothing here can reach
+ * outside the component — and, because this file is unlayered, so nothing
+ * here should ever share a class name with a Tailwind utility.
+ *
+ * The runtime drives the animation by writing custom properties every frame:
+ *   on .mo-actor   --w --h --r (geometry) and the layer opacities --oGlow
+ *                  --oPill --oBall --oGreen --oCard --oRing --oInput --oAur
+ *                  --oHalo, plus scales --gs --cs --inScale and the answer
+ *                  head's --hOp --dotS --bloom
+ *   on .mo-status  --sOp --sTy
+ *   on .mo-root    --oCenter
+ * CSS only maps those numbers onto layers. Colours are Tender's: paper
+ * surfaces, ink text, sand (#c48535) wherever the original used green.
+ */
+
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.mo-root {
+  --mo-ink: #121111;
+  --mo-sand: #c48535;
+  --mo-sand-hi: #e6b06a;
+  --mo-sand-lo: #9a6424;
+  --mo-mute: #8a8783;
+  --mo-line: #e6e4e0;
+  --oCenter: 0;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--mo-ink);
+  font-family: var(--font-sans);
+}
+
+.mo-bg {
+  position: absolute;
+  inset: 0;
+}
+
+/* the warm bloom behind the orb while it thinks */
+.mo-halo {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 560px;
+  height: 560px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(196, 133, 53, 0.2), rgba(196, 133, 53, 0.07) 55%, transparent);
+  opacity: var(--oCenter);
+}
+
+.mo-mover {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+
+/* comet trail behind the flying ball */
+.mo-trail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, var(--mo-sand-hi), var(--mo-sand) 58%, var(--mo-sand-lo));
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.mo-actor {
+  --w: 560px;
+  --h: 60px;
+  --r: 999px;
+  --cw: 520px;
+  --oGlow: 1;
+  --oPill: 1;
+  --oBall: 0;
+  --oGreen: 0;
+  --oCard: 0;
+  --oRing: 1;
+  --oInput: 1;
+  --oAur: 1;
+  --oHalo: 0;
+  --gs: 0.55;
+  --cs: 1;
+  --inScale: 1;
+  --hOp: 0;
+  --dotS: 0;
+  --bloom: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--w);
+  height: var(--h);
+  border-radius: var(--r);
+  transform: translate(-50%, -50%);
+}
+
+.mo-underglow,
+.mo-halo-green,
+.mo-surface,
+.mo-ball,
+.mo-green,
+.mo-card,
+.mo-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* a soft sand shadow under the idle pill */
+.mo-underglow {
+  inset: 30% 6% -18%;
+  background: rgba(196, 133, 53, 0.28);
+  filter: blur(22px);
+  opacity: calc(var(--oGlow) * 0.75);
+  transition: opacity 0.3s ease;
+}
+.mo-actor[data-typing] .mo-underglow {
+  opacity: var(--oGlow);
+}
+
+/* the glow around the condensed sand blob */
+.mo-halo-green {
+  inset: -42px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(196, 133, 53, 0.55), transparent);
+  opacity: var(--oHalo);
+}
+
+/* the pill itself */
+.mo-surface {
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px var(--mo-line),
+    0 14px 36px -16px rgba(18, 17, 17, 0.28);
+  opacity: var(--oPill);
+  transition: box-shadow 0.2s ease;
+}
+.mo-actor[data-flash] .mo-surface {
+  box-shadow:
+    0 0 0 1.5px var(--mo-sand),
+    0 14px 36px -16px rgba(196, 133, 53, 0.45);
+}
+
+/* slow warm light drifting inside the pill */
+.mo-aurora {
+  position: absolute;
+  inset: 0;
+  opacity: var(--oAur);
+}
+.mo-aurora i {
+  position: absolute;
+  top: -40%;
+  width: 46%;
+  height: 180%;
+  border-radius: 50%;
+  filter: blur(18px);
+  animation: mo-drift 7s ease-in-out infinite alternate;
+}
+.mo-aurora i:nth-child(1) { left: -8%; background: rgba(196, 133, 53, 0.12); }
+.mo-aurora i:nth-child(2) { left: 30%; background: rgba(240, 239, 235, 0.9); animation-duration: 9s; animation-delay: -3s; }
+.mo-aurora i:nth-child(3) { left: 58%; background: rgba(230, 176, 106, 0.1); animation-duration: 8s; animation-delay: -5s; }
+.mo-aurora i:nth-child(4) { left: 80%; background: rgba(196, 133, 53, 0.08); animation-duration: 10s; animation-delay: -2s; }
+
+/* the ball the pill collapses into before it flies */
+.mo-ball {
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--mo-sand-hi), var(--mo-sand) 55%, var(--mo-sand-lo));
+  box-shadow: 0 10px 24px -8px rgba(154, 100, 36, 0.55);
+  opacity: var(--oBall);
+}
+
+/* the answer condensing: a solid sand drop (green in the original) */
+.mo-green {
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--mo-sand-hi), var(--mo-sand) 52%, var(--mo-sand-lo));
+  box-shadow: 0 16px 40px -12px rgba(154, 100, 36, 0.6);
+  opacity: var(--oGreen);
+  transform: scale(var(--gs));
+}
+
+/* the answer card's surface */
+.mo-card {
+  background: #fff;
+  box-shadow:
+    0 0 0 1px var(--mo-line),
+    0 24px 60px -24px rgba(18, 17, 17, 0.3);
+  opacity: var(--oCard);
+  transform: scale(var(--cs));
+}
+
+/* the conic light running round the pill's edge */
+.mo-ring {
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--angle),
+    transparent 0deg,
+    transparent 200deg,
+    rgba(196, 133, 53, 0.25) 250deg,
+    var(--mo-sand) 300deg,
+    rgba(230, 176, 106, 0.4) 330deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: var(--oRing);
+  animation: mo-spin 4.5s linear infinite;
+}
+.mo-actor[data-typing] .mo-ring {
+  animation-duration: 1.8s;
+}
+
+/* the field */
+.mo-input {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 20px;
+  opacity: var(--oInput);
+  transform: scale(var(--inScale));
+  pointer-events: auto;
+}
+.mo-input[inert] {
+  pointer-events: none;
+}
+.mo-spark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--mo-sand);
+}
+.mo-field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--mo-ink);
+  /* 16px: anything smaller makes iOS zoom the page on focus */
+  font: inherit;
+  font-size: 16px;
+}
+.mo-field::placeholder {
+  color: var(--mo-mute);
+}
+.mo-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: #f0efeb;
+  color: var(--mo-mute);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.mo-send svg {
+  width: 20px;
+  height: 20px;
+}
+.mo-send[data-ready] {
+  background: var(--mo-ink);
+  color: #fff;
+}
+.mo-send[data-ready]:hover {
+  transform: translateY(-1px);
+}
+.mo-send:focus-visible,
+.mo-reset:focus-visible {
+  outline: 2px solid var(--mo-sand);
+  outline-offset: 2px;
+}
+
+.mo-actor[data-shake] {
+  animation: mo-shake 0.26s ease;
+}
+
+/* the dotted orb */
+.mo-orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220px;
+  height: 220px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* the ring that leaves the drop as it lands */
+.mo-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  border: 2px solid rgba(196, 133, 53, 0.65);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* the answer: laid out at the card's final width from the start, so its
+   height can be measured before the card unfolds to fit it */
+.mo-answer {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--cw);
+  height: 100%;
+  transform: translateX(-50%);
+  overflow: hidden;
+  outline: none;
+  pointer-events: none;
+}
+.mo-root[data-phase="answered"] .mo-answer {
+  overflow-y: auto;
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+.mo-a-inner {
+  padding: 18px 22px 20px;
+}
+.mo-a-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  opacity: var(--hOp);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mo-mute);
+}
+.mo-a-q {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mo-a-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mo-sand);
+  transform: scale(var(--dotS));
+  box-shadow: 0 0 0 calc(var(--bloom) * 5px) rgba(196, 133, 53, 0.18);
+}
+.mo-a-body {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--mo-ink);
+}
+.mo-w {
+  display: inline-block;
+  opacity: 0;
+}
+
+/* "Thinking…" under the orb */
+.mo-status {
+  --sOp: 0;
+  --sTy: 6;
+  position: absolute;
+  left: 50%;
+  top: calc(46% + 98px);
+  height: 20px;
+  opacity: var(--sOp);
+  transform: translateY(calc(var(--sTy) * 1px));
+  pointer-events: none;
+}
+.mo-lab {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mo-in {
+  animation: mo-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mo-out {
+  animation: mo-out 0.24s ease both;
+}
+.mo-lab-t {
+  background: linear-gradient(90deg, var(--mo-mute) 0%, var(--mo-mute) 35%, var(--mo-ink) 50%, var(--mo-mute) 65%, var(--mo-mute) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: mo-shimmer 2.2s linear infinite;
+}
+.mo-lab-done {
+  color: var(--mo-sand);
+}
+.mo-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.mo-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--mo-mute);
+  animation: mo-dot 1.2s ease-in-out infinite;
+}
+.mo-dots i:nth-child(2) { animation-delay: 0.15s; }
+.mo-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+/* "New question" sits where the pill was */
+.mo-reset {
+  position: absolute;
+  left: 50%;
+  bottom: 74px;
+  height: 44px;
+  padding: 0 22px;
+  translate: -50% 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mo-ink);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.mo-root[data-phase="answered"] .mo-reset {
+  visibility: visible;
+  pointer-events: auto;
+  animation: mo-fade-in 0.4s ease 0.2s both;
+}
+.mo-reset:hover {
+  background: rgba(18, 17, 17, 0.88);
+}
+
+.mo-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes mo-spin {
+  to { --angle: 360deg; }
+}
+@keyframes mo-drift {
+  from { transform: translateX(-14%); }
+  to { transform: translateX(14%); }
+}
+@keyframes mo-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -100% 0; }
+}
+@keyframes mo-dot {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+@keyframes mo-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mo-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes mo-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mo-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes mo-shake {
+  0%, 100% { transform: translate(-50%, -50%); }
+  25% { transform: translate(calc(-50% - 4px), -50%); }
+  75% { transform: translate(calc(-50% + 4px), -50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mo-ring,
+  .mo-aurora i,
+  .mo-lab-t,
+  .mo-dots i {
+    animation: none;
+  }
+  .mo-lab-t {
+    color: var(--mo-ink);
+  }
+}

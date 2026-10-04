@@ -1,0 +1,82 @@
+/* Tender mascot (mascot.tsx). `tm-` prefixed; unlayered, so keep it that way. */
+
+.tm {
+  display: block;
+  overflow: visible;
+}
+
+.tm-face {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tm[data-look="right"] .tm-face {
+  transform: translateX(4px);
+}
+
+.tm-eyes-calm {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tm-blink 4.6s ease-in-out infinite;
+  transition: opacity 0.12s ease;
+}
+
+.tm-eyes-happy,
+.tm-cheek,
+.tm-mouth-happy {
+  opacity: 0;
+}
+.tm-eyes-happy {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transform: scaleY(0.4);
+  transition: opacity 0.12s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tm-cheek {
+  transition: opacity 0.3s ease;
+}
+.tm-mouth-calm {
+  transition: opacity 0.12s ease;
+}
+.tm-mouth-happy {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  transform: scale(0.45, 0.15);
+  transition: opacity 0.12s ease, transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tm[data-mood="happy"] .tm-eyes-calm,
+.tm[data-mood="happy"] .tm-mouth-calm {
+  opacity: 0;
+}
+.tm[data-mood="happy"] .tm-eyes-happy {
+  opacity: 1;
+  transform: none;
+}
+.tm[data-mood="happy"] .tm-cheek {
+  opacity: 0.6;
+}
+.tm[data-mood="happy"] .tm-mouth-happy {
+  opacity: 1;
+  transform: none;
+}
+
+.tm-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tm-twinkle 2.8s ease-in-out infinite;
+}
+
+@keyframes tm-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.08); }
+}
+@keyframes tm-twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.25) rotate(45deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-eyes-calm,
+  .tm-star {
+    animation: none;
+  }
+}

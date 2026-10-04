@@ -7,7 +7,6 @@ import { TenderMark } from "@/components/logo";
 import { SignOutForm } from "@/components/auth/sign-out";
 import CurrencyFlag from "@/components/dash/currency-flag";
 import {
-  AskIcon,
   CloseIcon,
   MenuIcon,
   SettingsIcon,
@@ -26,6 +25,8 @@ import {
 } from "@/components/ui/animated-dropdown";
 import { GlowRail, GlowTab } from "@/components/ui/glow-menu";
 import { recordPath } from "@/lib/nav-history";
+import { useAsk } from "@/components/ask/ask-provider";
+import { Mascot } from "@/components/ask/mascot";
 
 /**
  * The dashboard header.
@@ -52,6 +53,7 @@ type Open = null | "pay" | "currency" | "avatar";
 
 export default function DashNav({ session }: { session: Session }) {
   const pathname = usePathname();
+  const ask = useAsk();
   const [open, setOpen] = useState<Open>(null);
   const [mobile, setMobile] = useState(false);
   // ⚠️ Fixed, not state. Picking another currency would relabel the header
@@ -167,18 +169,20 @@ export default function DashNav({ session }: { session: Session }) {
         </GlowRail>
 
         <div className="ml-auto flex items-center gap-1.5 xl:ml-0">
-          {/* Ask — the natural-language query box, reachable everywhere. */}
-          <Link
-            href="/app/ask"
+          {/* Ask — opens the assistant over this screen; no navigation. */}
+          <button
+            type="button"
+            onClick={ask.open}
             aria-label="Ask about your payments"
+            aria-haspopup="dialog"
             className={`hidden h-9 w-9 items-center justify-center rounded-full border transition-colors sm:flex ${
-              isActive(pathname, "/app/ask")
-                ? "border-ink bg-ink text-paper"
-                : "border-line text-ink hover:bg-stone"
+              isActive(pathname, "/app/ask") || ask.isOpen
+                ? "border-sand bg-sand/10"
+                : "border-line hover:bg-stone"
             }`}
           >
-            <AskIcon className="h-[1.125rem] w-[1.125rem]" />
-          </Link>
+            <Mascot className="h-[1.375rem] w-[1.375rem]" />
+          </button>
 
           {/* Display currency */}
           <div className="relative hidden sm:block">
@@ -274,6 +278,10 @@ export default function DashNav({ session }: { session: Session }) {
           pathname={pathname}
           session={session}
           onClose={() => setMobile(false)}
+          onAsk={() => {
+            setMobile(false);
+            ask.open();
+          }}
         />
       )}
     </header>
@@ -395,10 +403,12 @@ function MobileSheet({
   pathname,
   session,
   onClose,
+  onAsk,
 }: {
   pathname: string;
   session: Session;
   onClose: () => void;
+  onAsk: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 xl:hidden">
@@ -464,17 +474,19 @@ function MobileSheet({
               );
             })}
             <li>
-              <Link
-                href="/app/ask"
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] transition-colors ${
+              <button
+                type="button"
+                onClick={onAsk}
+                aria-haspopup="dialog"
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[0.9375rem] transition-colors ${
                   isActive(pathname, "/app/ask")
                     ? "bg-ink text-paper"
                     : "text-ink hover:bg-stone"
                 }`}
               >
-                <AskIcon className="h-[1.125rem] w-[1.125rem]" />
+                <Mascot className="h-[1.125rem] w-[1.125rem]" />
                 Ask
-              </Link>
+              </button>
             </li>
           </ul>
         </nav>

@@ -1,0 +1,318 @@
+/* Ask overlay (ask-overlay.tsx). `ask-` prefixed and unlayered: never reuse
+   a Tailwind utility's name here, or this file will silently beat it. */
+
+.ask-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  outline: none;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  animation: ask-in 0.22s ease both;
+}
+.ask-root[data-closing] {
+  pointer-events: none;
+  animation: ask-out 0.2s ease both;
+}
+
+/* warm light top and bottom, and a faint dot grid fading out from the centre */
+.ask-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 42% at 50% 0%, rgba(196, 133, 53, 0.1), transparent 70%),
+    radial-gradient(55% 38% at 50% 100%, rgba(196, 133, 53, 0.09), transparent 72%);
+}
+.ask-wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(18, 17, 17, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 44%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 44%, #000 20%, transparent 75%);
+}
+
+/* the flash when the mascot smiles */
+.ask-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 44%, rgba(230, 176, 106, 0.38), rgba(196, 133, 53, 0.1) 28%, transparent 52%);
+}
+
+.ask-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 16px;
+}
+@media (min-width: 768px) {
+  .ask-top {
+    padding: 0 24px;
+  }
+}
+.ask-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.ask-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.ask-close:hover {
+  background: var(--color-stone);
+}
+.ask-close:focus-visible,
+.ask-chip:focus-visible {
+  outline: 2px solid var(--color-sand);
+  outline-offset: 2px;
+}
+
+/* greeting block; fades away while a question is being answered */
+.ask-main {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  bottom: 200px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+@media (min-width: 640px) {
+  .ask-main {
+    bottom: 236px;
+  }
+}
+.ask-root[data-busy] .ask-main {
+  opacity: 0;
+}
+
+.ask-slot {
+  position: relative;
+  flex: none;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 20px;
+}
+.ask-place {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  will-change: transform;
+}
+.ask-travel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.ask-shadow {
+  position: absolute;
+  left: 15%;
+  bottom: -9px;
+  width: 70%;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(18, 17, 17, 0.4), transparent);
+  opacity: 0.5;
+}
+.ask-hop {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+}
+.ask-pop {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 60%;
+}
+.ask-ring {
+  position: absolute;
+  inset: 4px;
+  border: 3px solid var(--color-sand);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+.ask-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  color: var(--color-sand);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+}
+.ask-spark[data-ink] {
+  width: 12px;
+  height: 12px;
+  color: var(--color-ink);
+}
+.ask-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.ask-fade {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ask-root[data-stage="ready"] .ask-fade {
+  opacity: 1;
+  transform: none;
+}
+.ask-hello {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 1.5rem + 1.8vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.ask-hello-spark {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-left: 0.22em;
+  vertical-align: 0.42em;
+  fill: var(--color-sand);
+}
+.ask-sub {
+  margin-top: 10px;
+  font-size: 1rem;
+  color: var(--color-mute);
+}
+
+/* suggestions, just above the pill (whose centre is 96px off the bottom) */
+.ask-chips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 142px;
+  z-index: 20;
+  transition: opacity 0.25s ease;
+}
+.ask-root[data-busy] .ask-chips {
+  opacity: 0;
+  pointer-events: none;
+}
+.ask-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+@media (max-width: 639px) {
+  /* one swipeable row on a phone rather than a wall of chips */
+  .ask-chips-row {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ask-chips-row::-webkit-scrollbar {
+    display: none;
+  }
+}
+.ask-chip {
+  flex: none;
+  padding: 8px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: ask-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.ask-chip:hover {
+  border-color: rgba(196, 133, 53, 0.55);
+  background: rgba(196, 133, 53, 0.06);
+}
+
+.ask-orb {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  animation: ask-in 0.5s ease 0.12s both;
+}
+
+.ask-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 0 16px max(14px, env(safe-area-inset-bottom));
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color-mute);
+  animation: ask-in 0.5s ease 0.3s both;
+}
+
+@keyframes ask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ask-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes ask-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-chip,
+  .ask-orb,
+  .ask-note {
+    animation-duration: 0.01s;
+  }
+  .ask-fade {
+    transform: none;
+  }
+}

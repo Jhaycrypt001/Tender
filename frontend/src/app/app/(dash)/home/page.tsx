@@ -4,10 +4,10 @@ import { PageShell, SectionHeader } from "@/components/dash/shell";
 import BalanceCard from "@/components/dash/balance-card";
 import { Card, CardCanvas } from "@/components/ui/animated-glow-card";
 import { Cta } from "@/components/dash/cta";
+import { AskCta } from "@/components/ask/ask-cta";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import {
   ActivityIcon,
-  AskIcon,
   CheckoutIcon,
   PayIcon,
   PlusIcon,
@@ -136,10 +136,7 @@ export default async function HomePage() {
           <RampsIcon className="h-4 w-4" />
           Cash out
         </Cta>
-        <Cta href="/app/ask" tone="outline">
-          <AskIcon className="h-4 w-4" />
-          Ask
-        </Cta>
+        <AskCta />
       </nav>
 
       <div className="mt-10">
