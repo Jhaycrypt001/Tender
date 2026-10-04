@@ -67,9 +67,9 @@ Send **one** email, to `merchant.email`, when `created === true`.
 | | |
 |---|---|
 | Subject | `You're in. Set where your money lands.` |
-| From | `Tender <hello@tender-pay.com>` (see DNS below) |
+| From | `Tender <hello@tenderr.xyz>` (see DNS below) |
 | Reply-to | a real inbox you read |
-| Primary CTA | `https://tender-pay.vercel.app/app/settings` — set settlement address |
+| Primary CTA | `https://tenderr.xyz/app/settings` — set settlement address |
 | Must contain | a plain-text alternative + an unsubscribe-ish footer line |
 
 ### The card
@@ -121,8 +121,8 @@ In `src/config.ts`, alongside the other secrets — **optional**:
 
 ```ts
 RESEND_API_KEY: z.string().min(1).optional(),
-EMAIL_FROM: z.string().default("Tender <hello@tender-pay.com>"),
-APP_URL: z.url().default("https://tender-pay.vercel.app"),
+EMAIL_FROM: z.string().default("Tender <hello@tenderr.xyz>"),
+APP_URL: z.url().default("https://tenderr.xyz"),
 ```
 
 No key → no email, and sign-in still works normally. Same pattern as the

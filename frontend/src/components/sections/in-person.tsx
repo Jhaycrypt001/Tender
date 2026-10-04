@@ -10,7 +10,7 @@ import Button from "../button";
  * it encodes the live site, so a visitor who scans it out of curiosity lands
  * somewhere true rather than on a decorative pattern that goes nowhere.
  */
-const SITE = process.env.APP_URL || "https://tender-pay.vercel.app";
+const SITE = process.env.APP_URL || "https://tenderr.xyz";
 
 export default function InPerson() {
   return (
