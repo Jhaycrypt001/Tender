@@ -19,7 +19,7 @@ export function PageShell({
     // Width and centring come from the railed frame in (dash)/layout.tsx, so
     // the rails and the content column can never disagree about where the
     // edge is.
-    <div className={`w-full px-4 py-7 md:px-8 md:py-10 ${className}`}>
+    <div className={`w-full px-4 py-6 md:px-6 md:py-7 xl:px-8 xl:py-10 ${className}`}>
       {children}
     </div>
   );
@@ -43,7 +43,7 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-7 flex flex-col gap-5 sm:mb-9 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between xl:mb-9 xl:gap-5">
       <div className="min-w-0">
         {back && (
           <div>
@@ -53,7 +53,9 @@ export function PageHeader({
         {eyebrow && <p className="eyebrow mb-3.5 text-mute">{eyebrow}</p>}
         {/* A statement, not a label: each screen opens by saying what it is
             for in one short line, then the dim sub says how. */}
-        <h1 className="font-display text-[clamp(2rem,1.45rem+2.3vw,2.875rem)] leading-[1.04] tracking-[-0.025em]">
+        {/* Sized against a ~853px viewport (1280×720 at 150% OS scaling), where
+            the previous ceiling read as oversized next to the body text. */}
+        <h1 className="font-display text-[clamp(1.75rem,1.3rem+1.8vw,2.375rem)] leading-[1.06] tracking-[-0.025em]">
           {title}
         </h1>
         {description && (

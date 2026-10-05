@@ -124,24 +124,29 @@ export default function DashNav({ session }: { session: Session }) {
           aria-label="Tender dashboard home"
         >
           <TenderMark className="h-[1.375rem] w-[1.375rem] text-ink" />
-          <span className="hidden font-display text-[1.25rem] leading-none sm:block">
+          {/* Wordmark and chip stand down between md and xl: that is exactly
+              the range where the tab rail needs the width, and the mark alone
+              still identifies the page. Both return once there is room. */}
+          <span className="hidden font-display text-[1.25rem] leading-none sm:block md:hidden xl:block">
             tender
           </span>
-          <span className="ml-0.5 rounded-full border border-line px-1.5 py-[0.1875rem] font-mono text-[0.5625rem] uppercase leading-none tracking-[0.12em] text-mute">
+          <span className="ml-0.5 hidden rounded-full border border-line px-1.5 py-[0.1875rem] font-mono text-[0.5625rem] uppercase leading-none tracking-[0.12em] text-mute sm:inline-block md:hidden xl:inline-block">
             Beta
           </span>
         </Link>
 
-        {/* Tab rail. Hidden below xl: seven tabs plus the right-hand controls
-            need real width, and collapsing earlier avoids a cramped middle
-            state where labels truncate. */}
-        <GlowRail label="Dashboard" className="mx-auto hidden xl:block">
+        {/* Tab rail. Shown from md, where the tabs run at their tighter size
+            and the wordmark steps aside, which is what lets seven of them plus
+            the right-hand controls fit a ~853px viewport — a 1280×720 screen
+            at 150% OS scaling. Below md the sheet takes over. */}
+        <GlowRail label="Dashboard" className="mx-auto hidden md:block">
             {NAV.map((item) =>
               item.children ? (
                 <li key={item.href} className="relative">
                   <GlowTab
                     icon={item.icon}
                     label={item.label}
+                    short={item.short}
                     active={isActive(pathname, item.href) || open === "pay"}
                     onClick={() => toggle("pay")}
                     expanded={open === "pay"}
@@ -160,6 +165,7 @@ export default function DashNav({ session }: { session: Session }) {
                   <GlowTab
                     icon={item.icon}
                     label={item.label}
+                    short={item.short}
                     href={item.href}
                     active={isActive(pathname, item.href)}
                   />
@@ -168,7 +174,7 @@ export default function DashNav({ session }: { session: Session }) {
             )}
         </GlowRail>
 
-        <div className="ml-auto flex items-center gap-1.5 xl:ml-0">
+        <div className="ml-auto flex items-center gap-1.5 md:ml-0">
           {/* Ask — opens the assistant over this screen; no navigation. */}
           <button
             type="button"
@@ -192,10 +198,17 @@ export default function DashNav({ session }: { session: Session }) {
               aria-expanded={open === "currency"}
               aria-haspopup="listbox"
               aria-label={`Display currency: ${currency.label}`}
-              className="flex h-9 items-center gap-1.5 rounded-full border border-line pl-1.5 pr-3 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone"
+              className="flex h-9 items-center gap-1.5 rounded-full border border-line pl-1 pr-2 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ink transition-colors hover:bg-stone xl:pl-1.5 xl:pr-3"
             >
-              <CurrencyFlag code={currency.code} className="h-6 w-6" />
-              {currency.code} · {currency.symbol}
+              <CurrencyFlag code={currency.code} className="h-5 w-5 xl:h-6 xl:w-6" />
+              {currency.code}
+              {/* The symbol is redundant beside the code, so it is the first
+                  thing to go once the rail is sharing this row. It comes back
+                  at xl, where there is width for both. */}
+              <span className="hidden xl:inline">
+                {" "}
+                · {currency.symbol}
+              </span>
               <DropdownChevron
                 open={open === "currency"}
                 className="h-3.5 w-3.5 text-mute"
@@ -266,7 +279,7 @@ export default function DashNav({ session }: { session: Session }) {
             onClick={() => setMobile(true)}
             aria-label="Open menu"
             aria-expanded={mobile}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink transition-colors hover:bg-stone xl:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink transition-colors hover:bg-stone md:hidden"
           >
             <MenuIcon className="h-[1.125rem] w-[1.125rem]" />
           </button>
@@ -411,7 +424,7 @@ function MobileSheet({
   onAsk: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 xl:hidden">
+    <div className="fixed inset-0 z-50 md:hidden">
       <button
         type="button"
         aria-label="Close menu"

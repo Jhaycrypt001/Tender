@@ -112,6 +112,13 @@ export function GlowRail({
 type TabProps = {
   icon: (props: { className?: string }) => ReactNode;
   label: string;
+  /**
+   * Shorter wording for below xl, where the rail is tight. Both forms are
+   * rendered and swapped by breakpoint, so the tab also carries an explicit
+   * `aria-label` of the full wording — otherwise the announced name would
+   * change with the viewport.
+   */
+  short?: string;
   /** The current screen: a solid ink block with a standing glow. */
   active: boolean;
   /** Drawn on both faces after the label — the Pay tab's chevron. */
@@ -122,12 +129,28 @@ type TabProps = {
 );
 
 export function GlowTab(props: TabProps) {
-  const { icon: Icon, label, active, trailing } = props;
+  const { icon: Icon, label, short, active, trailing } = props;
 
+  // Two sizes. The tighter one carries the mid widths — a 1280×720 screen at
+  // 150% OS scaling reports ~853 CSS px, where seven tabs at the wide sizing
+  // would not fit beside the account controls. `xl:` restores the roomier
+  // spacing once there is width for it.
   const face =
-    "flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 font-mono text-[0.6875rem] uppercase leading-none tracking-[0.12em]";
+    "flex items-center gap-1 whitespace-nowrap rounded-xl px-2 py-[0.4375rem] font-mono text-[0.625rem] uppercase leading-none tracking-[0.02em] xl:gap-2 xl:px-3.5 xl:py-2 xl:text-[0.6875rem] xl:tracking-[0.12em]";
   const text = active ? "text-paper" : "text-mute";
   const backText = active ? "text-paper" : "text-ink";
+
+  // Both wordings, swapped by breakpoint. The interactive element carries an
+  // explicit `aria-label` with the full wording, so what is announced does not
+  // depend on which span the viewport happens to be showing.
+  const wording = short ? (
+    <>
+      <span className="xl:hidden">{short}</span>
+      <span className="hidden xl:inline">{label}</span>
+    </>
+  ) : (
+    label
+  );
 
   const faces = (
     <>
@@ -137,8 +160,8 @@ export function GlowTab(props: TabProps) {
         className={`relative z-10 ${face} ${text}`}
         style={{ transformStyle: "preserve-3d", transformOrigin: "center bottom" }}
       >
-        <Icon className="h-4 w-4" />
-        {label}
+        <Icon className="h-3.5 w-3.5 xl:h-4 xl:w-4" />
+        {wording}
         {trailing}
       </motion.span>
       <motion.span
@@ -152,8 +175,8 @@ export function GlowTab(props: TabProps) {
           rotateX: 90,
         }}
       >
-        <Icon className="h-4 w-4 text-sand" />
-        {label}
+        <Icon className="h-3.5 w-3.5 text-sand xl:h-4 xl:w-4" />
+        {wording}
         {trailing}
       </motion.span>
     </>
@@ -189,6 +212,7 @@ export function GlowTab(props: TabProps) {
         <Link
           href={props.href}
           aria-current={active ? "page" : undefined}
+          aria-label={short ? label : undefined}
           className={hit}
         >
           {faces}

@@ -32,6 +32,12 @@ export type NavItem = {
   label: string;
   href: string;
   icon: (props: { className?: string }) => React.ReactElement;
+  /**
+   * Shorter wording for the tab rail between md and xl, where seven tabs are
+   * sharing the header with the account controls. Only set it where the short
+   * form still names the same thing; `label` is what everything else reads.
+   */
+  short?: string;
   /** Renders as a dropdown on desktop and a nested group on mobile. */
   children?: NavChild[];
 };
@@ -81,6 +87,7 @@ export const NAV: NavItem[] = [
   },
   {
     label: "Payment links",
+    short: "Links",
     href: "/app/links",
     icon: LinkIcon,
   },
