@@ -22,7 +22,7 @@ export default function SettleLive() {
 
           <div className="relative grid gap-12 md:grid-cols-[1fr_1.05fr] md:items-center md:gap-16">
             <div>
-              {/* Talise's INVEST · LIVE pair — two static labels, the first
+              {/* Two static labels, the first
                   active. Not tabs: there is nothing to switch between. */}
               <div className="flex items-center gap-2">
                 {settleLive.tabs.map((t, i) => (

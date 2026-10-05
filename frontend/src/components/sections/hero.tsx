@@ -46,9 +46,9 @@ export default function Hero() {
       </div>
 
       {/* Three interlocking phones: got-paid · review · settled.
-          Talise lets the collage bleed rather than sitting it in a card, so
-          there is no radius, no tile and no shell padding here — the render
-          carries its own backdrop and simply runs to the viewport edges.
+          The collage bleeds rather than sitting in a card, so there is no
+          radius, no tile and no shell padding here — the render carries its
+          own backdrop and simply runs to the viewport edges.
           The gradient below feathers its bottom into the page instead of
           ending on a hard horizontal seam. */}
       <div className="relative mt-12 md:mt-14">

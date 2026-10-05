@@ -140,8 +140,7 @@ export const showcase = {
   caption: "Merchant dashboard · live balance",
 } as const;
 
-/** Talise's "Real money. Real speed. Real control." band — four numbers with
- *  mono labels under a crosshaired rule. */
+/** The stats band — four numbers with mono labels under a crosshaired rule. */
 export const stats = {
   eyebrow: "Measurable difference",
   heading: "Real money. Real speed.\nReal control.",
@@ -154,7 +153,7 @@ export const stats = {
   ],
 } as const;
 
-/** Talise's "Everything money, in one app" — three white cards on stone. */
+/** Three white cards on stone. */
 export const capabilities = {
   eyebrow: "What you can do",
   heading: "Everything a checkout needs, in one integration",
@@ -249,7 +248,7 @@ export const card = {
   },
 } as const;
 
-/** Item 6 — Talise's "INVEST · LIVE" dark band, rebuilt as settle · spend. */
+/** Item 6 — the dark settle · live band. */
 export const settleLive = {
   tabs: ["Settle", "Live"],
   eyebrow: "Settle · Live",

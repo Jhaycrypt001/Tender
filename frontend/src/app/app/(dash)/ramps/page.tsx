@@ -7,7 +7,7 @@ import { Money } from "@/components/dash/money";
 import { getCorridors } from "@/lib/api/ramps";
 import type { RampCorridor } from "@/lib/api/types";
 
-export const metadata = { title: "Ramps · Tender" };
+export const metadata = { title: "Cash out · Tender" };
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +61,7 @@ export default async function RampsPage() {
     <PageShell>
       <PageHeader
         back="/app/home"
-        eyebrow="Ramps"
+        eyebrow="Cash out"
         title="From Monad to your bank."
         description="Move settled revenue out to a bank account."
       />

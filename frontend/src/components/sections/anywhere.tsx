@@ -5,8 +5,8 @@ import MediaSlot from "../media-slot";
 export default function Anywhere() {
   return (
     <section className="bg-ink text-paper">
-      {/* The ochre bloom sits behind the phone. Talise uses one accent colour
-          per dark section and nothing else — ours is sand, never green. */}
+      {/* The ochre bloom sits behind the phone. One accent colour
+          per dark section and nothing else: sand, never green. */}
       {/* Bottom padding is trimmed because Card follows immediately on the same
           ink ground: a full section-y here plus Card's own panel inset reads as
           a dead gap rather than rhythm. The three dark sections are one block. */}

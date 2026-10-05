@@ -6,7 +6,7 @@ import { EarnIcon } from "@/components/dash/icons";
 import { Money, Timestamp } from "@/components/dash/money";
 import { getPositions } from "@/lib/api/earn";
 
-export const metadata = { title: "Earn · Tender" };
+export const metadata = { title: "Treasury · Tender" };
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export default async function EarnPage() {
     <PageShell>
       <PageHeader
         back="/app/home"
-        eyebrow="Earn"
+        eyebrow="Treasury"
         title="Make idle revenue work."
         description="Settled revenue put to work on Monad, instead of sitting still."
       />

@@ -15,8 +15,8 @@ import type { ReactNode } from "react";
  * Adapted from the Glow Menu component: each tab is a two-faced label that
  * tips over on hover (the front face rotates away on X while the back rotates
  * up into place), a soft radial glow blooms behind the tab, and the whole
- * rail lights faintly while the pointer is on it. The shape is Talise's — an
- * icon beside a mono label, with the current tab a solid filled block.
+ * rail lights faintly while the pointer is on it. The shape is an icon beside
+ * a mono label, with the current tab a solid filled block.
  *
  * What changed from the original, and why:
  *   - Tabs are real links (and the Pay tab a real menu button), not buttons

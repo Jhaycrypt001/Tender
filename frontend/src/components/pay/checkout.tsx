@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Money, UsdMinimum } from "@/components/dash/money";
+import { ChainSelect } from "@/components/pay/chain-select";
 import { QRCode } from "@/components/pay/qr";
 import { submitTx } from "@/lib/api/public";
 import type { InvoiceStatus, PublicInvoice } from "@/lib/api/types";
@@ -279,43 +280,26 @@ export default function Checkout({
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* Chain picker. Deliberately first in the DOM: choosing what you
             already hold is the first decision, and on mobile it must come
-            before the address it changes. */}
+            before the address it changes. Collapsed to a dropdown so the
+            address and QR stay on screen beside it however many chains the
+            invoice offers. */}
         <section className="rounded-2xl border border-line bg-paper p-5">
           <h2 className="eyebrow mb-1.5 text-mute">Pay with</h2>
           <p className="mb-4 text-[0.875rem] leading-relaxed text-mute">
             Send whatever you already hold. You do not need to bridge, swap, or
             hold gas on the destination chain.
           </p>
-          <ul className="flex flex-col gap-1.5">
-            {invoice.addresses.map((a) => {
-              const active = a.chain === selected;
-              return (
-                <li key={a.chain}>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(a.chain)}
-                    aria-pressed={active}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-[0.9375rem] transition-colors ${
-                      active
-                        ? "border-ink bg-ink text-paper"
-                        : "border-line hover:border-mute/50"
-                    }`}
-                  >
-                    <span>{chainLabel(a.chain)}</span>
-                    {a.minimum && (
-                      <span
-                        className={`font-mono text-[0.6875rem] tracking-[0.08em] ${
-                          active ? "text-paper/60" : "text-mute"
-                        }`}
-                      >
-                        MIN <UsdMinimum amount={a.minimum} />
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <ChainSelect
+            id="pay-chain"
+            options={invoice.addresses}
+            value={selected}
+            onChange={setSelected}
+            disabled={!open}
+          />
+          <p className="mt-3 text-[0.8125rem] leading-relaxed text-mute">
+            Each chain has its own address. Pick yours and the address below
+            changes to match.
+          </p>
         </section>
 
         {/* The payment panel. Ink, because it is the one thing on this page

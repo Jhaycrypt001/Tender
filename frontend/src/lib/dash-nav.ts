@@ -15,13 +15,11 @@ import {
  * Desktop nav, mobile sheet and the active-state logic all read from here, so
  * a tab cannot appear in one and be missing from another.
  *
- * On what these tabs mean: the seven-tab shape is the familiar one from
- * consumer wallet apps, but Tender is a merchant checkout, so each label is
- * pointed at the merchant's side of the transaction rather than a consumer's.
- * "Earn" is not a savings account, it is settled revenue put to work; "Pay" is
- * money going back out as refunds and payouts, not sending a friend a tenner.
- * Consumer features that have no merchant meaning — round-up savings, personal
- * goals — are deliberately absent rather than reskinned.
+ * Every label names the merchant's side of the transaction, in the plainest
+ * word available. "Treasury" is settled revenue put to work, not a savings
+ * account. "Pay" is money going back out as refunds and payouts, not sending
+ * someone a tenner. "Cash out" says what it does, where a word like "ramps"
+ * would assume the merchant already speaks crypto.
  */
 
 export type NavChild = {
@@ -67,7 +65,7 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    label: "Earn",
+    label: "Treasury",
     href: "/app/earn",
     icon: EarnIcon,
   },
@@ -82,12 +80,12 @@ export const NAV: NavItem[] = [
     icon: ActivityIcon,
   },
   {
-    label: "Links",
+    label: "Payment links",
     href: "/app/links",
     icon: LinkIcon,
   },
   {
-    label: "Ramps",
+    label: "Cash out",
     href: "/app/ramps",
     icon: RampsIcon,
   },

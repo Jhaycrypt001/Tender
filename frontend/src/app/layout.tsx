@@ -31,8 +31,8 @@ const tenderSans = localFont({
   weight: "400 700",
 });
 
-/** Talise sets its body copy and small labels in mono. Used for section
- *  eyebrows, stat labels and the dark sections' prose. */
+/** The mono face. Used for section eyebrows, stat labels and the dark
+ *  sections' prose. */
 const tenderMono = localFont({
   src: "./fonts/JetBrainsMono-400.woff2",
   variable: "--font-mono-ui",

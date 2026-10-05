@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { AmountField, Field, Select } from "@/components/dash/field";
 import { Card, CardHeader } from "@/components/dash/card";
 import { Submit } from "@/components/dash/action";
-import { UsdMinimum } from "@/components/dash/money";
+import { ChainMultiSelect } from "@/components/dash/chain-multiselect";
 import {
   createInvoiceAction,
   type CreateState,
@@ -142,35 +142,22 @@ export function CreateInvoiceForm({
             hint="One deposit address is minted per chain you tick."
           />
 
-          {/* Checkboxes, not a multi-select: on a phone a native multi-select
-              is a scrolling list where nothing looks selected, and this is the
-              field that decides whether a buyer can pay at all. */}
-          <fieldset>
-            <legend className="sr-only">Chains this invoice accepts</legend>
-            <ul className="flex flex-col gap-1.5">
-              {defaults.map((c) => (
-                <ChainBox key={c.id} chain={c} checked />
-              ))}
-            </ul>
-          </fieldset>
-
-          {extras.length > 0 && (
-            <fieldset className="mt-5 border-t border-line pt-4">
-              <legend className="eyebrow float-left mb-2 w-full text-mute">Also available</legend>
-              <p className="clear-both mb-3 text-[0.8125rem] leading-relaxed text-mute">
-                Each of these gets its own deposit address, so every one you
-                tick adds about a second to creating the invoice.
-              </p>
-              <ul className="flex flex-col gap-1.5">
-                {extras.map((c) => (
-                  <ChainBox key={c.id} chain={c} checked={false} />
-                ))}
-              </ul>
-            </fieldset>
-          )}
+          {/* The common chains come first in the list, so the ones most buyers
+              hold are the ones reached without scrolling. */}
+          <ChainMultiSelect
+            id="chains"
+            options={[...defaults, ...extras]}
+            defaultSelected={DEFAULT_CHAIN_IDS}
+            invalid={Boolean(state.fields?.chains)}
+            describedBy={state.fields?.chains ? "chains-error" : undefined}
+          />
+          <p className="mt-3 text-[0.8125rem] leading-relaxed text-mute">
+            Each chain you tick gets its own deposit address, so every extra one
+            adds about a second to creating the invoice.
+          </p>
 
           {state.fields?.chains && (
-            <p role="alert" className="mt-3 text-[0.8125rem] text-ink">
+            <p id="chains-error" role="alert" className="mt-3 text-[0.8125rem] text-ink">
               <span aria-hidden="true" className="mr-1.5 text-sand">
                 &#9632;
               </span>
@@ -207,32 +194,5 @@ export function CreateInvoiceForm({
         </Card>
       </div>
     </form>
-  );
-}
-
-/** One chain checkbox. Both groups render through this, so they cannot drift apart. */
-function ChainBox({ chain, checked }: { chain: ChainOption; checked: boolean }) {
-  return (
-    <li>
-      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-line px-3.5 py-3 text-[0.9375rem] transition-colors hover:border-mute/50 has-[:checked]:border-ink has-[:checked]:bg-ink has-[:checked]:text-paper">
-        <span className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            name="chains"
-            value={chain.id}
-            defaultChecked={checked}
-            className="size-4 accent-ink"
-          />
-          {chain.name}
-        </span>
-        {/* Only rendered when the API supplied it. A minimum is a number a
-            merchant may quote to a buyer, so it is never invented locally. */}
-        {chain.minimum && (
-          <span className="font-mono text-[0.6875rem] tracking-[0.08em] text-mute">
-            MIN <UsdMinimum amount={chain.minimum} />
-          </span>
-        )}
-      </label>
-    </li>
   );
 }

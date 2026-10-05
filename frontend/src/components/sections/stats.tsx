@@ -4,7 +4,7 @@ export default function Stats() {
   return (
     <section className="section-y section-y-flush-t">
       <div className="shell">
-        {/* The crosshairs sit on the corners of the block itself, Talise-style,
+        {/* The crosshairs sit on the corners of the block itself,
             rather than a border being drawn around it. */}
         <div className="crosshairs relative border-y border-line py-14 md:py-20">
           <div className="grid gap-10 md:grid-cols-[1fr_1fr] md:items-end md:gap-16">

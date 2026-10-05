@@ -9,7 +9,7 @@ import { APP_URL } from "@/lib/auth";
 import { LinkForm } from "./form";
 import { LinkTools } from "./tools";
 
-export const metadata = { title: "Links · Tender" };
+export const metadata = { title: "Payment links · Tender" };
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export default async function LinksPage() {
     <PageShell>
       <PageHeader
         back="/app/home"
-        eyebrow="Links"
+        eyebrow="Payment links"
         title="One link, every buyer."
         description="One link you can reuse. Every buyer who opens it gets their own invoice."
       />

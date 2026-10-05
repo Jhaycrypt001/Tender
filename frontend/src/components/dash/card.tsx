@@ -37,7 +37,7 @@ export function Card({
   tone = "paper",
   pad = "md",
   className = "",
-  /** Draws the Talise registration marks on the corners. Used sparingly —
+  /** Draws registration marks on the corners. Used sparingly —
    *  on a block that is the point of the screen, not on every card. */
   marks = false,
 }: {
