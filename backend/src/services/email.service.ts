@@ -49,7 +49,10 @@ export function renderWelcome(m: WelcomeInput): Message {
   <tr><td align="center">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #e6e4e0;border-radius:16px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;">
       <tr><td style="padding:32px 32px 0;">
-        <div style="font-size:20px;letter-spacing:-0.02em;color:#121111;">tender</div>
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:middle;"><img src="${escapeHtml(m.appUrl)}/apple-icon.png" width="36" height="36" alt="Tender" style="display:block;border:0;border-radius:9px;"></td>
+          <td style="vertical-align:middle;padding-left:10px;font-size:20px;letter-spacing:-0.02em;color:#121111;">tender</td>
+        </tr></table>
       </td></tr>
       <tr><td style="padding:24px 32px 0;">
         <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#c48535;">Your account is ready</div>

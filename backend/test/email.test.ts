@@ -21,6 +21,12 @@ beforeEach(async () => {
 const merchantRow = { id: "ck123", name: "Ada", settlementAddress: null, settlementVerified: false };
 
 describe("renderWelcome", () => {
+  it("shows the Tender mark, served from the app's own origin", () => {
+    const m = renderWelcome({ ...merchantRow, appUrl: cfg.appUrl });
+    expect(m.html).toContain(`<img src="${cfg.appUrl}/apple-icon.png"`);
+    expect(m.html).toContain('alt="Tender"');
+  });
+
   it("escapes a hostile name in the HTML and leaves it readable in the text", () => {
     const m = renderWelcome({ ...merchantRow, name: `<script>alert(1)</script> & "co"`, appUrl: cfg.appUrl });
     expect(m.html).not.toContain("<script>");
