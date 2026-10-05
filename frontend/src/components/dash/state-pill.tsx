@@ -1,4 +1,4 @@
-import type { InvoiceStatus, PaymentStatus } from "@/lib/api/types";
+import type { InvoiceStatus, PaymentStatus, TransferStatus } from "@/lib/api/types";
 
 /**
  * The status badge.
@@ -72,6 +72,22 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   REFUNDED: "Refunded",
 };
 
+const TRANSFER_VARIANT: Record<TransferStatus, Variant> = {
+  AWAITING_SIGNATURE: "pending",
+  SUBMITTED: "pending",
+  CONFIRMED: "good",
+  FAILED: "attention",
+  EXPIRED: "quiet",
+};
+
+const TRANSFER_LABEL: Record<TransferStatus, string> = {
+  AWAITING_SIGNATURE: "Waiting for you",
+  SUBMITTED: "Sending",
+  CONFIRMED: "Sent",
+  FAILED: "Failed",
+  EXPIRED: "Not sent",
+};
+
 function Pill({ variant, children }: { variant: Variant; children: string }) {
   return (
     <span
@@ -90,6 +106,10 @@ function Pill({ variant, children }: { variant: Variant; children: string }) {
 
 export function InvoiceStatePill({ status }: { status: InvoiceStatus }) {
   return <Pill variant={INVOICE_VARIANT[status]}>{INVOICE_LABEL[status]}</Pill>;
+}
+
+export function TransferStatePill({ status }: { status: TransferStatus }) {
+  return <Pill variant={TRANSFER_VARIANT[status]}>{TRANSFER_LABEL[status]}</Pill>;
 }
 
 export function PaymentStatePill({ status }: { status: PaymentStatus }) {

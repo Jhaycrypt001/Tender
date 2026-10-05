@@ -24,19 +24,6 @@ export function getPayment(id: string): Promise<ApiResult<PaymentDetail>> {
   return request<PaymentDetail>(`/v1/payments/${encodeURIComponent(id)}`);
 }
 
-/**
- * Refund a settled payment back to its sender.
- *
- * This is the merchant choosing to give money back. It is NOT the automatic
- * refund of an under-minimum deposit, which the network performs on its own
- * with no call from us.
- */
-export function refundPayment(id: string): Promise<ApiResult<PaymentDetail>> {
-  return request<PaymentDetail>(`/v1/payments/${encodeURIComponent(id)}/refund`, {
-    method: "POST",
-  });
-}
-
 /* --------------------------------------------------------------------------
    Recovery — the two actions behind NEEDS_RECOVERY.
 

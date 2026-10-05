@@ -4,6 +4,7 @@ import type { AuroraClient } from "../aurora/client.js";
 import type { Db } from "../db/client.js";
 import { getPublicInvoice } from "../services/invoice.service.js";
 import { getPublicLink, openLink } from "../services/link.service.js";
+import type { FxService } from "../services/fx.service.js";
 import { describeEta, type ChainCatalogueReader } from "../services/chains.service.js";
 import { effectiveStatus, toPublicInvoice } from "../services/serialize.js";
 import type { InvoiceStream } from "../services/stream.js";
@@ -22,6 +23,7 @@ export type PublicDeps = {
   ttlMinutes: number;
   stream: InvoiceStream;
   catalogue: ChainCatalogueReader;
+  fx: FxService;
 };
 
 /**
@@ -43,7 +45,18 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
    * Supported chains with their measured minimum (USD) and settlement time.
    * 503 until the worker has measured them: a minimum is never guessed.
    */
-  app.get("/public/chains", async (_req, reply) => {
+  /**
+   * Display-currency rates (USD to each currency). Presentation only: see fx.service.ts.
+   * 503 when there are none, because a rate is never guessed.
+   */
+  app.get("/public/fx", async (_req, reply) => {
+    const snapshot = await deps.fx.get();
+    if (!snapshot) return reply.code(503).send({ error: "not_ready", message: "Exchange rates are not available right now. Try again shortly." });
+    reply.header("cache-control", "public, max-age=300");
+    return { base: "USD", as_of: snapshot.asOf, rates: snapshot.rates };
+  });
+
+    app.get("/public/chains", async (_req, reply) => {
     const catalogue = await deps.catalogue.get();
     if (!catalogue || catalogue.chains.length === 0) {
       return reply.code(503).send({ error: "not_ready", message: "Chain minimums have not been measured yet. Try again shortly." });

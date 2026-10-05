@@ -4,6 +4,7 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { getPayment } from "@/lib/api/payments";
 import { chainLabel } from "@/lib/chains";
@@ -97,11 +98,16 @@ export default async function PaymentPage({
             </Line>
             <Line label="Settled to you">
               {p.amount_settled ? (
-                <Money amount={p.amount_settled} currency={p.invoice.currency} />
+                <FiatMoney amount={p.amount_settled} currency={p.invoice.currency} />
               ) : (
                 <span className="text-mute">Not settled yet</span>
               )}
             </Line>
+            {p.refunded_amount && Number(p.refunded_amount) > 0 ? (
+              <Line label="Refunded to the buyer">
+                <FiatMoney amount={p.refunded_amount} currency={p.invoice.currency} />
+              </Line>
+            ) : null}
             <Line label="First seen">
               <Timestamp value={p.first_seen_at} />
             </Line>
@@ -135,7 +141,7 @@ export default async function PaymentPage({
           <dl className="flex flex-col gap-3.5">
             <Line label="Your reference">{p.invoice.reference}</Line>
             <Line label="Amount owed">
-              <Money
+              <FiatMoney
                 amount={p.invoice.amount_expected}
                 currency={p.invoice.currency}
               />

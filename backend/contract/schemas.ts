@@ -54,6 +54,10 @@ export const Payment = z.object({
   from_chain: ChainId,
   amount_in: Amount,
   amount_settled: Amount.nullish(),
+  /** The address that sent the deposit on the buyer's chain, when Aurora reported it. May be an exchange's wallet. */
+  sender: z.string().nullish(),
+  /** Total already sent back to buyers for this payment (submitted or confirmed refunds). */
+  refunded_amount: Amount.nullish(),
   status: PaymentStatus,
   first_seen_at: Timestamp,
   settled_at: Timestamp.nullish(),
@@ -259,6 +263,73 @@ export const Chain = z.object({
   asset: z.string(),
   minimum: Amount,
   estimated_settlement: z.string(),
+});
+
+export const Fx = z.object({
+  base: z.literal("USD"),
+  as_of: z.string().describe("When the rates were published (ISO 8601). They update about once a day."),
+  rates: z.record(z.string(), z.string()).describe("Units of each currency per 1 USD, as decimal strings"),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Transfers: money sent OUT of the merchant's own wallet                      */
+/* -------------------------------------------------------------------------- */
+
+export const TransferKind = z.enum(["PAYOUT", "REFUND", "SPLIT"]);
+export const TransferStatus = z.enum(["AWAITING_SIGNATURE", "SUBMITTED", "CONFIRMED", "FAILED", "EXPIRED"]);
+
+export const TransferLine = z.object({ to: z.string(), amount: Amount });
+
+/** What the merchant's wallet must sign for one line (EIP-712 typed data, EIP-3009). */
+export const TransferAuthorization = z.object({
+  index: z.number().int(),
+  typed_data: z.object({
+    domain: z.object({ name: z.string(), version: z.string(), chainId: z.number(), verifyingContract: z.string() }),
+    types: z.record(z.string(), z.array(z.object({ name: z.string(), type: z.string() }))),
+    primaryType: z.literal("TransferWithAuthorization"),
+    message: z.record(z.string(), z.string()),
+  }),
+});
+
+export const Transfer = z.object({
+  id: z.string(),
+  kind: TransferKind,
+  status: TransferStatus,
+  asset: z.string(),
+  from: z.string(),
+  total_amount: Amount,
+  payment_id: z.string().nullish(),
+  note: z.string().nullish(),
+  tx_hash: z.string().nullish(),
+  failure_reason: z.string().nullish(),
+  lines: z.array(TransferLine),
+  created_at: Timestamp,
+  expires_at: Timestamp,
+  submitted_at: Timestamp.nullish(),
+  confirmed_at: Timestamp.nullish(),
+  /** Only on a freshly prepared transfer: what to sign, one entry per line. */
+  authorizations: z.array(TransferAuthorization).optional(),
+});
+
+export const PrepareTransferBody = z.object({
+  kind: TransferKind,
+  lines: z.array(z.object({ to: z.string().trim(), amount: z.string().trim() })).min(1).max(50),
+  payment_id: z.string().min(1).max(64).optional(),
+  note: z.string().trim().max(140).optional(),
+});
+
+export const SubmitTransferBody = z.object({
+  signatures: z.array(z.string().regex(/^0x[0-9a-fA-F]{130}$/, "must be a 65-byte hex signature")).min(1).max(50),
+});
+
+export const WalletBalance = z.object({
+  address: z.string().nullish(),
+  asset: z.string().nullish(),
+  /** The wallet's on-chain balance of its settlement asset. Null when it cannot be read. */
+  balance: Amount.nullish(),
+  /** Whether sending from Tender is possible right now, and if not, why. */
+  can_send: z.boolean(),
+  reason: z.string().nullish(),
 });
 
 export const InvoiceEvent = z.object({

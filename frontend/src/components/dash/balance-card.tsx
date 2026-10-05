@@ -7,6 +7,8 @@ import { Cta } from "@/components/dash/cta";
 import { CopyValue } from "@/components/dash/copy";
 import { EyeIcon, EyeOffIcon } from "@/components/dash/icons";
 import { Hash, Money } from "@/components/dash/money";
+import { FiatMoney, useCurrency } from "@/components/dash/currency";
+import { isUsdPegged } from "@/lib/fx";
 import type { Amount } from "@/lib/api/types";
 
 /**
@@ -68,6 +70,7 @@ export default function BalanceCard({
   art,
 }: BalanceCardProps) {
   const [hidden, setHidden] = useState(false);
+  const { code: displayCode, rates } = useCurrency();
 
   useEffect(() => {
     try {
@@ -93,6 +96,9 @@ export default function BalanceCard({
     settled.find((line) => line.asset === asset) ?? settled[0] ?? null;
   const others = total ? settled : settled.filter((line) => line !== primary);
   const ticker = primary?.asset ?? asset ?? null;
+  // When the headline is shown in another currency it carries that currency's
+  // code itself, so the settlement ticker beside it would contradict it.
+  const converted = displayCode !== "USD" && !!rates[displayCode] && isUsdPegged(ticker);
 
   return (
     <section
@@ -153,14 +159,18 @@ export default function BalanceCard({
             ••••••
           </p>
         ) : total ? (
-          <Money amount={total.amount} currency={total.currency} size="hero" />
+          <FiatMoney amount={total.amount} currency={total.currency} size="hero" />
         ) : (
           <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             {/* An empty settled list from a successful request IS a zero
                 balance — the API said so — which is why a 0 is shown here and
                 a dash only on error. */}
-            <Money amount={primary?.amount ?? "0"} size="hero" />
-            {ticker && (
+            {converted ? (
+              <FiatMoney amount={primary?.amount ?? "0"} currency={ticker ?? undefined} size="hero" />
+            ) : (
+              <Money amount={primary?.amount ?? "0"} size="hero" />
+            )}
+            {ticker && !converted && (
               <span className="font-mono text-[0.8125rem] uppercase tracking-[0.14em] text-paper/50">
                 {ticker}
               </span>

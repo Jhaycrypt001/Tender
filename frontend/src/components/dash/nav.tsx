@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { TenderMark } from "@/components/logo";
 import { SignOutForm } from "@/components/auth/sign-out";
 import CurrencyFlag from "@/components/dash/currency-flag";
+import { currencyMeta, useCurrency } from "@/components/dash/currency";
 import {
   CloseIcon,
   MenuIcon,
@@ -56,11 +57,11 @@ export default function DashNav({ session }: { session: Session }) {
   const ask = useAsk();
   const [open, setOpen] = useState<Open>(null);
   const [mobile, setMobile] = useState(false);
-  // ⚠️ Fixed, not state. Picking another currency would relabel the header
-  // while every amount on screen stayed in its settlement asset — a number the
-  // merchant did not ask for, dressed as one they did. The other codes stay
-  // listed as Soon until an FX feed exists to convert with.
-  const currency: DisplayCurrency = DISPLAY_CURRENCIES[0];
+  // The display currency is presentation only (see components/dash/currency.tsx):
+  // it never changes where money settles. Codes without a live rate stay
+  // listed but disabled, so a currency is only offered when it can be shown truly.
+  const { code: currencyCode, setCode: setCurrencyCode, available, asOf } = useCurrency();
+  const currency = currencyMeta(currencyCode);
   const headerRef = useRef<HTMLElement>(null);
 
   // Any navigation dismisses everything. Without this a dropdown stays open
@@ -225,8 +226,9 @@ export default function DashNav({ session }: { session: Session }) {
                   Display currency
                 </p>
                 <p className="px-2.5 pb-2 text-[0.6875rem] leading-snug text-mute">
-                  Amounts show in the asset they settle in. Other currencies
-                  need a live FX rate, which is not connected yet.
+                  Dollar amounts are shown in the currency you pick, at a daily reference
+                  rate{asOf ? ` (published ${new Date(asOf).toISOString().slice(0, 10)})` : ""}. Where
+                  your money settles does not change.
                 </p>
               </DropdownItem>
               {DISPLAY_CURRENCIES.map((item) => (
@@ -235,13 +237,18 @@ export default function DashNav({ session }: { session: Session }) {
                     type="button"
                     role="option"
                     aria-selected={item.code === currency.code}
-                    aria-disabled={item.code !== currency.code}
-                    disabled={item.code !== currency.code}
-                    onClick={() => setOpen(null)}
+                    aria-disabled={!available.has(item.code)}
+                    disabled={!available.has(item.code)}
+                    onClick={() => {
+                      setCurrencyCode(item.code);
+                      setOpen(null);
+                    }}
                     className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[0.8125rem] transition-colors disabled:cursor-not-allowed ${
                       item.code === currency.code
                         ? "bg-stone text-ink"
-                        : "text-mute"
+                        : available.has(item.code)
+                          ? "text-ink hover:bg-stone/60"
+                          : "text-mute"
                     }`}
                   >
                     <CurrencyFlag
@@ -250,7 +257,7 @@ export default function DashNav({ session }: { session: Session }) {
                     />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     <span className="font-mono text-[0.6875rem] text-mute">
-                      {item.code === currency.code ? item.code : "Soon"}
+                      {available.has(item.code) ? item.code : "Soon"}
                     </span>
                   </button>
                 </DropdownItem>

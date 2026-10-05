@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import { parseEther } from "viem";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -12,7 +13,10 @@ import { httpRequests, registry } from "./lib/metrics.js";
 import { registerRateLimits } from "./lib/rate-limit.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import type { AuroraClient } from "./aurora/client.js";
+import { FxService } from "./services/fx.service.js";
 import { assistantRoutes } from "./routes/assistant.js";
+import { transferRoutes } from "./routes/transfers.js";
+import type { TransferChain } from "./services/transfer-chain.js";
 import { requireMerchant } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { internalRoutes } from "./routes/internal.js";
@@ -35,6 +39,10 @@ declare module "fastify" {
 export type AppDeps = {
   /** Test-only: replaces the call to the model provider. */
   assistantFetch?: typeof fetch;
+  /** Display-currency rates. Defaults to the live source; tests pass one with a fake fetch. */
+  fx?: FxService;
+  /** Sends signed transfers on Monad from the relayer. Without it the transfer routes answer 503. */
+  transferChain?: TransferChain;
   config: Config;
   db: Db;
   redis: Redis;
@@ -118,7 +126,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: "not_found", message: "Route not found" }));
 
   healthRoutes(app, deps);
-  publicRoutes(app, { ...deps, ttlMinutes: config.INVOICE_TTL_MINUTES });
+  publicRoutes(app, { ...deps, fx: deps.fx ?? new FxService(deps.redis, app.log), ttlMinutes: config.INVOICE_TTL_MINUTES });
   internalRoutes(app, { db: deps.db, platformKey: config.TENDER_PLATFORM_KEY, welcomeEmail: !!config.RESEND_API_KEY });
 
   // Everything under /v1 requires a merchant API key (or the dashboard's platform key). The hook is scoped to
@@ -127,6 +135,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     requireMerchant(merchantScope, deps.db, config.TENDER_PLATFORM_KEY);
     merchantRoutes(merchantScope, { db: deps.db, redis: deps.redis, chain: deps.chain });
     paymentRoutes(merchantScope, { db: deps.db });
+    transferRoutes(merchantScope, {
+      db: deps.db,
+      chain: deps.transferChain,
+      config: {
+        dailyLimit: config.TRANSFER_DAILY_LIMIT,
+        maxLines: config.TRANSFER_MAX_LINES,
+        minRelayerWei: parseEther(config.RELAYER_MIN_MON),
+      },
+    });
     if (config.GEMINI_API_KEY) {
       assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch });
     }

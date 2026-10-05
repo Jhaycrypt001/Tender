@@ -3,6 +3,7 @@ import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { listPayments } from "@/lib/api/payments";
+import { getWalletBalance } from "@/lib/api/transfers";
 import { RefundForm } from "./form";
 
 export const metadata = { title: "Refund · Tender" };
@@ -23,7 +24,7 @@ const LIMIT = 25;
  * will reject.
  */
 export default async function RefundPage() {
-  const result = await listPayments({ status: "SETTLED", limit: LIMIT });
+  const [result, wallet] = await Promise.all([listPayments({ status: "SETTLED", limit: LIMIT }), getWalletBalance()]);
 
   return (
     <PageShell>
@@ -63,7 +64,7 @@ export default async function RefundPage() {
           </p>
         </Card>
       ) : (
-        <RefundForm payments={result.data.data} />
+        <RefundForm payments={result.data.data} wallet={wallet.ok ? wallet.data : { can_send: false, reason: "We could not check your wallet just now. Try again in a moment." }} />
       )}
     </PageShell>
   );

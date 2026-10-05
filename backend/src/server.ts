@@ -6,6 +6,7 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { createLogger } from "./lib/logger.js";
 import { ChainCatalogueReader } from "./services/chains.service.js";
+import { createTransferChain } from "./services/transfer-chain.js";
 import { InvoiceStream } from "./services/stream.js";
 
 try {
@@ -36,7 +37,8 @@ const monad = defineChain({
 });
 const chain = createPublicClient({ chain: monad, transport: http(config.MONAD_RPC_URL, { timeout: 10_000 }) });
 
-const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain });
+const transferChain = createTransferChain({ client: chain, rpcUrl: config.MONAD_RPC_URL, relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined });
+const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
 
 // Graceful shutdown: stop taking requests, then close connections. A second
 // signal forces exit.

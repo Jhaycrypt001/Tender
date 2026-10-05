@@ -3,6 +3,7 @@ import { Empty, ErrorState } from "@/components/dash/empty";
 import { ActivityIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { FilterTabs } from "@/components/dash/filter-tabs";
@@ -118,7 +119,7 @@ export default async function ActivityPage({
                  */
                 sent: <Money amount={p.amount_in} maxDp={8} />,
                 settled: p.amount_settled ? (
-                  <Money amount={p.amount_settled} />
+                  <FiatMoney amount={p.amount_settled} />
                 ) : null,
                 tx: <Hash value={p.tx_hash} />,
                 state: <PaymentStatePill status={p.status} />,

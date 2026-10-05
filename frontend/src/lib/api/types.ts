@@ -186,6 +186,10 @@ export type Payment = {
   amount_in: Amount;
   /** What landed at the merchant's address, in the settlement asset. */
   amount_settled?: Amount | null;
+  /** The address that sent the deposit on the buyer's chain, when Aurora reported it. May be an exchange's wallet. */
+  sender?: string | null;
+  /** Total already sent back to buyers for this payment (submitted or confirmed refunds). */
+  refunded_amount?: Amount | null;
   status: PaymentStatus;
   first_seen_at: Timestamp;
   settled_at?: Timestamp | null;
@@ -395,6 +399,15 @@ export type PublicLink = {
   active: boolean;
 };
 
+/** Display-currency rates, from GET /public/fx. Presentation only. */
+export type Fx = {
+  base: "USD";
+  /** When the rates were published (ISO 8601). They update about once a day. */
+  as_of: string;
+  /** Units of each currency per 1 USD, as decimal strings. */
+  rates: Record<string, string>;
+};
+
 /** One supported chain, from GET /public/chains. */
 export type Chain = {
   id: ChainId;
@@ -483,3 +496,63 @@ export type ApiError = {
 export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: ApiError };
+
+
+/* -------------------------------------------------------------------------- */
+/* Transfers: money sent OUT of the merchant's own wallet                      */
+/* -------------------------------------------------------------------------- */
+
+export type TransferKind = "PAYOUT" | "REFUND" | "SPLIT";
+export type TransferStatus = "AWAITING_SIGNATURE" | "SUBMITTED" | "CONFIRMED" | "FAILED" | "EXPIRED";
+
+export type TransferLine = { to: string; amount: Amount };
+
+/** What the merchant's wallet must sign for one line (EIP-712 typed data, EIP-3009). */
+export type TransferAuthorization = {
+  index: number;
+  typed_data: {
+    domain: { name: string; version: string; chainId: number; verifyingContract: string };
+    types: Record<string, { name: string; type: string }[]>;
+    primaryType: "TransferWithAuthorization";
+    message: Record<string, string>;
+  };
+};
+
+export type Transfer = {
+  id: string;
+  kind: TransferKind;
+  status: TransferStatus;
+  asset: string;
+  from: string;
+  total_amount: Amount;
+  payment_id?: string | null;
+  note?: string | null;
+  tx_hash?: string | null;
+  failure_reason?: string | null;
+  lines: TransferLine[];
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  submitted_at?: Timestamp | null;
+  confirmed_at?: Timestamp | null;
+  /** Only on a freshly prepared transfer: what to sign, one entry per line. */
+  authorizations?: TransferAuthorization[];
+};
+
+export type PrepareTransferInput = {
+  kind: TransferKind;
+  lines: { to: string; amount: string }[];
+  payment_id?: string;
+  note?: string;
+};
+
+export type SubmitTransferInput = { signatures: string[] };
+
+export type WalletBalance = {
+  address?: string | null;
+  asset?: string | null;
+  /** The wallet's on-chain balance of its settlement asset. Null when it cannot be read. */
+  balance?: Amount | null;
+  /** Whether sending from Tender is possible right now, and if not, why. */
+  can_send: boolean;
+  reason?: string | null;
+};

@@ -3,6 +3,7 @@ import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { Money, Timestamp } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { getMerchant } from "@/lib/api/merchant";
 import { listPayments } from "@/lib/api/payments";
@@ -208,7 +209,7 @@ async function Answer({ question }: { question: Question }) {
                     rather than showing a zero. */}
                 <span className="text-[0.9375rem]">
                   {payment.amount_settled ? (
-                    <Money amount={payment.amount_settled} maxDp={8} />
+                    <FiatMoney amount={payment.amount_settled} maxDp={8} />
                   ) : (
                     <span className="text-mute">not settled</span>
                   )}

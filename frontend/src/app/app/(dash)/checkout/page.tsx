@@ -3,6 +3,7 @@ import { Empty, ErrorState } from "@/components/dash/empty";
 import { CheckoutIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
 import { Money, Timestamp } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import { InvoiceStatePill } from "@/components/dash/state-pill";
 import { FilterTabs } from "@/components/dash/filter-tabs";
 import { DataTable, type Row } from "@/components/dash/table";
@@ -107,7 +108,7 @@ export default async function CheckoutPage({
               cells: {
                 reference: inv.reference,
                 amount: (
-                  <Money amount={inv.amount_expected} currency={inv.currency} />
+                  <FiatMoney amount={inv.amount_expected} currency={inv.currency} />
                 ),
                 created: <Timestamp value={inv.created_at} dateOnly />,
                 expires: <Timestamp value={inv.expires_at} />,

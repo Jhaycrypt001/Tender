@@ -271,3 +271,68 @@ export function ReadOnlyField({
     </div>
   );
 }
+
+/**
+ * A text input whose value the parent owns.
+ *
+ * `Field` is uncontrolled (a name and a default), which suits a form that is
+ * read once on submit. The send-money screens need the value live: a balance
+ * check as the amount is typed, a total across rows, an address compared with
+ * the one a payment came from. Same look as `Field`, so a screen mixing the
+ * two does not show two styles of input.
+ */
+export function ControlledField({
+  label,
+  value,
+  onChange,
+  hint,
+  error,
+  required,
+  placeholder,
+  suffix,
+  inputMode,
+  mono,
+  disabled,
+  autoComplete = "off",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  placeholder?: string;
+  suffix?: string;
+  inputMode?: "text" | "decimal" | "numeric";
+  /** Addresses read better in the mono face. */
+  mono?: boolean;
+  disabled?: boolean;
+  autoComplete?: string;
+}) {
+  const id = useId();
+  return (
+    <Shell id={id} label={label} hint={hint} error={error} required={required}>
+      <div className="relative">
+        <input
+          id={id}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          spellCheck={false}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
+          className={`${INPUT} ${border(error)} ${suffix ? "pr-16" : ""} ${mono ? "font-mono text-[0.8125rem]" : ""} disabled:opacity-60`}
+        />
+        {suffix && (
+          <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center font-mono text-[0.75rem] uppercase tracking-[0.1em] text-mute">
+            {suffix}
+          </span>
+        )}
+      </div>
+    </Shell>
+  );
+}

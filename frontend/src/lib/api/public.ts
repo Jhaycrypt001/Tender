@@ -1,5 +1,5 @@
 import { publicBase, publicRequest } from "./client";
-import type { ApiResult, Chain, PublicInvoice, PublicLink } from "./types";
+import type { ApiResult, Chain, Fx, PublicInvoice, PublicLink } from "./types";
 
 /**
  * The public, unauthenticated API — everything the buyer checkout calls.
@@ -47,6 +47,16 @@ export function getPublicLink(token: string): Promise<ApiResult<PublicLink>> {
  */
 export function getChains(): Promise<ApiResult<Chain[]>> {
   return publicRequest<Chain[]>("/public/chains", { revalidate: 60 });
+}
+
+/**
+ * Rates for showing amounts in another currency (USD to each currency).
+ *
+ * Updated about once a day at the source, so five minutes of caching costs
+ * nothing. A failure just means the selector offers only dollars.
+ */
+export function getFx(): Promise<ApiResult<Fx>> {
+  return publicRequest<Fx>("/public/fx", { revalidate: 300 });
 }
 
 /**

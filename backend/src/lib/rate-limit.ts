@@ -21,6 +21,8 @@ function groupFor(req: FastifyRequest): Group {
   // Every call costs a model request, so it is far tighter than the rest, and is
   // counted per merchant whichever way they authenticate.
   if (url === "/v1/assistant/ask") return { name: "assistant", max: 10 };
+  // Preparing and submitting a transfer costs Tender network fees, so POSTs here are tight and per merchant.
+  if (url.startsWith("/v1/transfers") && req.method === "POST") return { name: "transfers", max: 20 };
   // The dashboard's platform key fronts every signed-in merchant, so it is
   // limited per merchant it acts for, at its own ceiling.
   if (req.headers.authorization?.startsWith("Bearer tp_")) return { name: "platform", max: 1200 };
@@ -34,11 +36,11 @@ function groupFor(req: FastifyRequest): Group {
 
 function identity(req: FastifyRequest, group: Group): string {
   const viaPlatform = req.headers.authorization?.startsWith("Bearer tp_");
-  if (group.name === "platform" || (group.name === "assistant" && viaPlatform)) {
+  if (group.name === "platform" || ((group.name === "assistant" || group.name === "transfers") && viaPlatform)) {
     const id = req.headers["x-tender-merchant"];
     return `merchant:${typeof id === "string" ? id.slice(0, 40) : "none"}`;
   }
-  if (group.name === "merchant" || group.name === "assistant") {
+  if (group.name === "merchant" || group.name === "assistant" || group.name === "transfers") {
     const key = req.headers.authorization?.split(" ")[1];
     if (key) return `key:${apiKeyPrefix(key)}`;
   }

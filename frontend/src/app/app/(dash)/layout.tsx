@@ -5,6 +5,9 @@ import { AskProvider } from "@/components/ask/ask-provider";
 import { FrameMark } from "@/components/dash/shell";
 import { SESSION_COOKIE, decodeSession } from "@/lib/auth";
 import { accountsEnabled } from "@/lib/api/server";
+import { getMerchant } from "@/lib/api/merchant";
+import { getFx } from "@/lib/api/public";
+import { CURRENCY_COOKIE, CurrencyProvider } from "@/components/dash/currency";
 
 /**
  * The signed-in dashboard.
@@ -37,9 +40,19 @@ export default async function DashLayout({
   // without one would only show "not linked" errors on every screen.
   if (!session || (accountsEnabled() && !session.merchantId)) redirect("/app");
 
+  // Display currency: the rates are public and cached; the settlement asset says
+  // which amounts are dollars (and so convertible). If either call fails the
+  // dashboard simply shows dollars, as it always did.
+  const [fx, merchant] = await Promise.all([getFx(), getMerchant()]);
+  const rates = fx.ok ? fx.data.rates : {};
+  const asOf = fx.ok ? fx.data.as_of : null;
+  const settlementAsset = (merchant.ok && merchant.data.settlement_asset) || "USDC";
+  const chosen = jar.get(CURRENCY_COOKIE)?.value ?? "USD";
+
   // The Ask assistant opens over whichever screen is showing, so it wraps the
   // whole chrome rather than living on one route.
   return (
+    <CurrencyProvider initial={chosen} rates={rates} asOf={asOf} settlementAsset={settlementAsset}>
     <AskProvider firstName={session.name.trim().split(/\s+/)[0] ?? ""}>
       <div className="flex min-h-dvh flex-col bg-stone">
         <DashNav
@@ -61,5 +74,6 @@ export default async function DashLayout({
         </div>
       </div>
     </AskProvider>
+    </CurrencyProvider>
   );
 }

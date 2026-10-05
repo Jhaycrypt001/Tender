@@ -23,6 +23,8 @@ Set these on **both** api and worker unless noted.
 | `TENDER_PLATFORM_KEY` | `tp_` + 32 random bytes, base64url | **api only.** Generate with `node -e "console.log('tp_'+require('crypto').randomBytes(32).toString('base64url'))"`. Acts as any merchant: the same value goes in the dashboard server's env and nowhere else. |
 | `CORS_ORIGINS` | the exact frontend origin(s), e.g. `https://tender.xyz` | No trailing slash. Include preview domains only if you test on them. **Payment links and checkout fail in the browser without it.** api only. |
 | `METRICS_TOKEN` | 16+ random characters | `/metrics` is public without it. Set on api and worker. |
+| `RELAYER_PRIVATE_KEY` | `0x` + 64 hex | **api only.** The wallet that submits merchants' signed transfers and pays their gas in MON. Fund it with a few MON and nothing else; the merchant's own wallet authorizes every transfer, so this key cannot move merchant funds. Without it `/v1/transfers` answers 503. |
+| `RELAYER_MIN_MON` | default 0.02 | Transfers pause (503) when the relayer holds less than this. Alert before it gets there. |
 | `MONAD_RPC_URL` | a paid endpoint | Only used to verify smart-contract settlement wallets (ERC-1271). The public default is fine for a demo. |
 | `MINIMUMS_REFRESH_MINUTES` | default 30 | See "Minimums" below. worker only. |
 

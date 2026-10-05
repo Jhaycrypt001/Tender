@@ -99,7 +99,7 @@ export function refundPayment(): never {
   throw new ApiError(
     501,
     "not_supported",
-    "Refunds are not available: Aurora's persistent deposit addresses have no refund-to-sender API. Under-minimum deposits are still refunded automatically by the network.",
+    "This route cannot refund: Aurora's persistent deposit addresses have no refund-to-sender API. To return money, send it from the settlement wallet with POST /v1/transfers (kind REFUND, payment_id). Under-minimum deposits are still refunded automatically by the network.",
   );
 }
 
@@ -129,7 +129,7 @@ export function toRecovery(task: NonNullable<PaymentWithDetail["recovery"]>): z.
 }
 
 /** Payment detail with a history reconstructed from what the payment records. */
-export function toPaymentDetail(p: PaymentWithDetail): z.output<typeof S.PaymentDetail> {
+export function toPaymentDetail(p: PaymentWithDetail, refunded?: string): z.output<typeof S.PaymentDetail> {
   const history: { status: string; at: string; note?: string }[] = [
     { status: "DETECTED", at: p.firstSeenAt.toISOString(), note: `${amount(p.amountIn)} received on ${p.fromChain}` },
   ];
@@ -146,7 +146,7 @@ export function toPaymentDetail(p: PaymentWithDetail): z.output<typeof S.Payment
   }
 
   return {
-    ...toPayment(p),
+    ...toPayment(p, refunded),
     invoice: {
       id: p.invoice.id,
       reference: p.invoice.reference,

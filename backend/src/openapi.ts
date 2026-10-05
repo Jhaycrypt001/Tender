@@ -50,6 +50,7 @@ const ERROR_TEXT: Record<number, string> = {
   401: "Missing or invalid API key",
   404: "Not found (or not yours)",
   409: "Conflict with the current state",
+  410: "Expired — start again",
   429: "Rate limited",
   501: "Not supported — see `message`",
   502: "Aurora could not be reached; nothing was written, retry",
@@ -143,6 +144,15 @@ export const OPERATIONS: Record<string, Op> = {
     summary: "Supported chains with measured minimums (USD) and settlement time",
     description: "503 until the worker has measured minimums — a minimum is never guessed.",
     ok: { status: 200, schema: z.array(S.Chain) },
+    errors: [503],
+  },
+  "GET /public/fx": {
+    tag: "Public (checkout)",
+    auth: false,
+    summary: "Display-currency rates (units of each currency per 1 USD)",
+    description:
+      "Reference rates for SHOWING amounts in another currency. They never price an invoice or move money, and update about once a day. 503 when none are available: a rate is never guessed.",
+    ok: { status: 200, schema: S.Fx },
     errors: [503],
   },
   "GET /public/links/:token": {
@@ -250,10 +260,56 @@ export const OPERATIONS: Record<string, Op> = {
     ok: { status: 200, schema: S.PaymentDetail },
     errors: [400, 404, 409],
   },
+  "GET /v1/transfers/wallet": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Can this merchant send money out, and what does their wallet hold?",
+    description:
+      "Reads the settlement wallet's on-chain balance of its settlement asset. `can_send` is false, with a `reason`, when the wallet is not verified, the asset cannot be sent through Tender, or sending is switched off.",
+    ok: { status: 200, schema: S.WalletBalance },
+  },
+  "POST /v1/transfers": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Step 1: prepare a payout, refund or split (moves nothing)",
+    description:
+      "Validates the request and returns, per recipient, the EIP-712 typed data the merchant's own wallet must sign (an EIP-3009 authorization). " +
+      "Tender never holds or signs for the merchant: the signature names the exact recipient, amount and deadline (15 minutes), so nothing can be changed afterwards. " +
+      "A refund is capped by what the payment delivered, minus refunds already made.",
+    body: S.PrepareTransferBody,
+    ok: { status: 201, schema: S.Transfer },
+    errors: [400, 404, 409, 429, 503],
+  },
+  "POST /v1/transfers/:id/submit": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Step 2: submit the wallet's signatures; Tender relays them and pays the gas",
+    description:
+      "Each signature must come from the settlement wallet. A split goes through Multicall3 as ONE transaction, so it lands whole or not at all. " +
+      "The response is SUBMITTED; it becomes CONFIRMED only when the chain shows a successful receipt and every authorization is spent.",
+    params: ["id"],
+    body: S.SubmitTransferBody,
+    ok: { status: 200, schema: S.Transfer },
+    errors: [400, 404, 409, 410, 429, 502, 503],
+  },
+  "GET /v1/transfers": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Recent transfers, newest first",
+    ok: { status: 200, schema: z.object({ data: z.array(S.Transfer) }) },
+  },
+  "GET /v1/transfers/:id": {
+    tag: "Transfers",
+    auth: true,
+    summary: "One transfer and its status",
+    params: ["id"],
+    ok: { status: 200, schema: S.Transfer },
+    errors: [404],
+  },
   "POST /v1/payments/:id/refund": {
     tag: "Payments",
     auth: true,
-    summary: "Refund (not supported)",
+    summary: "Refund (use POST /v1/transfers instead)",
     params: ["id"],
     ok: { status: 501, description: "Always 501: persistent addresses have no refund API" },
     errors: [404],

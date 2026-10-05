@@ -78,7 +78,13 @@ export function toPublicInvoice(
   };
 }
 
-export function toPayment(p: Payment): Wire<typeof S.Payment> {
+/** The buyer's address on their own chain, when Aurora reported it. Aurora's own field, passed through untouched. */
+function senderOf(p: Payment): string | null {
+  const from = (p.raw as { received?: { from?: unknown } } | null)?.received?.from;
+  return typeof from === "string" && from ? from : null;
+}
+
+export function toPayment(p: Payment, refunded?: string): Wire<typeof S.Payment> {
   return {
     id: p.id,
     invoice_id: p.invoiceId,
@@ -86,6 +92,8 @@ export function toPayment(p: Payment): Wire<typeof S.Payment> {
     from_chain: p.fromChain,
     amount_in: amount(p.amountIn),
     amount_settled: p.amountSettled ? amount(p.amountSettled) : null,
+    sender: senderOf(p),
+    refunded_amount: refunded ?? null,
     status: p.status,
     first_seen_at: p.firstSeenAt.toISOString(),
     settled_at: p.settledAt?.toISOString() ?? null,

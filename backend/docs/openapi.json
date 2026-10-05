@@ -765,6 +765,121 @@
         }
       }
     },
+    "/public/fx": {
+      "get": {
+        "tags": [
+          "Public (checkout)"
+        ],
+        "summary": "Display-currency rates (units of each currency per 1 USD)",
+        "description": "Reference rates for SHOWING amounts in another currency. They never price an invoice or move money, and update about once a day. 503 when none are available: a rate is never guessed.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "base": {
+                      "type": "string",
+                      "const": "USD"
+                    },
+                    "as_of": {
+                      "type": "string",
+                      "description": "When the rates were published (ISO 8601). They update about once a day."
+                    },
+                    "rates": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Units of each currency per 1 USD, as decimal strings"
+                    }
+                  },
+                  "required": [
+                    "base",
+                    "as_of",
+                    "rates"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready yet (or, on the assistant, the model is unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/public/links/{token}": {
       "get": {
         "tags": [
@@ -1482,6 +1597,23 @@
                               }
                             ]
                           },
+                          "sender": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "refunded_amount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -1874,6 +2006,23 @@
                                     }
                                   ]
                                 },
+                                "sender": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "refunded_amount": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "status": {
                                   "type": "string",
                                   "enum": [
@@ -2186,6 +2335,23 @@
                               }
                             ]
                           },
+                          "sender": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "refunded_amount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -2471,6 +2637,23 @@
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                           },
                           "amount_settled": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sender": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "refunded_amount": {
                             "anyOf": [
                               {
                                 "type": "string",
@@ -2772,6 +2955,23 @@
                               }
                             ]
                           },
+                          "sender": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "refunded_amount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -2975,6 +3175,23 @@
                       "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     },
                     "amount_settled": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sender": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "refunded_amount": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -3283,6 +3500,23 @@
                       "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     },
                     "amount_settled": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sender": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "refunded_amount": {
                       "anyOf": [
                         {
                           "type": "string",
@@ -3651,6 +3885,23 @@
                         }
                       ]
                     },
+                    "sender": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "refunded_amount": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -3963,12 +4214,1796 @@
         }
       }
     },
+    "/v1/transfers/wallet": {
+      "get": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Can this merchant send money out, and what does their wallet hold?",
+        "description": "Reads the settlement wallet's on-chain balance of its settlement asset. `can_send` is false, with a `reason`, when the wallet is not verified, the asset cannot be sent through Tender, or sending is switched off.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "asset": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "balance": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "can_send": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "can_send"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transfers": {
+      "post": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Step 1: prepare a payout, refund or split (moves nothing)",
+        "description": "Validates the request and returns, per recipient, the EIP-712 typed data the merchant's own wallet must sign (an EIP-3009 authorization). Tender never holds or signs for the merchant: the signature names the exact recipient, amount and deadline (15 minutes), so nothing can be changed afterwards. A refund is capped by what the payment delivered, minus refunds already made.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PAYOUT",
+                      "REFUND",
+                      "SPLIT"
+                    ]
+                  },
+                  "lines": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "to": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "to",
+                        "amount"
+                      ]
+                    }
+                  },
+                  "payment_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 140
+                  }
+                },
+                "required": [
+                  "kind",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "PAYOUT",
+                        "REFUND",
+                        "SPLIT"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "AWAITING_SIGNATURE",
+                        "SUBMITTED",
+                        "CONFIRMED",
+                        "FAILED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "total_amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "payment_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tx_hash": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "failure_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "to": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          }
+                        },
+                        "required": [
+                          "to",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "submitted_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "confirmed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "typed_data": {
+                            "type": "object",
+                            "properties": {
+                              "domain": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  },
+                                  "chainId": {
+                                    "type": "number"
+                                  },
+                                  "verifyingContract": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version",
+                                  "chainId",
+                                  "verifyingContract"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "types": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "primaryType": {
+                                "type": "string",
+                                "const": "TransferWithAuthorization"
+                              },
+                              "message": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "domain",
+                              "types",
+                              "primaryType",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "index",
+                          "typed_data"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "status",
+                    "asset",
+                    "from",
+                    "total_amount",
+                    "lines",
+                    "created_at",
+                    "expires_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `fields` names each bad field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (or not yours)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready yet (or, on the assistant, the model is unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Recent transfers, newest first",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "PAYOUT",
+                              "REFUND",
+                              "SPLIT"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "AWAITING_SIGNATURE",
+                              "SUBMITTED",
+                              "CONFIRMED",
+                              "FAILED",
+                              "EXPIRED"
+                            ]
+                          },
+                          "asset": {
+                            "type": "string"
+                          },
+                          "from": {
+                            "type": "string"
+                          },
+                          "total_amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          },
+                          "payment_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tx_hash": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "failure_reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "to": {
+                                  "type": "string"
+                                },
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                                }
+                              },
+                              "required": [
+                                "to",
+                                "amount"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "expires_at": {
+                            "type": "string"
+                          },
+                          "submitted_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "confirmed_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "authorizations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "index": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "typed_data": {
+                                  "type": "object",
+                                  "properties": {
+                                    "domain": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "version": {
+                                          "type": "string"
+                                        },
+                                        "chainId": {
+                                          "type": "number"
+                                        },
+                                        "verifyingContract": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "version",
+                                        "chainId",
+                                        "verifyingContract"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "types": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "type": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "name",
+                                            "type"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "primaryType": {
+                                      "type": "string",
+                                      "const": "TransferWithAuthorization"
+                                    },
+                                    "message": {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "domain",
+                                    "types",
+                                    "primaryType",
+                                    "message"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "index",
+                                "typed_data"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "status",
+                          "asset",
+                          "from",
+                          "total_amount",
+                          "lines",
+                          "created_at",
+                          "expires_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transfers/{id}/submit": {
+      "post": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Step 2: submit the wallet's signatures; Tender relays them and pays the gas",
+        "description": "Each signature must come from the settlement wallet. A split goes through Multicall3 as ONE transaction, so it lands whole or not at all. The response is SUBMITTED; it becomes CONFIRMED only when the chain shows a successful receipt and every authorization is spent.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "signatures": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{130}$"
+                    }
+                  }
+                },
+                "required": [
+                  "signatures"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "PAYOUT",
+                        "REFUND",
+                        "SPLIT"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "AWAITING_SIGNATURE",
+                        "SUBMITTED",
+                        "CONFIRMED",
+                        "FAILED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "total_amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "payment_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tx_hash": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "failure_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "to": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          }
+                        },
+                        "required": [
+                          "to",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "submitted_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "confirmed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "typed_data": {
+                            "type": "object",
+                            "properties": {
+                              "domain": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  },
+                                  "chainId": {
+                                    "type": "number"
+                                  },
+                                  "verifyingContract": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version",
+                                  "chainId",
+                                  "verifyingContract"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "types": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "primaryType": {
+                                "type": "string",
+                                "const": "TransferWithAuthorization"
+                              },
+                              "message": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "domain",
+                              "types",
+                              "primaryType",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "index",
+                          "typed_data"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "status",
+                    "asset",
+                    "from",
+                    "total_amount",
+                    "lines",
+                    "created_at",
+                    "expires_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `fields` names each bad field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (or not yours)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired — start again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Aurora could not be reached; nothing was written, retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready yet (or, on the assistant, the model is unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transfers/{id}": {
+      "get": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "One transfer and its status",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "PAYOUT",
+                        "REFUND",
+                        "SPLIT"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "AWAITING_SIGNATURE",
+                        "SUBMITTED",
+                        "CONFIRMED",
+                        "FAILED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "total_amount": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "payment_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tx_hash": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "failure_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "to": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          }
+                        },
+                        "required": [
+                          "to",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "submitted_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "confirmed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "authorizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "typed_data": {
+                            "type": "object",
+                            "properties": {
+                              "domain": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  },
+                                  "chainId": {
+                                    "type": "number"
+                                  },
+                                  "verifyingContract": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version",
+                                  "chainId",
+                                  "verifyingContract"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "types": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "primaryType": {
+                                "type": "string",
+                                "const": "TransferWithAuthorization"
+                              },
+                              "message": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "domain",
+                              "types",
+                              "primaryType",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "index",
+                          "typed_data"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "status",
+                    "asset",
+                    "from",
+                    "total_amount",
+                    "lines",
+                    "created_at",
+                    "expires_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (or not yours)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/payments/{id}/refund": {
       "post": {
         "tags": [
           "Payments"
         ],
-        "summary": "Refund (not supported)",
+        "summary": "Refund (use POST /v1/transfers instead)",
         "security": [
           {
             "merchantKey": []

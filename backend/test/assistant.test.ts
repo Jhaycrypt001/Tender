@@ -86,7 +86,7 @@ describe("tools: scoped to the signed-in merchant", () => {
     await settled(m.auth, "three", { chain: "sol", settledAmount: "7000001" });
 
     const { page } = await listPayments(t.db, m.merchant.id, { status: "SETTLED", limit: 100 });
-    const frontend = total(page.map(toPayment) as never);
+    const frontend = total(page.map((p) => toPayment(p)) as never);
     const result = (await runTool(deps(m.merchant, vi.fn() as never), "sum_settled", {})) as { amount: string; payments_counted: number };
     expect(result.payments_counted).toBe(frontend.counted);
     expect(Number(result.amount)).toBe(Number(frontend.amount));

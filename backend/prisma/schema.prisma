@@ -11,8 +11,8 @@
 // Money is Decimal(36,18). Never Float.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
   // Pinned: Prisma otherwise infers this from tsconfig.json, and `prisma generate`
   // runs in `postinstall` before a Docker build has copied it, which emitted
   // `./internal/class.ts` imports that do not exist in dist.
@@ -40,10 +40,11 @@ model Merchant {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  invoices Invoice[]
-  links    PaymentLink[]
-  apiKeys  ApiKey[]
-  emails   EmailDelivery[]
+  invoices  Invoice[]
+  links     PaymentLink[]
+  apiKeys   ApiKey[]
+  emails    EmailDelivery[]
+  transfers Transfer[]
 }
 
 /// A merchant API key. The key itself is shown once and never stored: only its
@@ -160,6 +161,7 @@ model Payment {
   invoice  Invoice        @relation(fields: [invoiceId], references: [id])
   address  InvoiceAddress @relation(fields: [invoiceAddressId], references: [id])
   recovery RecoveryTask?
+  refunds  Transfer[]
 }
 
 /// Every status change an invoice goes through. Backs the dashboard's history
@@ -248,4 +250,70 @@ enum RecoveryState {
   WITHDRAWN
   RESOLVED
   FAILED
+}
+
+/// Money the merchant sent OUT of their own wallet: a payout, a refund or a split.
+///
+/// Tender never holds or moves these funds. The merchant's wallet signs one
+/// EIP-3009 authorization per line ("send exactly this much to that address,
+/// until this time"); Tender's relayer submits them on-chain and pays the gas.
+/// This row is the record of that: what was asked, what was signed, and what
+/// the chain says happened. It never claims money moved until a receipt says so.
+model Transfer {
+  id            String         @id @default(cuid())
+  merchantId    String
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  kind          TransferKind
+  status        TransferStatus @default(AWAITING_SIGNATURE)
+  /// "USDC" or "USDT0": the token these lines are denominated in.
+  asset         String
+  /// The merchant's settlement address when this was prepared: the only address that may sign.
+  fromAddress   String
+  /// Sum of the lines.
+  totalAmount   Decimal        @db.Decimal(36, 18)
+  /// A refund points at the payment it returns money for.
+  paymentId     String?
+  payment       Payment?       @relation(fields: [paymentId], references: [id])
+  note          String?
+  /// Every authorization is valid until here; unsubmitted past this, nothing can ever move.
+  expiresAt     DateTime
+  txHash        String?        @unique
+  failureReason String?
+  createdAt     DateTime       @default(now())
+  submittedAt   DateTime?
+  confirmedAt   DateTime?
+  lines         TransferLine[]
+
+  @@index([merchantId, createdAt])
+  @@index([status, expiresAt])
+  @@index([paymentId])
+}
+
+model TransferLine {
+  id         String   @id @default(cuid())
+  transferId String
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  index      Int
+  toAddress  String
+  amount     Decimal  @db.Decimal(36, 18)
+  /// The EIP-3009 nonce (bytes32, random). Used on-chain exactly once.
+  nonce      String
+  /// The merchant wallet's signature over this line, once given.
+  signature  String?
+
+  @@unique([transferId, index])
+}
+
+enum TransferKind {
+  PAYOUT
+  REFUND
+  SPLIT
+}
+
+enum TransferStatus {
+  AWAITING_SIGNATURE
+  SUBMITTED
+  CONFIRMED
+  FAILED
+  EXPIRED
 }

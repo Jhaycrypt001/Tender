@@ -11,6 +11,8 @@ import { AuroraClient } from "./aurora/client.js";
 import { PriceBook } from "./aurora/prices.js";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
+import { createPublicClient, http, parseEther } from "viem";
+import { monad } from "viem/chains";
 import { createLogger } from "./lib/logger.js";
 import { registry } from "./lib/metrics.js";
 import { registerWorkerGauges } from "./lib/worker-gauges.js";
@@ -18,6 +20,8 @@ import { ChainCatalogueReader, measureCatalogue, saveCatalogue } from "./service
 import { startLoop } from "./workers/loop.js";
 import { Poller } from "./workers/poller.js";
 import { EmailWorker } from "./workers/email.worker.js";
+import { createTransferChain } from "./services/transfer-chain.js";
+import { reconcileTransfers } from "./services/transfer.service.js";
 import { WebhookWorker } from "./workers/webhook.worker.js";
 
 try {
@@ -90,6 +94,28 @@ const emailLoop = config.RESEND_API_KEY
   : undefined;
 if (!emailLoop) emailLog.info("RESEND_API_KEY not set: welcome emails are off");
 
+// Sent transfers (payouts, refunds, splits): settle each from what the chain says, and
+// expire unsigned ones. Read-only against the chain, so it needs no relayer key.
+const transferLog = logger.child({ component: "transfers" });
+const transferChain = createTransferChain({
+  client: createPublicClient({ chain: monad, transport: http(config.MONAD_RPC_URL, { timeout: 10_000 }) }),
+  rpcUrl: config.MONAD_RPC_URL,
+  relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined,
+});
+const transferLoop = startLoop(
+  "transfers",
+  5_000,
+  async () => {
+    const r = await reconcileTransfers({
+      db,
+      chain: transferChain,
+      config: { dailyLimit: config.TRANSFER_DAILY_LIMIT, maxLines: config.TRANSFER_MAX_LINES, minRelayerWei: parseEther(config.RELAYER_MIN_MON) },
+    });
+    if (r.confirmed || r.failed || r.expired) transferLog.info(r, "transfers reconciled");
+  },
+  transferLog,
+);
+
 // The worker's own /metrics: poller, webhook and Aurora metrics live in this process.
 const metricsServer = createServer(async (req, res) => {
   const authorised = !config.METRICS_TOKEN || req.headers.authorization === `Bearer ${config.METRICS_TOKEN}`;
@@ -155,7 +181,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     // Let the current tick finish: every write is transactional, but there is
     // no reason to throw away a pass that is nearly done.
     clearTimeout(catalogueTimer);
-    await Promise.all([poller.stop(), webhookLoop.stop(), emailLoop?.stop()]);
+    await Promise.all([poller.stop(), webhookLoop.stop(), emailLoop?.stop(), transferLoop.stop()]);
     metricsServer.close();
     await Promise.allSettled([db.$disconnect(), redis.quit()]);
     process.exit(0);

@@ -4,6 +4,7 @@ import { Empty, ErrorState } from "@/components/dash/empty";
 import { LinkIcon } from "@/components/dash/icons";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import { listLinks } from "@/lib/api/links";
 import { APP_URL } from "@/lib/auth";
 import { LinkForm } from "./form";
@@ -64,7 +65,7 @@ export default async function LinksPage() {
                               "0.00" here would be a lie about what the buyer
                               is asked for. */}
                           {link.amount ? (
-                            <Money
+                            <FiatMoney
                               amount={link.amount}
                               currency={link.currency}
                             />

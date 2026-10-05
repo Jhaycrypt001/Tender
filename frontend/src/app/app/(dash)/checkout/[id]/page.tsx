@@ -4,6 +4,7 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
 import { Hash, Money, Timestamp, UsdMinimum } from "@/components/dash/money";
+import { FiatMoney } from "@/components/dash/currency";
 import {
   INVOICE_STATUS_HELP,
   InvoiceStatePill,
@@ -70,7 +71,7 @@ export default async function InvoicePage({
       from: chainLabel(p.from_chain),
       sent: <Money amount={p.amount_in} maxDp={8} />,
       settled: p.amount_settled ? (
-        <Money amount={p.amount_settled} currency={invoice.currency} />
+        <FiatMoney amount={p.amount_settled} currency={invoice.currency} />
       ) : (
         <span className="text-mute">&mdash;</span>
       ),

@@ -73,6 +73,23 @@ const schema = z.object({
   /** Tried once when the main model is overloaded (429/5xx). Empty disables the fallback. */
   ASSISTANT_FALLBACK_MODEL: z.string().default("gemini-3.5-flash-lite"),
 
+  /**
+   * Sending money OUT of a merchant's wallet (payouts, refunds, splits).
+   * The merchant's wallet signs; this wallet only submits what was signed and pays the gas
+   * in MON, so it should hold a small float and nothing else. Without it the transfer
+   * routes answer 503 and the dashboard says so. API and worker both read it.
+   */
+  RELAYER_PRIVATE_KEY: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x followed by 64 hex characters")
+    .optional(),
+  /** Refuse new transfers when the relayer holds less than this much MON. */
+  RELAYER_MIN_MON: z.string().regex(/^d+(.d+)?$/).default("0.02"),
+  /** Most transfers one merchant may send in 24 hours. Each one costs Tender gas. */
+  TRANSFER_DAILY_LIMIT: z.coerce.number().int().min(1).default(100),
+  /** Most recipients in one split. */
+  TRANSFER_MAX_LINES: z.coerce.number().int().min(1).max(50).default(10),
+
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),
   /** Port for the worker process's own /metrics endpoint. */
