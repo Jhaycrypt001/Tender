@@ -23,7 +23,10 @@ const schema = z.object({
   AURORA_API_URL: z.url().default("https://intents-api.aurora.dev"),
   AURORA_API_KEY: z.string().min(1, "AURORA_API_KEY is required — create one at https://studio.aurora.dev"),
 
-  POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(5000),
+  /** How often an open invoice's addresses are polled. Aurora throttles our key, so not faster than this. */
+  POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(10_000),
+  /** How often a closed invoice's addresses are polled (late-payment watch). */
+  POLL_CLOSED_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
   INVOICE_TTL_MINUTES: z.coerce.number().int().positive().default(30),
 
   /** A payment within this many basis points of the amount counts as exact. Absorbs price-feed lag. */
@@ -68,7 +71,7 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().min(1).optional(),
   ASSISTANT_MODEL: z.string().min(1).default("gemini-3.1-flash-lite"),
   /** Tried once when the main model is overloaded (429/5xx). Empty disables the fallback. */
-  ASSISTANT_FALLBACK_MODEL: z.string().default("gemini-2.5-flash"),
+  ASSISTANT_FALLBACK_MODEL: z.string().default("gemini-3.5-flash-lite"),
 
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),

@@ -95,7 +95,7 @@ socket hang.
 |---|---|---|
 | `GEMINI_API_KEY` | none | Unset means the route is **not registered**: a 404, and the dashboard shows its "not connected" message |
 | `ASSISTANT_MODEL` | `gemini-3.1-flash-lite` | `gemini-3.1-flash` does not exist for our key; this is the closest |
-| `ASSISTANT_FALLBACK_MODEL` | `gemini-2.5-flash` | Tried **once** if the main model answers 429/5xx or cannot be reached. Empty disables it |
+| `ASSISTANT_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Tried **once** if the main model answers 429/5xx or cannot be reached. Empty disables it |
 
 - Never on Vercel and never `NEXT_PUBLIC_`. The frontend only talks to our API.
 - The key travels in the `x-goog-api-key` header, never in a URL or log line.

@@ -210,6 +210,26 @@ describe("poller", () => {
     expect(await status(inv.id)).toBe("SETTLED");
   });
 
+  it("watches an open invoice every interval, and a closed one only once per closed interval", async () => {
+    const inv = await invoice();
+    const { poller, clock } = makePoller(t);
+    const evm = () => t.db.invoiceAddress.findFirstOrThrow({ where: { address: inv.evm } });
+
+    await poller.tick();
+    expect((await evm()).nextPollAt.getTime() - clock.now.getTime()).toBe(5_000);
+
+    t.aurora.push(inv.evm, "received", usdc(inv.evm, 49));
+    t.aurora.push(inv.evm, "success", payout(inv.evm, 48.8));
+    clock.now = new Date(clock.now.getTime() + 10_000);
+    await poller.tick();
+    expect(await status(inv.id)).toBe("SETTLED");
+
+    // Closed: still watched for late money, but no longer every few seconds.
+    clock.now = new Date(clock.now.getTime() + 10_000);
+    await poller.tick();
+    expect((await evm()).nextPollAt.getTime() - clock.now.getTime()).toBe(60_000);
+  });
+
   it("backs off a failing address without blocking the others", async () => {
     const inv = await invoice();
     const { poller } = makePoller(t);

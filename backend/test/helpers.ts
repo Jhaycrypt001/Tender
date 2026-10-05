@@ -127,6 +127,7 @@ export async function merchant(db: Db, overrides: { verified?: boolean; name?: s
 
 export const POLLER_CONFIG: PollerConfig = {
   intervalMs: 5000,
+  closedIntervalMs: 60_000,
   toleranceBps: 100,
   graceMinutes: 15,
   lateWindowHours: 24,

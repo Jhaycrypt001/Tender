@@ -29,7 +29,14 @@ import { judge, matchOutcomes } from "../services/settlement.js";
  */
 
 export type PollerConfig = {
+  /** How often an address of an OPEN invoice is polled. Also how often the loop wakes. */
   intervalMs: number;
+  /**
+   * How often an address of a CLOSED invoice is polled (settled, expired, or stuck in recovery).
+   * These are watched only for late or extra money, so a minute is plenty, and each poll is
+   * three Aurora calls: polling them as fast as open ones was most of our traffic.
+   */
+  closedIntervalMs: number;
   toleranceBps: number;
   /** After the deadline, how long in-flight deposits still count. */
   graceMinutes: number;
@@ -114,7 +121,7 @@ export class Poller {
       },
       orderBy: { nextPollAt: "asc" },
       take: this.deps.config.batchSize,
-      select: { id: true, address: true, invoiceId: true, pollFailures: true },
+      select: { id: true, address: true, invoiceId: true, pollFailures: true, invoice: { select: { status: true } } },
     });
 
     let transitions = 0;
@@ -130,7 +137,13 @@ export class Poller {
     return { polled: due.length, transitions };
   }
 
-  private async pollAddress(addr: { id: string; address: string; invoiceId: string; pollFailures: number }): Promise<number> {
+  private async pollAddress(addr: {
+    id: string;
+    address: string;
+    invoiceId: string;
+    pollFailures: number;
+    invoice: { status: string };
+  }): Promise<number> {
     const { db, aurora, logger } = this.deps;
     let lists: { received: Deposit[]; success: Deposit[]; failed: Deposit[] };
     try {
@@ -183,7 +196,7 @@ export class Poller {
 
       await tx.invoiceAddress.update({
         where: { id: addr.id },
-        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.deps.config.intervalMs) },
+        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.pollEveryMs(addr.invoice.status)) },
       });
 
       // Polling one address never closes an invoice: its other addresses may
@@ -193,6 +206,12 @@ export class Poller {
 
     await this.publish(transitions);
     return transitions.length;
+  }
+
+  /** Open invoices are watched closely; closed ones only for late money. */
+  private pollEveryMs(invoiceStatus: string): number {
+    const { intervalMs, closedIntervalMs } = this.deps.config;
+    return invoiceStatus === "PENDING" || invoiceStatus === "DETECTED" ? intervalMs : closedIntervalMs;
   }
 
   /** Converts base units and prices each deposit. Entries we cannot read are skipped loudly, never guessed. */

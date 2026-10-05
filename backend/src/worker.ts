@@ -54,6 +54,7 @@ const poller = new Poller({
   logger: logger.child({ component: "poller" }),
   config: {
     intervalMs: config.POLL_INTERVAL_MS,
+    closedIntervalMs: config.POLL_CLOSED_INTERVAL_MS,
     toleranceBps: config.PAYMENT_TOLERANCE_BPS,
     graceMinutes: config.EXPIRY_GRACE_MINUTES,
     lateWindowHours: config.LATE_WINDOW_HOURS,
