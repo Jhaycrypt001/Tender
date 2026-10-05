@@ -85,13 +85,14 @@ export type TestContext = {
   subscriber: Redis;
 };
 
-export async function setupApp(): Promise<TestContext> {
+export async function setupApp(env: Record<string, string> = {}, extra: Partial<Parameters<typeof buildApp>[0]> = {}): Promise<TestContext> {
   const config = loadConfig({
     NODE_ENV: "test",
     LOG_LEVEL: "fatal",
     DATABASE_URL: TEST_DATABASE_URL,
     AURORA_API_KEY: "test",
     TENDER_PLATFORM_KEY: PLATFORM_KEY,
+    ...env,
   });
   const db = createDb(TEST_DATABASE_URL);
   const aurora = fakeAurora();
@@ -99,7 +100,7 @@ export async function setupApp(): Promise<TestContext> {
   const subscriber = new Redis(REDIS_URL);
   // No read cache in tests, so a catalogue written by a test is seen at once.
   const catalogue = new ChainCatalogueReader(redis, 0);
-  const app = await buildApp({ config, db, redis, aurora, stream: new InvoiceStream(subscriber), catalogue });
+  const app = await buildApp({ config, db, redis, aurora, stream: new InvoiceStream(subscriber), catalogue, ...extra });
   return { app, db, aurora, redis, subscriber };
 }
 

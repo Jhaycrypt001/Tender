@@ -55,10 +55,12 @@ Content-Type: application/json
   from the body.**
 - `question` is a string, 1–200 characters. The frontend trims it and caps it
   at 200, but validate anyway (zod, like the other routes).
-- `answer` is **plain text**: no markdown, no bullet lists, no code fences. The
-  chat animates it in word by word, so `**bold**` would show the asterisks.
-  Keep it short, roughly 1–4 sentences and under ~120 words. The answer card
-  scrolls, but short reads better.
+- `answer` is **markdown, limited to three things**: `**bold**`, `` `inline code` ``
+  and lists whose lines start with `- `. No headings, tables, code blocks, links
+  or images. The backend reduces every answer to that subset before it leaves
+  the server (`limitMarkdown`), and the dashboard renders only that subset
+  (`frontend/src/lib/safe-markdown.ts`): bold and code get styled, anything else
+  shows as plain text. Keep it short, roughly 1–4 sentences and under ~120 words.
 
 ### Errors: what the merchant sees for each
 
@@ -86,27 +88,18 @@ socket hang.
 
 ## Where the LLM key goes
 
-Add it to **`src/config.ts`** like every other secret, and make it optional:
+**Built, 2026-10-05.** The provider is **Google Gemini**, called over plain REST
+(no SDK). Backend env only:
 
-```ts
-ANTHROPIC_API_KEY: z.string().min(1).optional(),
-ASSISTANT_MODEL: z.string().default("claude-sonnet-5-5"),
-```
+| Var | Default | |
+|---|---|---|
+| `GEMINI_API_KEY` | none | Unset means the route is **not registered**: a 404, and the dashboard shows its "not connected" message |
+| `ASSISTANT_MODEL` | `gemini-3.1-flash-lite` | `gemini-3.1-flash` does not exist for our key; this is the closest |
+| `ASSISTANT_FALLBACK_MODEL` | `gemini-2.5-flash` | Tried **once** if the main model answers 429/5xx or cannot be reached. Empty disables it |
 
-Then **register the route only when the key is set**:
-
-```ts
-if (config.ANTHROPIC_API_KEY) assistantRoutes(merchantScope, { db: deps.db, ... });
-```
-
-No key means no route, which means a 404, which means the frontend shows its
-"not connected" message. Nothing half-works.
-
-- Backend env only (Railway). **Never** on Vercel and **never** `NEXT_PUBLIC_`.
-  The frontend never needs it, because it only ever talks to our API.
-- Any provider works. The contract above doesn't care. Claude is the default
-  suggestion because tool use (below) is first-class in its SDK
-  (`npm i @anthropic-ai/sdk`).
+- Never on Vercel and never `NEXT_PUBLIC_`. The frontend only talks to our API.
+- The key travels in the `x-goog-api-key` header, never in a URL or log line.
+- A rejected request (bad key, bad input) is **not** retried on the backup model.
 
 ---
 
@@ -154,7 +147,7 @@ Something like:
 > about this merchant's payments, invoices and balance using only the tools
 > provided. Never guess a number: if a tool didn't return it, say you can't
 > see it. Amounts are exact decimal strings; quote them as given with their
-> asset. Answer in plain text, 1–4 sentences, no markdown. If asked to take an
+> asset. Answer in 1–4 sentences. Markdown is limited to **bold**, `inline code` and "- " lists. If asked to take an
 > action (refund, withdraw, cancel), explain where in the dashboard to do it;
 > you cannot do it yourself. If the question is not about their Tender account,
 > say briefly that you can only help with their Tender payments.
@@ -181,7 +174,7 @@ return `{ answer }`.
 
 ## Testing it end to end
 
-1. Set `ANTHROPIC_API_KEY` in the backend env and restart. The route now exists.
+1. Set `GEMINI_API_KEY` in the backend env and restart. The route now exists.
 2. Quick check without the frontend:
    ```bash
    curl -s -X POST "$API/v1/assistant/ask" \
@@ -195,6 +188,7 @@ return `{ answer }`.
    - tools never return another merchant's rows (seed two merchants, ask as one);
    - `sum_settled` matches the frontend's "How much have I been paid?" figure exactly;
    - no key → route is 404;
+   - a markdown image, link or raw HTML in the model's answer never reaches the merchant;
    - a model timeout → 504 with a readable message, well inside 15 s.
 
 ## Frontend files, for reference (don't need changing)

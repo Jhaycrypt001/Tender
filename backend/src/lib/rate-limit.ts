@@ -18,6 +18,9 @@ type Group = { name: string; max: number };
 function groupFor(req: FastifyRequest): Group {
   const url = req.routeOptions.url ?? req.url;
   if (url.startsWith("/internal/")) return { name: "internal", max: 120 };
+  // Every call costs a model request, so it is far tighter than the rest, and is
+  // counted per merchant whichever way they authenticate.
+  if (url === "/v1/assistant/ask") return { name: "assistant", max: 10 };
   // The dashboard's platform key fronts every signed-in merchant, so it is
   // limited per merchant it acts for, at its own ceiling.
   if (req.headers.authorization?.startsWith("Bearer tp_")) return { name: "platform", max: 1200 };
@@ -30,11 +33,12 @@ function groupFor(req: FastifyRequest): Group {
 }
 
 function identity(req: FastifyRequest, group: Group): string {
-  if (group.name === "platform") {
+  const viaPlatform = req.headers.authorization?.startsWith("Bearer tp_");
+  if (group.name === "platform" || (group.name === "assistant" && viaPlatform)) {
     const id = req.headers["x-tender-merchant"];
     return `merchant:${typeof id === "string" ? id.slice(0, 40) : "none"}`;
   }
-  if (group.name === "merchant") {
+  if (group.name === "merchant" || group.name === "assistant") {
     const key = req.headers.authorization?.split(" ")[1];
     if (key) return `key:${apiKeyPrefix(key)}`;
   }

@@ -10,7 +10,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "outDir": "dist",
-    "rootDir": ".."
+    "rootDir": "..",
+    "paths": { "@/*": ["../frontend/src/*"] }
   },
   "include": ["src", "contract", "scripts", "test", "prisma.config.ts"]
 }

@@ -12,6 +12,7 @@ import { httpRequests, registry } from "./lib/metrics.js";
 import { registerRateLimits } from "./lib/rate-limit.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import type { AuroraClient } from "./aurora/client.js";
+import { assistantRoutes } from "./routes/assistant.js";
 import { requireMerchant } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { internalRoutes } from "./routes/internal.js";
@@ -32,6 +33,8 @@ declare module "fastify" {
 }
 
 export type AppDeps = {
+  /** Test-only: replaces the call to the model provider. */
+  assistantFetch?: typeof fetch;
   config: Config;
   db: Db;
   redis: Redis;
@@ -116,7 +119,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   healthRoutes(app, deps);
   publicRoutes(app, { ...deps, ttlMinutes: config.INVOICE_TTL_MINUTES });
-  internalRoutes(app, { db: deps.db, platformKey: config.TENDER_PLATFORM_KEY });
+  internalRoutes(app, { db: deps.db, platformKey: config.TENDER_PLATFORM_KEY, welcomeEmail: !!config.RESEND_API_KEY });
 
   // Everything under /v1 requires a merchant API key (or the dashboard's platform key). The hook is scoped to
   // this plugin, so it can never leak onto /public or /health.
@@ -124,6 +127,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     requireMerchant(merchantScope, deps.db, config.TENDER_PLATFORM_KEY);
     merchantRoutes(merchantScope, { db: deps.db, redis: deps.redis, chain: deps.chain });
     paymentRoutes(merchantScope, { db: deps.db });
+    if (config.GEMINI_API_KEY) {
+      assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch });
+    }
     dashboardRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, ttlMinutes: config.INVOICE_TTL_MINUTES });
     invoiceRoutes(merchantScope, {
       db: deps.db,

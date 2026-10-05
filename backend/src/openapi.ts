@@ -53,7 +53,8 @@ const ERROR_TEXT: Record<number, string> = {
   429: "Rate limited",
   501: "Not supported — see `message`",
   502: "Aurora could not be reached; nothing was written, retry",
-  503: "Not ready yet",
+  503: "Not ready yet (or, on the assistant, the model is unavailable)",
+  504: "Took too long",
 };
 
 function operation(op: Op) {
@@ -268,6 +269,17 @@ export const OPERATIONS: Record<string, Op> = {
     body: S.UpdateMerchantInput,
     ok: { status: 200, schema: S.Merchant },
     errors: [400],
+  },
+  "POST /v1/assistant/ask": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Ask the assistant a question about your payments",
+    description:
+      "Answers in markdown limited to bold, inline code and `- ` lists. Read-only: it can look at this merchant's payments, invoices and balance, never act. " +
+      "Limited to 10 per minute. Returns 404 when the server has no `GEMINI_API_KEY`, 504 if the model takes longer than 12 s.",
+    body: S.AskInput,
+    ok: { status: 200, schema: S.AskAnswer },
+    errors: [400, 503, 504],
   },
   "GET /v1/merchant/api-keys": {
     tag: "Merchant",

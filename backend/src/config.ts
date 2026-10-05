@@ -49,6 +49,27 @@ const schema = z.object({
     .regex(/^tp_[A-Za-z0-9_-]{43,}$/, "must be tp_ followed by at least 43 URL-safe characters (32 random bytes, base64url)")
     .optional(),
 
+  /**
+   * Welcome email through Resend. Optional: with no key nothing is queued and
+   * sign-in is unaffected. API and worker both read these; only the worker sends.
+   */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).default("Tender <hello@tenderr.xyz>"),
+  /** tenderr.xyz can send but not receive, so set this to a mailbox someone reads. Unset: no reply-to is sent. */
+  EMAIL_REPLY_TO: z.string().min(3).optional(),
+  /** Public origin of the dashboard, used for the links inside emails. */
+  APP_URL: z.url().default("https://tenderr.xyz").transform((u) => u.replace(/\/+$/, "")),
+
+  /**
+   * The Ask assistant (docs/ASSISTANT.md). Optional: with no key the route is
+   * not registered at all, so the dashboard shows its honest "not connected" reply.
+   * Backend env only. Never on Vercel, never NEXT_PUBLIC_.
+   */
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  ASSISTANT_MODEL: z.string().min(1).default("gemini-3.1-flash-lite"),
+  /** Tried once when the main model is overloaded (429/5xx). Empty disables the fallback. */
+  ASSISTANT_FALLBACK_MODEL: z.string().default("gemini-2.5-flash"),
+
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),
   /** Port for the worker process's own /metrics endpoint. */

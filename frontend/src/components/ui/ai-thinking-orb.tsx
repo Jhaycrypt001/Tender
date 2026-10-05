@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { parseAnswer, toPlainText, wordCount, type Run } from "@/lib/safe-markdown";
 import "./ai-thinking-orb.css";
 
 /**
@@ -13,6 +14,24 @@ import "./ai-thinking-orb.css";
  * can ask, and `onPhaseChange` so Escape can close the overlay when idle.
  * All styles are `mo-` prefixed in ai-thinking-orb.css.
  */
+
+/**
+ * Words of an answer, each in its own `.mo-w` span so the reveal can fade them
+ * in one by one. Bold and code keep their style per word. Text only: React
+ * escapes it, so nothing the model wrote can become markup.
+ */
+function runWords(runs: Run[]): React.ReactNode {
+  return runs.flatMap((run, r) =>
+    run.text
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w, i) => (
+        <React.Fragment key={`${r}-${i}`}>
+          <span className={run.code ? "mo-w mo-code" : run.bold ? "mo-w mo-bold" : "mo-w"}>{w}</span>{" "}
+        </React.Fragment>
+      )),
+  );
+}
 
 /* ───────────────────────────── copy ───────────────────────────── */
 const COPY = {
@@ -675,8 +694,8 @@ function createRuntime(env: Env): Runtime {
       ctl.stop = true;
       if (sig.aborted) throw ABORT;
 
-      const words = body.split(/\s+/).filter(Boolean);
-      const n = Math.max(1, words.length);
+      // Counted from what will be shown (markers are not words), so the reveal is timed to it.
+      const n = Math.max(1, wordCount(body));
 
       if (!reduced) {
         env.ui.setPhase("resolve");
@@ -716,7 +735,7 @@ function createRuntime(env: Env): Runtime {
       }
 
       env.ui.setPhase("answered");
-      env.ui.live("Answer ready: " + body);
+      env.ui.live("Answer ready: " + toPlainText(body));
       env.ui.focusAnswer();
     } catch (e) {
       if (e === ABORT) return;
@@ -846,7 +865,7 @@ export default function MorphOrb(props: MorphOrbProps) {
   const pulseRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLParagraphElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const ghostRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -981,7 +1000,7 @@ export default function MorphOrb(props: MorphOrbProps) {
   };
 
   const ready = value.trim().length > 0;
-  const words = answer.split(/\s+/).filter(Boolean);
+  const blocks = parseAnswer(answer);
 
   const labelInner = (name: string) =>
     name === COPY.done ? (
@@ -1048,13 +1067,19 @@ export default function MorphOrb(props: MorphOrbProps) {
                 <i className="mo-a-dot" aria-hidden="true" />
                 <span className="mo-a-q">{head || COPY.answerTitle}</span>
               </div>
-              <p className="mo-a-body" ref={bodyRef}>
-                {words.map((w, i) => (
-                  <React.Fragment key={i}>
-                    <span className="mo-w">{w}</span>{" "}
-                  </React.Fragment>
-                ))}
-              </p>
+              <div className="mo-a-body" ref={bodyRef}>
+                {blocks.map((b, i) =>
+                  b.kind === "p" ? (
+                    <p key={i}>{runWords(b.runs)}</p>
+                  ) : (
+                    <ul key={i}>
+                      {b.items.map((item, j) => (
+                        <li key={j}>{runWords(item)}</li>
+                      ))}
+                    </ul>
+                  ),
+                )}
+              </div>
             </div>
           </div>
         </div>

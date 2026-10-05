@@ -132,6 +132,8 @@ export async function updateMerchant(db: Db, merchant: Merchant, input: Merchant
   return db.merchant.update({ where: { id: merchant.id }, data });
 }
 
+const WELCOME_DELAY_MS = 60_000;
+
 export type GoogleIdentity = { googleSub: string; email: string; name: string };
 
 /**
@@ -147,7 +149,11 @@ export type GoogleIdentity = { googleSub: string; email: string; name: string };
  * take over an existing account. The new merchant gets a `+<sub>` address
  * instead.
  */
-export async function resolveGoogleMerchant(db: Db, who: GoogleIdentity): Promise<{ merchant: Merchant; created: boolean }> {
+export async function resolveGoogleMerchant(
+  db: Db,
+  who: GoogleIdentity,
+  opts: { welcomeEmail?: boolean; now?: Date } = {},
+): Promise<{ merchant: Merchant; created: boolean }> {
   const existing = await db.merchant.findUnique({ where: { googleSub: who.googleSub } });
   if (existing) return { merchant: existing, created: false };
 
@@ -162,6 +168,13 @@ export async function resolveGoogleMerchant(db: Db, who: GoogleIdentity): Promis
         googleSub: who.googleSub,
         settlementAsset: "USDC",
         webhookSecret: generateWebhookSecret(),
+        // Queued in the SAME statement as the merchant: it exists if and only if the
+        // merchant does, and the unique (merchant, kind) pair makes it once-only. The
+        // first send waits a minute so a payout address set right after sign-in is
+        // already in place when the message is built.
+        emails: opts.welcomeEmail
+          ? { create: { kind: "welcome", toEmail: email, nextRetryAt: new Date((opts.now ?? new Date()).getTime() + WELCOME_DELAY_MS) } }
+          : undefined,
       },
     });
     return { merchant, created: true };

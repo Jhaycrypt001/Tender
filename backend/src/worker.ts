@@ -17,6 +17,7 @@ import { registerWorkerGauges } from "./lib/worker-gauges.js";
 import { ChainCatalogueReader, measureCatalogue, saveCatalogue } from "./services/chains.service.js";
 import { startLoop } from "./workers/loop.js";
 import { Poller } from "./workers/poller.js";
+import { EmailWorker } from "./workers/email.worker.js";
 import { WebhookWorker } from "./workers/webhook.worker.js";
 
 try {
@@ -70,6 +71,23 @@ poller.start();
 const webhookLog = logger.child({ component: "webhooks" });
 const webhooks = new WebhookWorker({ db, logger: webhookLog });
 const webhookLoop = startLoop("webhooks", 2_000, () => webhooks.tick(), webhookLog);
+
+// Welcome email: only runs when a Resend key is set (the API queues nothing without one).
+const emailLog = logger.child({ component: "email" });
+const emailLoop = config.RESEND_API_KEY
+  ? startLoop(
+      "email",
+      5_000,
+      () =>
+        new EmailWorker({
+          db,
+          logger: emailLog,
+          config: { apiKey: config.RESEND_API_KEY!, from: config.EMAIL_FROM, replyTo: config.EMAIL_REPLY_TO, appUrl: config.APP_URL },
+        }).tick(),
+      emailLog,
+    )
+  : undefined;
+if (!emailLoop) emailLog.info("RESEND_API_KEY not set: welcome emails are off");
 
 // The worker's own /metrics: poller, webhook and Aurora metrics live in this process.
 const metricsServer = createServer(async (req, res) => {
@@ -136,7 +154,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     // Let the current tick finish: every write is transactional, but there is
     // no reason to throw away a pass that is nearly done.
     clearTimeout(catalogueTimer);
-    await Promise.all([poller.stop(), webhookLoop.stop()]);
+    await Promise.all([poller.stop(), webhookLoop.stop(), emailLoop?.stop()]);
     metricsServer.close();
     await Promise.allSettled([db.$disconnect(), redis.quit()]);
     process.exit(0);

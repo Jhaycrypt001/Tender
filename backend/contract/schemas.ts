@@ -294,6 +294,14 @@ export const ListPaymentsQuery = z.object({
 });
 
 /**
+ * Ask assistant (POST /v1/assistant/ask). Not in the frontend's types.ts: the
+ * dashboard calls it from a server action. `answer` is MARKDOWN limited to bold,
+ * inline code and "- " lists; the dashboard renders that subset and nothing else.
+ */
+export const AskInput = z.object({ question: z.string().trim().min(1).max(200) });
+export const AskAnswer = z.object({ answer: z.string() });
+
+/**
  * Error body. Flat, because the frontend client reads `message` and `fields`
  * from the top level (frontend/src/lib/api/client.ts) and maps the HTTP status
  * to its own `ApiErrorKind`. `error` is a machine-readable code.

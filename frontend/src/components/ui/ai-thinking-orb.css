@@ -373,9 +373,38 @@
   line-height: 1.6;
   color: var(--mo-ink);
 }
+.mo-a-body p {
+  margin: 0;
+}
+.mo-a-body p + p,
+.mo-a-body p + ul,
+.mo-a-body ul + p {
+  margin-top: 8px;
+}
+.mo-a-body ul {
+  margin: 0;
+  padding: 0 0 0 1.1em;
+  list-style: disc;
+}
+.mo-a-body li {
+  margin: 2px 0;
+}
+.mo-a-body li::marker {
+  color: var(--mo-sand);
+}
 .mo-w {
   display: inline-block;
   opacity: 0;
+}
+.mo-bold {
+  font-weight: 600;
+}
+.mo-code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0 0.3em;
+  border-radius: 5px;
+  background: rgba(18, 17, 17, 0.06);
 }
 
 /* "Thinking…" under the orb */

@@ -251,6 +251,23 @@ function placeFunctionPatterns(m: Matrix, version: number) {
     set(m, 8, m.size - 1 - i, 0);
   }
 
+  // Version information, versions 7 and up: 6 bits of version plus 12 bits of
+  // BCH(18,6) check, written twice (beside the top-right and bottom-left
+  // finders). Without it a scanner cannot tell which version it is reading and
+  // rejects the whole code. Versions 1-6 carry none.
+  if (version >= 7) {
+    let rem = version;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+    const bits = (version << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const dark = (bits >>> i) & 1;
+      const a = m.size - 11 + (i % 3);
+      const b = Math.floor(i / 3);
+      set(m, a, b, dark);
+      set(m, b, a, dark);
+    }
+  }
+
   // The permanently dark module. Written AFTER the reservation loops above,
   // because the second of them passes over this exact position and would
   // otherwise clear it — the reservation is what protects it from masking.

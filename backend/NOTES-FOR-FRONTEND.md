@@ -83,3 +83,9 @@ TENDER_PLATFORM_KEY=<the same tp_… value as in backend/.env>
 ```
 (`TENDER_API_KEY` from `npm run merchant:create` still works as a single fixed merchant until the dashboard switches to the platform key.)
 In `backend/`, once: `cp .env.example .env` (add the Aurora key), `npm install`, `npm run setup`. Then run the API (`npm run dev`) and the worker (`npm run dev:worker`), and create your merchant key with `npm run merchant:create -- --name "Demo" --email you@example.com --settlement 0xYourMonadAddress --verified`.
+
+## 2026-10-05: Ask assistant, welcome email, QR
+
+- **`POST /v1/assistant/ask`** (Gemini, `GEMINI_API_KEY`): `{ question }` → `{ answer }`. The answer is **markdown limited to bold, inline code and `- ` lists**; the old "plain text only" rule in `docs/ASSISTANT.md` is gone. The Ask card now renders that subset (`frontend/src/lib/safe-markdown.ts`) and shows everything else as text, never as links, images or HTML. Errors: `404` no key set, `429` over 10/min, `503` model unavailable, `504` took longer than 12 s.
+- **Welcome email.** The first sign-in (`POST /internal/merchants/resolve` → 201) queues one email, sent about a minute later by the worker through Resend. Nothing for the frontend to do. It reads "ready" instead of "set your payout address" if the embedded wallet was verified in that minute.
+- **QR fix.** `frontend/src/lib/qr.ts` produced unscannable codes for any input of 107 bytes or more (version 7 and up were missing their version-information bits). Every address and the `/pay/chk_` URL were shorter, so nothing visible broke, but a longer payload would have. Verified now against an independent decoder for every length from 1 to 213 bytes.

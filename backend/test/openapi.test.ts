@@ -5,7 +5,8 @@ import { setupApp, teardown, type TestContext } from "./helpers.js";
 
 let t: TestContext;
 beforeAll(async () => {
-  t = await setupApp();
+  // A key is set so the assistant route exists: the document always lists it.
+  t = await setupApp({ GEMINI_API_KEY: "test" });
   await t.app.ready();
 });
 afterAll(() => teardown(t));

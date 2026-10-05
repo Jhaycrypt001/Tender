@@ -43,6 +43,7 @@ model Merchant {
   invoices Invoice[]
   links    PaymentLink[]
   apiKeys  ApiKey[]
+  emails   EmailDelivery[]
 }
 
 /// A merchant API key. The key itself is shown once and never stored: only its
@@ -189,6 +190,25 @@ model WebhookDelivery {
   createdAt   DateTime  @default(now())
 
   @@index([deliveredAt, nextRetryAt])
+}
+
+/// Outbox for transactional email (the welcome message). Written in the same
+/// transaction as the thing that triggers it, so a merchant exists if and only
+/// if its welcome is queued. The unique pair is what makes it once-only.
+model EmailDelivery {
+  id          String    @id @default(cuid())
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  kind        String
+  toEmail     String
+  attempts    Int       @default(0)
+  nextRetryAt DateTime?
+  sentAt      DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([merchantId, kind])
+  @@index([sentAt, nextRetryAt])
 }
 
 model RecoveryTask {

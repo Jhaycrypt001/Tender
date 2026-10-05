@@ -7,7 +7,7 @@ import { resolveGoogleMerchant } from "../services/merchant.service.js";
 import { toMerchant } from "../services/serialize.js";
 import { isPlatformKey } from "./auth.js";
 
-export type InternalRouteDeps = { db: Db; platformKey?: string };
+export type InternalRouteDeps = { db: Db; platformKey?: string; welcomeEmail?: boolean };
 
 /**
  * Routes only the dashboard's server may call, with the platform key. Not part
@@ -21,7 +21,7 @@ export function internalRoutes(app: FastifyInstance, deps: InternalRouteDeps) {
       googleSub: who.google_sub,
       email: who.email,
       name: who.name?.trim() || who.email.split("@")[0]!,
-    });
+    }, { welcomeEmail: deps.welcomeEmail });
     req.log.info({ merchantId: merchant.id, created, via: "platform" }, "resolved merchant for sign-in");
     return reply.code(created ? 201 : 200).send(toMerchant(merchant));
   });
