@@ -236,7 +236,7 @@ export type Merchant = {
    */
   settlement_verified: boolean;
   webhook_url?: string | null;
-  /** Tender's fee in basis points. 40 = 0.40%. */
+  /** Tender's fee in basis points (50 = 0.50%). Currently always 0. */
   fee_bps: number;
   created_at: Timestamp;
 };

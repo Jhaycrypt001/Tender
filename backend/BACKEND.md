@@ -197,7 +197,7 @@ model Merchant {
   settlementAsset    String?
   settlementVerified Boolean  @default(false)  // see §8
   auroraApiKeyId     String?
-  feeBps             Int      @default(40)
+  feeBps             Int      @default(0)
   webhookUrl         String?
   webhookSecret      String
   // API keys live in the ApiKey table (hash only, argon2): NEVER store a key itself.

@@ -85,11 +85,12 @@ export default async function SettingsPage() {
               hint="What Tender takes from each settled payment."
             />
             <div className="flex flex-col gap-5">
-              {/* fee_bps is basis points. 40 is 0.40%, not 40%. Rendering the
-                  raw number here would be a hundredfold overstatement of our
-                  own fee on the screen a merchant checks it on. */}
+              {/* fee_bps is basis points (50 is 0.50%, not 50%). Tender's fee is
+                  zero, so say so in words; a non-zero value, if one is ever set,
+                  is shown as a percentage. Swap and network costs of the route
+                  are not Tender's fee and are already out of what lands. */}
               <ReadOnlyField label="Tender fee">
-                {(m.fee_bps / 100).toFixed(2)}%
+                {m.fee_bps === 0 ? "None" : `${(m.fee_bps / 100).toFixed(2)}%`}
               </ReadOnlyField>
               <ReadOnlyField label="Merchant ID">
                 <code className="font-mono text-[0.8125rem]">{m.id}</code>

@@ -34,7 +34,7 @@ model Merchant {
   /// Aurora asset id or symbol on Monad, e.g. "USDC".
   settlementAsset    String?
   settlementVerified Boolean  @default(false)
-  feeBps             Int      @default(40)
+  feeBps             Int      @default(0)
   webhookUrl         String?
   webhookSecret      String
   createdAt          DateTime @default(now())
