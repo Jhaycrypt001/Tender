@@ -2,7 +2,7 @@ import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import { CheckoutIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
-import { Money, Timestamp } from "@/components/dash/money";
+import { Timestamp } from "@/components/dash/money";
 import { FiatMoney } from "@/components/dash/currency";
 import { InvoiceStatePill } from "@/components/dash/state-pill";
 import { FilterTabs } from "@/components/dash/filter-tabs";

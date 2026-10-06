@@ -286,8 +286,8 @@ export default function Checkout({
         <section className="rounded-2xl border border-line bg-paper p-5">
           <h2 className="eyebrow mb-1.5 text-mute">Pay with</h2>
           <p className="mb-4 text-[0.875rem] leading-relaxed text-mute">
-            Send whatever you already hold. You do not need to bridge, swap, or
-            hold gas on the destination chain.
+            Send whatever you already hold. You do not need to bridge or swap, and
+            you never need MON. The usual network fee of your own chain applies.
           </p>
           <ChainSelect
             id="pay-chain"

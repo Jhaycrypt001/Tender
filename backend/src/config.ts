@@ -84,7 +84,7 @@ const schema = z.object({
     .regex(/^0x[0-9a-fA-F]{64}$/, "must be 0x followed by 64 hex characters")
     .optional(),
   /** Refuse new transfers when the relayer holds less than this much MON. */
-  RELAYER_MIN_MON: z.string().regex(/^d+(.d+)?$/).default("0.02"),
+  RELAYER_MIN_MON: z.string().regex(/^\d+(\.\d+)?$/, "must be a plain decimal such as 0.02").default("0.02"),
   /** Most transfers one merchant may send in 24 hours. Each one costs Tender gas. */
   TRANSFER_DAILY_LIMIT: z.coerce.number().int().min(1).default(100),
   /** Most recipients in one split. */

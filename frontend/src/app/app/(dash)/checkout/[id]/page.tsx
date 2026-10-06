@@ -95,7 +95,7 @@ export default async function InvoicePage({
         <Card marks>
           <CardHeader
             label="Send this to your buyer"
-            hint="Opens on any phone. They do not need a wallet connected, an account, or gas."
+            hint="Opens on any phone. They do not need a wallet connected or an account."
           />
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">

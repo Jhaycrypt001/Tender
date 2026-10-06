@@ -1,6 +1,6 @@
 import { settleLive } from "@/lib/copy";
 import Button from "../button";
-import MediaSlot from "../media-slot";
+import Image from "next/image";
 
 export default function SettleLive() {
   return (
@@ -68,7 +68,7 @@ export default function SettleLive() {
                 An earlier falloff (opaque to 30%, gone by 76%) was eating the
                 card's border and made the whole slot read as a soft blur. */}
             <div className="mx-auto w-full max-w-[420px]">
-              <MediaSlot
+              <Image
                 src={settleLive.image.src}
                 alt={settleLive.image.alt}
                 width={1254}

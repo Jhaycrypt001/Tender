@@ -1,4 +1,18 @@
 import { Counter, Histogram, Registry, collectDefaultMetrics } from "prom-client";
+import { safeEqual } from "./crypto.js";
+
+/**
+ * Who may read /metrics. With a token set, only a matching Bearer token, compared
+ * in constant time. With none set, development stays open but production answers
+ * "disabled": process and route metrics are not for the public internet.
+ */
+export function metricsAccess(
+  cfg: { NODE_ENV: string; METRICS_TOKEN?: string },
+  authorization: string | undefined,
+): "ok" | "denied" | "disabled" {
+  if (!cfg.METRICS_TOKEN) return cfg.NODE_ENV === "production" ? "disabled" : "ok";
+  return safeEqual(authorization ?? "", `Bearer ${cfg.METRICS_TOKEN}`) ? "ok" : "denied";
+}
 
 /**
  * Prometheus metrics (BACKEND.md §6.9, §10 step 12). One registry per

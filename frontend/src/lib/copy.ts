@@ -17,52 +17,13 @@ export const nav = {
 export const hero = {
   eyebrow: "Live on Monad · 30 chains",
   title: ["Get paid in any coin.", "Settle on Monad."],
-  sub: "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, no gas.",
+  sub: "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, and no MON to hold.",
   primary: { label: "Get started", href: "/app" },
   secondary: { label: "Read the docs", href: "/docs" },
   // Goldsand runs one quiet qualifier under the button pair, not a chip row.
   note: "Non-custodial · Settles on Monad · Works with any wallet",
-  strip: ["30 chains", "~0.4% fee", "Scan and send", "Non-custodial"],
+  strip: ["30 chains", "0% Tender fee", "Scan and send", "Non-custodial"],
 } as const;
-
-export const testimonials = [
-  {
-    quote:
-      "We were losing customers who held everything on Solana. Tender took a day to wire up and that whole category of drop-off just disappeared.",
-    name: "Daniel Okoro",
-    role: "Founder, Cadence Commerce",
-  },
-  {
-    quote:
-      "One address per chain, one settlement asset. The API does exactly what the docs say it does, which is rarer than it should be.",
-    name: "Priya Raghunathan",
-    role: "Staff Engineer, Northwind",
-  },
-  {
-    quote:
-      "The underpayment handling is what sold me. Everyone else pretends partial payments don't happen. Tender models them.",
-    name: "Marcus Feld",
-    role: "Payments Lead, Orbit Retail",
-  },
-  {
-    quote:
-      "Our buyers never see a network picker. They scan, they pay, it settles. Support tickets about 'wrong chain' went to zero.",
-    name: "Aisha Bello",
-    role: "COO, Lumen Goods",
-  },
-  {
-    quote:
-      "Non-custodial was non-negotiable for us after Commerce shut down. Tender never touches the funds and still gives us webhooks.",
-    name: "Tomas Lindqvist",
-    role: "CTO, Fathom Studio",
-  },
-  {
-    quote:
-      "I integrated it on a Sunday afternoon. Create invoice, render the page, listen for the webhook. That's the whole thing.",
-    name: "Grace Mwangi",
-    role: "Indie developer",
-  },
-] as const;
 
 /** The sticky scroll section — five beats, one visible at a time. */
 export const feeScroll = {
@@ -88,7 +49,7 @@ export const feeScroll = {
     },
     {
       caption: "Most of them just leave",
-      sub: "85% of crypto checkouts are abandoned",
+      sub: null,
       img: "/img/beat-4.png",
       alt: "Ink sketch of an open hand letting a smartphone fall away",
     },
@@ -100,19 +61,6 @@ export const feeScroll = {
       link: { label: "See how it works", href: "/#how-it-works" },
     },
   ],
-} as const;
-
-export const comparison = {
-  heading: "Convert more\nwith Tender.",
-  body: "Crypto checkouts lose most of their buyers, and the top cited reason is network selection confusion. Tender removes the choice entirely. Every chain is simply accepted.",
-  // Completion rate, not abandonment: the winning bar has to be the tall one,
-  // the way goldsand.fi charts "up to 7%" against the banks.
-  bars: [
-    { label: "Crypto checkout", value: "15%", pct: 15, tone: "bad", marks: "₿ Ξ ◎" },
-    { label: "Card checkout", value: "30%", pct: 30, tone: "mid", marks: "▣ ▤" },
-    { label: "Tender", value: "98%", pct: 98, tone: "good", marks: "◆" },
-  ],
-  footnote: "Checkout completion rate. Higher is better.",
 } as const;
 
 /** Left rail of three claims beside the looping wallet video — Goldsand's
@@ -146,7 +94,7 @@ export const stats = {
   heading: "Real money. Real speed.\nReal control.",
   body: "Numbers a merchant can hold you to, not a promise about the future.",
   items: [
-    { value: "<1s", label: "Settlement finality" },
+    { value: "<1s", label: "Monad block finality" },
     { value: "$0", label: "Gas paid by you" },
     { value: "100%", label: "Self-custody" },
     { value: "24/7", label: "Always on" },
@@ -167,7 +115,7 @@ export const capabilities = {
     {
       title: "Settle in one asset",
       body: "Whatever comes in, one asset lands on Monad at the address you control. Your books stay in a single currency.",
-      points: ["Monad, chain 143", "Your choice of asset", "Gas abstracted"],
+      points: ["Monad, chain 143", "Your choice of asset", "No MON needed"],
     },
     {
       title: "Know the moment it lands",
@@ -205,7 +153,7 @@ export const inPerson = {
 export const anywhere = {
   eyebrow: "Move money",
   heading: "Take payment from anyone, anywhere",
-  body: "Your buyer opens their wallet, scans, and sends. There is no account to make, no chain to choose and no gas token to go and buy first.",
+  body: "Your buyer opens their wallet, scans, and sends. There is no account to make, no chain to choose and nothing to bridge first.",
   points: [
     {
       title: "One QR, every chain",
@@ -273,7 +221,7 @@ export const howItWorks = {
     {
       n: "02",
       title: "Buyer pays anything",
-      body: "They scan a QR with the wallet they already use. It works from any wallet or exchange, with no bridge, no network switch and no gas token.",
+      body: "They scan a QR with the wallet they already use. It works from any wallet or exchange, with no bridge and no network switch.",
     },
     {
       n: "03",
@@ -281,16 +229,6 @@ export const howItWorks = {
       body: "Funds arrive at your address in your chosen asset. A signed webhook hits your server the moment it lands.",
     },
   ],
-} as const;
-
-export const abandonment = {
-  heading: "Checkout friction is eating your revenue",
-  body: "Every chain you don't accept is a customer who can't pay you. See what that costs over a year.",
-  chartLabels: { left: "Monthly volume", right: "Projected over 12 months" },
-  without: { label: "Without Tender", value: "$180K" },
-  with: { label: "With Tender", value: "$1.2M" },
-  disclaimer:
-    "Illustrative figures based on a $100K monthly checkout volume, comparing an 85% abandonment rate against under 2%. Results vary by business.",
 } as const;
 
 /**
@@ -360,15 +298,15 @@ export const faq = {
     },
     {
       q: "Do I need MON to receive payments?",
-      a: "No. Gas is abstracted end to end. Neither you nor your customer needs to acquire the destination chain's native token for a payment to settle.",
+      a: "No. Neither you nor your customer ever needs MON, the settlement chain's gas token. Your customer still pays the ordinary network fee of the chain they send from, as with any transfer.",
     },
     {
       q: "How fast do payments settle?",
-      a: "Most settle within a minute of confirmation on the source chain. Confirmation time depends on the chain your customer pays from: Solana is seconds, Bitcoin is longer.",
+      a: "It depends on the chain your customer pays from, and the checkout shows an estimate for each one. Solana is around a minute; Bitcoin takes longer, because its blocks do.",
     },
     {
       q: "What does it cost?",
-      a: "Around 0.4% per transaction with no monthly fee, no setup fee, and no minimum volume. You keep the majority of the spread on every payment you process.",
+      a: "Tender charges nothing: no fee per transaction, no monthly fee, no setup fee and no minimum volume. The swap and network cost of moving a payment across chains is not ours, and it comes out of the amount that lands. The checkout shows the minimum for each chain so small payments are not eaten by it.",
     },
   ],
 } as const;

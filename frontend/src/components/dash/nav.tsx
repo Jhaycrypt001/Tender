@@ -17,7 +17,6 @@ import {
   DISPLAY_CURRENCIES,
   NAV,
   isActive,
-  type DisplayCurrency,
   type NavItem,
 } from "@/lib/dash-nav";
 import {

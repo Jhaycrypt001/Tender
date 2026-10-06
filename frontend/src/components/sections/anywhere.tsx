@@ -1,6 +1,6 @@
 import { anywhere } from "@/lib/copy";
 import Button from "../button";
-import MediaSlot from "../media-slot";
+import Image from "next/image";
 
 export default function Anywhere() {
   return (
@@ -60,7 +60,7 @@ export default function Anywhere() {
           {/* Held a little narrower than the column so the portrait render's
               height stays close to the checklist beside it. */}
           <div className="relative mx-auto w-full max-w-[290px] md:max-w-[330px]">
-            <MediaSlot
+            <Image
               src={anywhere.image.src}
               alt={anywhere.image.alt}
               width={1086}

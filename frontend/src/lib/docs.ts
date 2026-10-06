@@ -1,7 +1,7 @@
-/** Docs page content. Written against the §5 API contract in the project
- *  plan — the endpoints, states and webhook events here are the real ones
- *  the backend is being built to, not placeholders, so the page stays true
- *  as the two halves converge. */
+/** Docs page content. The endpoints, states and webhook events listed here are
+ *  the ones the backend implements (backend/docs/openapi.json is the full
+ *  reference). The sample ids, tokens and addresses in the request and response
+ *  examples are illustrative, not real records. */
 
 export const docs = {
   eyebrow: "Documentation",
@@ -12,9 +12,8 @@ export const docs = {
   quickstart: {
     title: "Quickstart",
     body: "Create an invoice with the amount you want and the order reference from your own system. Tender mints a deposit address on every chain you accept and hands back a public token for the checkout page.",
-    request: `curl -X POST https://api.tender.sh/v1/invoices \\
+    request: `curl -X POST $TENDER_API_URL/v1/invoices \\
   -H "Authorization: Bearer $TENDER_API_KEY" \\
-  -H "Idempotency-Key: order_8842" \\
   -H "Content-Type: application/json" \\
   -d '{
     "amount_expected": "49.00",
@@ -35,7 +34,7 @@ export const docs = {
     { "chain": "base",    "address": "0x7c2f91…a4de03" }
   ]
 }`,
-    note: "Send the buyer to https://pay.tender.sh/{token}. The token is not the invoice id. It carries nothing private, so it is safe in a URL.",
+    note: "Send the buyer to {your Tender site}/pay/{token}. The token is not the invoice id. It carries nothing private, so it is safe in a URL.",
   },
 
   endpoints: {
@@ -49,7 +48,7 @@ export const docs = {
           {
             method: "POST",
             path: "/v1/invoices",
-            desc: "Create an invoice. Honours Idempotency-Key, so a retry returns the original.",
+            desc: "Create an invoice. Not idempotent: a retried request creates a second invoice, so store the id from the first response before retrying.",
           },
           {
             method: "GET",
@@ -74,7 +73,7 @@ export const docs = {
           {
             method: "PATCH",
             path: "/v1/merchant",
-            desc: "Update settlement address, webhook URL or fee.",
+            desc: "Update settlement address, settlement asset or webhook URL.",
           },
         ],
       },
@@ -208,7 +207,7 @@ export function verify(rawBody: string, signature: string, timestamp: string, se
     items: [
       {
         q: "Do I need MON to receive payments?",
-        a: "No. Gas is abstracted end to end, so neither you nor your buyer ever acquires the destination chain's native token.",
+        a: "No. Neither you nor your buyer ever needs MON, the settlement chain's gas token. Your buyer still pays the ordinary network fee of the chain they send from, as with any transfer.",
       },
       {
         q: "How long are deposit addresses valid?",

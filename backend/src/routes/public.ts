@@ -42,10 +42,6 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
   });
 
   /**
-   * Supported chains with their measured minimum (USD) and settlement time.
-   * 503 until the worker has measured them: a minimum is never guessed.
-   */
-  /**
    * Display-currency rates (USD to each currency). Presentation only: see fx.service.ts.
    * 503 when there are none, because a rate is never guessed.
    */
@@ -56,7 +52,11 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
     return { base: "USD", as_of: snapshot.asOf, rates: snapshot.rates };
   });
 
-    app.get("/public/chains", async (_req, reply) => {
+  /**
+   * Supported chains with their measured minimum (USD) and settlement time.
+   * 503 until the worker has measured them: a minimum is never guessed.
+   */
+  app.get("/public/chains", async (_req, reply) => {
     const catalogue = await deps.catalogue.get();
     if (!catalogue || catalogue.chains.length === 0) {
       return reply.code(503).send({ error: "not_ready", message: "Chain minimums have not been measured yet. Try again shortly." });

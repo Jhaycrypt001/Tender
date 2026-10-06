@@ -1,6 +1,6 @@
 import { card } from "@/lib/copy";
 import Button from "../button";
-import MediaSlot from "../media-slot";
+import Image from "next/image";
 
 export default function Card() {
   return (
@@ -53,7 +53,7 @@ export default function Card() {
             {/* Negative block margin absorbs the render's own empty border so
                 the card sits optically level with the copy beside it. */}
             <div className="mx-auto w-full max-w-[450px] md:-my-8">
-              <MediaSlot
+              <Image
                 src={card.image.src}
                 alt={card.image.alt}
                 width={1448}

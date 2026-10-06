@@ -12,15 +12,10 @@ function signOut() {
 }
 
 /**
- * Signing out is a state change, so the dashboard menu submits a form rather
- * than following a link — a GET that mutates can be triggered by anything that
- * prefetches or scans links. GET is kept for any plain anchor still pointing
- * here, but POST is the path the app uses.
+ * Signing out is a state change, so it is POST only: a GET that mutates can be
+ * triggered by anything that prefetches, scans, or embeds a link (an image tag on
+ * another site could sign a merchant out). The dashboard menu submits a form.
  */
 export async function POST() {
-  return signOut();
-}
-
-export async function GET() {
   return signOut();
 }

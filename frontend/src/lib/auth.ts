@@ -33,8 +33,14 @@ export function isConfigured(): boolean {
 export const SESSION_COOKIE = "tender_session";
 
 function secret(): string {
-  // Dev fallback keeps a fresh clone runnable; production must set its own.
-  return process.env.SESSION_SECRET ?? "tender-dev-secret-not-for-production";
+  const set = process.env.SESSION_SECRET;
+  if (set) return set;
+  // The fallback is a public string: anyone could sign a cookie with it. It exists
+  // only so a fresh clone runs, and production refuses to use it.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET is not set. Refusing to sign sessions with the public development secret.");
+  }
+  return "tender-dev-secret-not-for-production";
 }
 
 export type Session = {

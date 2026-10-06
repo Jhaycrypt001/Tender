@@ -105,7 +105,7 @@ export default function OpenLink({
           </div>
           <p className="mt-4 text-[0.9375rem] leading-relaxed text-mute">
             Pay with the coin you already hold: Bitcoin, Solana, a stablecoin.
-            Pick it on the next screen. No bridging, no swapping, no gas to buy.
+            Pick it on the next screen. No bridging and no swapping.
             Nothing moves until you send.
           </p>
         </>
@@ -117,7 +117,7 @@ export default function OpenLink({
           </h1>
           <p className="mt-4 text-[0.9375rem] leading-relaxed text-mute">
             Bitcoin, Solana, a stablecoin: pick what is in your wallet on the next
-            screen and send it. No bridging, no swapping, no gas to buy. Nothing
+            screen and send it. No bridging and no swapping. Nothing
             moves until you send.
           </p>
         </>

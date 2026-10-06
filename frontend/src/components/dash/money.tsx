@@ -191,7 +191,7 @@ export function UsdMinimum({
   // The backend may or may not send its own marker. Strip any leading "$" and
   // whitespace so a future change there cannot produce "$$8.45" here, and so
   // this component is the single place the symbol comes from.
-  const bare = amount.trim().replace(/^$s*/, "");
+  const bare = amount.trim().replace(/^\$\s*/, "");
 
   // Cents, like a price tag. These are dollars, not an 18-decimal on-chain
   // value, so 2dp is the honest precision — and `parts` truncates, which for

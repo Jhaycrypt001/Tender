@@ -171,3 +171,29 @@ describe("secrets in logs", () => {
     expect(lines.join("")).toContain("[redacted]");
   });
 });
+
+describe("a made-up platform header on a public route", () => {
+  it("does not earn the platform bucket, so the tight per-IP limit on link-open still applies", async () => {
+    const res = await t.app.inject({
+      method: "POST",
+      url: "/public/links/nosuchlink",
+      headers: { authorization: "Bearer tp_" + "x".repeat(43) },
+      payload: {},
+    });
+    expect(res.headers["x-ratelimit-limit"]).toBe("10");
+    const keys = await t.redis.keys("tender:rl:link-open:*");
+    expect(keys.length).toBeGreaterThan(0);
+    expect((await t.redis.keys("tender:rl:platform:*")).some((k) => k.includes("merchant:none"))).toBe(false);
+  });
+});
+
+describe("RELAYER_MIN_MON config", () => {
+  const base = { AURORA_API_KEY: "x" };
+  it("accepts a plain decimal and refuses anything else", () => {
+    expect(loadConfig(base).RELAYER_MIN_MON).toBe("0.02");
+    expect(loadConfig({ ...base, RELAYER_MIN_MON: "0.05" }).RELAYER_MIN_MON).toBe("0.05");
+    expect(loadConfig({ ...base, RELAYER_MIN_MON: "1" }).RELAYER_MIN_MON).toBe("1");
+    expect(() => loadConfig({ ...base, RELAYER_MIN_MON: "lots" })).toThrow(/RELAYER_MIN_MON/);
+    expect(() => loadConfig({ ...base, RELAYER_MIN_MON: "-1" })).toThrow(/RELAYER_MIN_MON/);
+  });
+});

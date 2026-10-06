@@ -3,7 +3,7 @@ import { Card } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import { LinkIcon } from "@/components/dash/icons";
 import { CopyValue } from "@/components/dash/copy";
-import { Money, Timestamp } from "@/components/dash/money";
+import { Timestamp } from "@/components/dash/money";
 import { FiatMoney } from "@/components/dash/currency";
 import { listLinks } from "@/lib/api/links";
 import { APP_URL } from "@/lib/auth";

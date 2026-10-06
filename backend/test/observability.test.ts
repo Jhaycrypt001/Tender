@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as S from "../contract/schemas.js";
-import { registry } from "../src/lib/metrics.js";
+import { metricsAccess, registry } from "../src/lib/metrics.js";
 import { registerWorkerGauges } from "../src/lib/worker-gauges.js";
 import { ChainCatalogueReader, saveCatalogue } from "../src/services/chains.service.js";
 import { merchant, resetDb, setupApp, teardown, type TestContext } from "./helpers.js";
@@ -129,5 +129,18 @@ describe("worker alert gauges", () => {
     expect(await gauge("tender_chain_minimums_age_seconds")).toBe(-1);
     await saveCatalogue(t.redis, { measuredAt: new Date(clock.now.getTime() - 45 * 60_000).toISOString(), chains: [] });
     expect(await gauge("tender_chain_minimums_age_seconds")).toBe(45 * 60);
+  });
+});
+
+describe("metricsAccess", () => {
+  it("is open in development with no token, but disabled in production", () => {
+    expect(metricsAccess({ NODE_ENV: "development" }, undefined)).toBe("ok");
+    expect(metricsAccess({ NODE_ENV: "production" }, undefined)).toBe("disabled");
+  });
+  it("with a token, needs exactly that Bearer token", () => {
+    const cfg = { NODE_ENV: "production", METRICS_TOKEN: "t".repeat(20) };
+    expect(metricsAccess(cfg, `Bearer ${"t".repeat(20)}`)).toBe("ok");
+    expect(metricsAccess(cfg, `Bearer ${"t".repeat(19)}x`)).toBe("denied");
+    expect(metricsAccess(cfg, undefined)).toBe("denied");
   });
 });

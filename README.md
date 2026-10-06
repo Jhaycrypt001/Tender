@@ -7,7 +7,7 @@
 ### Get paid in any coin. Settle on Monad.
 
 **Your customer pays with whatever they already hold — the Bitcoin they swore they'd never sell, the USDT sitting on Tron, the USDC on Base.
-You receive one asset on Monad. No bridges. No network switching. No gas. No wallet connect.**
+You receive one asset on Monad. No bridges. No network switching. No MON to hold. No wallet connect.**
 
 <br/>
 
@@ -83,7 +83,7 @@ There is also a hole in the market. **Coinbase Commerce shut down outside the US
 
 ## What Tender actually does
 
-A buyer lands on a checkout page. They see an amount and a QR code. They send from the wallet they already have, on the chain they already use. They never connect a wallet, never pick a network, never acquire a gas token.
+A buyer lands on a checkout page. They see an amount and a QR code. They send from the wallet they already have, on the chain they already use. They never connect a wallet, never pick a network, and never need MON. They pay the ordinary network fee of the chain they send from, as with any transfer.
 
 The merchant receives **one asset on Monad**, at an address they control, and a signed webhook the moment it lands.
 
@@ -103,7 +103,7 @@ That is the whole buyer-facing story, and it is deliberately short. Underneath i
 |---|---|---|
 | Buyer picks a network | Yes, from a dropdown | **Never — every chain is accepted** |
 | Buyer connects a wallet | Usually | **Never. Scan and send** |
-| Buyer needs destination gas | Often | **No. Gas is abstracted end to end** |
+| Buyer needs destination gas | Often | **No. Nobody needs MON** (the buyer still pays their own chain's normal fee) |
 | Merchant needs MON | Yes | **No** |
 | Custody of funds | Usually custodial | **Non-custodial. Tender never holds it** |
 | Partial payment | Generic "failed" | **Modelled: `UNDERPAID` / `OVERPAID`** |
@@ -386,9 +386,8 @@ Your customer pays from the chain they already hold. Every one of these settles 
 ### 1 — Create the invoice
 
 ```bash
-curl -X POST https://api.tender.sh/v1/invoices \
+curl -X POST $TENDER_API_URL/v1/invoices \
   -H "Authorization: Bearer $TENDER_API_KEY" \
-  -H "Idempotency-Key: order_8842" \
   -H "Content-Type: application/json" \
   -d '{
     "amount_expected": "49.00",
@@ -417,7 +416,7 @@ curl -X POST https://api.tender.sh/v1/invoices \
 ### 2 — Send the buyer to the checkout
 
 ```
-https://pay.tender.sh/{token}
+{your Tender site}/pay/{token}
 ```
 
 The `token` is **not** the invoice id. It is unguessable, carries nothing merchant-private, and is safe in a URL — which is exactly why the two are different values.
@@ -445,7 +444,7 @@ The `token` is **not** the invoice id. It is unguessable, carries nothing mercha
 
 | Scope | Method | Path | |
 |---|---|---|---|
-| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Honours `Idempotency-Key`. |
+| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Not idempotent: a retry creates a second invoice. |
 | | `GET` | `/v1/invoices/:id` | Fetch one. |
 | | `GET` | `/v1/invoices` | List, filterable, paginated. |
 | | `POST` | `/v1/invoices/:id/cancel` | Cancel before payment. |
@@ -596,7 +595,7 @@ Not assumed, not read off a blog post — probed against the real API with a rea
 | 5 | **Addresses are permanent** — no TTL | Invoice expiry is *Tender's* invention, layered on top. |
 | 6 | **`sender` is an arbitrary identifier** | **The core UX unlock: the buyer never connects a wallet.** |
 | 7 | **Refund asymmetry** after a successful deposit | `NEEDS_RECOVERY` exists as a first-class state. |
-| 10 | **Gas is abstracted end to end** | Merchants need no MON. It is a headline claim, and it is true. |
+| 10 | **Nobody needs MON** | Merchants need no MON to be paid, and buyers never need it. Buyers still pay their own chain's normal network fee. |
 
 **Probed live, 2026-09-26.** Key valid, 197 tokens returned. Settlement assets on Monad confirmed as **USDC** (6dp, the default), **USDT0** (6dp) and **MON** (18dp). Minting confirmed for `evm`, `sol`, `btc` and `tron`. EVM address-sharing confirmed. `persistent-deposit-status` confirmed on an unused address.
 

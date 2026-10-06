@@ -14,6 +14,10 @@
  */
 import AuthProvider from "@/components/auth/privy-provider";
 import { PRIVY_APP_ID } from "@/lib/auth";
+import type { Metadata } from "next";
+
+// Everything under /app is a signed-in screen: keep it out of search results.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function AppLayout({
   children,

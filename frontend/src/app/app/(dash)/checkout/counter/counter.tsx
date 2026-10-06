@@ -312,7 +312,7 @@ function SaleScreen({
               </p>
               <p className="mt-2 max-w-[34ch] text-[0.8125rem] leading-relaxed text-mute">
                 Pay from the wallet you already have: Bitcoin, Solana, Tron or
-                any EVM chain. No app, no account, no gas to buy.
+                any EVM chain. No app, no account, nothing to bridge.
               </p>
 
               <StatusLine status={shown} left={left} />

@@ -160,7 +160,7 @@ The API and the worker run as **two processes** against one Postgres and one Red
 | `NODE_ENV` | `production` (turns on `trustProxy`, so per-IP rate limits see the real client IP) |
 | `DATABASE_URL`, `REDIS_URL` | managed instances; run `prisma migrate deploy` on release, never `migrate dev` |
 | `AURORA_API_KEY` | server only |
-| `CORS_ORIGINS` | the exact frontend origin(s), e.g. `https://tender.xyz` (no trailing slash; preview domains too if we test there) |
+| `CORS_ORIGINS` | the exact frontend origin(s), e.g. `https://tenderr.xyz` (no trailing slash; preview domains too if we test there) |
 | `TENDER_PLATFORM_KEY` | new, see §1 |
 | `METRICS_TOKEN` | set it: `/metrics` is otherwise public |
 | `MONAD_RPC_URL` | defaults to the public RPC; use a paid endpoint for real traffic |

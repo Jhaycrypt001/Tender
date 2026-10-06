@@ -14,7 +14,7 @@ import { createDb } from "./db/client.js";
 import { createPublicClient, http, parseEther } from "viem";
 import { monad } from "viem/chains";
 import { createLogger } from "./lib/logger.js";
-import { registry } from "./lib/metrics.js";
+import { metricsAccess, registry } from "./lib/metrics.js";
 import { registerWorkerGauges } from "./lib/worker-gauges.js";
 import { ChainCatalogueReader, measureCatalogue, saveCatalogue } from "./services/chains.service.js";
 import { startLoop } from "./workers/loop.js";
@@ -118,9 +118,9 @@ const transferLoop = startLoop(
 
 // The worker's own /metrics: poller, webhook and Aurora metrics live in this process.
 const metricsServer = createServer(async (req, res) => {
-  const authorised = !config.METRICS_TOKEN || req.headers.authorization === `Bearer ${config.METRICS_TOKEN}`;
-  if (req.url !== "/metrics" || !authorised) {
-    res.statusCode = req.url === "/metrics" ? 401 : 404;
+  const access = metricsAccess(config, req.headers.authorization);
+  if (req.url !== "/metrics" || access !== "ok") {
+    res.statusCode = req.url === "/metrics" && access === "denied" ? 401 : 404;
     return res.end();
   }
   res.setHeader("content-type", registry.contentType);

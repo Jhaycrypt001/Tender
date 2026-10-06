@@ -1,3 +1,4 @@
+import { CHAINS } from "../aurora/chains.js";
 import type { Merchant } from "../generated/prisma/client.js";
 
 /**
@@ -57,7 +58,7 @@ export function renderWelcome(m: WelcomeInput): Message {
       <tr><td style="padding:24px 32px 0;">
         <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#c48535;">Your account is ready</div>
         <h1 style="margin:12px 0 0;font-size:32px;line-height:1.1;letter-spacing:-0.02em;color:#121111;font-weight:400;">You're in, ${escapeHtml(name)}.</h1>
-        <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:#121111;">Tender lets your customers pay with whatever coin they already hold, on any of 30 chains. You get settled in one asset on Monad. No bridges and no network switching on your side.</p>
+        <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:#121111;">Tender lets your customers pay with whatever coin they already hold, on any of ${CHAINS.length} chains. You get settled in one asset on Monad. No bridges and no network switching on your side.</p>
         <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:#121111;">${lead}</p>
       </td></tr>
       <tr><td style="padding:24px 32px 0;">
@@ -104,7 +105,7 @@ export function renderWelcome(m: WelcomeInput): Message {
   const text = [
     `You're in, ${name}.`,
     "",
-    "Tender lets your customers pay with whatever coin they already hold, on any of 30 chains. You get settled in one asset on Monad.",
+    `Tender lets your customers pay with whatever coin they already hold, on any of ${CHAINS.length} chains. You get settled in one asset on Monad.`,
     "",
     lead,
     `${ctaLabel.replace(" →", "")}: ${ctaUrl}`,

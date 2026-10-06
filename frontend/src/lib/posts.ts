@@ -3,7 +3,8 @@
  * index and each /blog/[slug] page, so a post can never appear in the list
  * without a page behind it.
  *
- * Body copy is placeholder prose — real posts replace `body` and nothing else.
+ * These are Tender's own essays: product reasoning and opinion. They carry no
+ * invented statistics, and a figure only goes in with its source beside it.
  * `date` is an ISO string so it sorts and formats without a parser.
  */
 export type Post = {
@@ -19,14 +20,14 @@ export type Post = {
 export const posts: Post[] = [
   {
     slug: "why-crypto-checkouts-lose-most-buyers",
-    title: "Why crypto checkouts lose most of their buyers",
+    title: "Why crypto checkouts lose buyers at the network picker",
     excerpt:
-      "Over eight in ten crypto checkouts are abandoned, and the reasons are boringly consistent: the buyer is asked to pick a network.",
+      "Buyers abandon crypto checkouts for boringly consistent reasons, and the first is being asked to pick a network.",
     date: "2026-09-18",
     readingTime: "6 min read",
     category: "Research",
     body: [
-      "Card checkouts lose roughly seven buyers in ten. Crypto checkouts lose more than eight, and the gap is not explained by price, trust or volatility. It is explained by the fact that a crypto checkout asks the buyer a question that a card checkout never asks: which network are you on?",
+      "A crypto checkout asks the buyer a question that a card checkout never asks: which network are you on?",
       "The question sounds reasonable to the engineer who wrote it. It is unanswerable for most of the people who see it. A buyer holding USDT knows they hold USDT. Whether that balance sits on Tron, Ethereum or BNB Chain is a detail their wallet has spent years hiding from them, and the checkout has just made it load-bearing.",
       "What follows is a chain of small failures. The buyer guesses. The guess is wrong, or right but expensive. They open a second tab to bridge. The bridge asks for a gas token they do not hold. Somewhere in that sequence the purchase stops being worth the effort, and the merchant never learns why, because nothing failed loudly enough to be logged.",
       "The fix is not a better network picker. It is not showing one. If the checkout accepts every chain the buyer might already hold, the question never has to be asked, and the entire failure chain below it disappears at once.",
@@ -59,9 +60,9 @@ export const posts: Post[] = [
     category: "Product",
     body: [
       "A settlement layer is judged on a single axis: how long the merchant has to stand there not knowing whether they have been paid. Everything else is secondary to closing that window.",
-      "Monad gives us sub-second finality with EVM equivalence, which means the tooling merchants already trust keeps working and the confirmation arrives inside the span of a normal counter interaction. The buyer has not put their phone back in their pocket before the invoice has moved to settled.",
+      "Monad gives us sub-second finality with EVM equivalence, which means the tooling merchants already trust keeps working and a settlement is final almost as soon as it lands. The time before that, while a payment crosses chains, depends on the chain the buyer paid from, and the checkout shows an estimate for each one.",
       "The second reason is cost. Settlement that eats a visible percentage of a small payment is not settlement, it is a tax on small baskets. Fees on Monad stay low enough that a coffee-sized payment is still worth accepting, which is the test most chains quietly fail.",
-      "The third is that neither side needs to hold the native token. Gas is abstracted end to end, so a merchant can receive their first payment without ever having acquired MON, and a buyer never learns the word.",
+      "The third is that neither side needs to hold MON. A merchant can receive their first payment without ever having acquired it, and a buyer never has to hold it either. They pay only the ordinary network fee of the chain they are sending from.",
       "The chain the buyer pays from is theirs to choose. The chain you are settled on should be boring, fast and cheap. That is the split, and it is why the two are different chains.",
     ],
   },

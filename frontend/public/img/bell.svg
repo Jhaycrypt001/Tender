@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" width="360" height="360">
-<rect width="360" height="360" fill="#FFFFFF"/>
-<path d="M92 236 a88 88 0 0 1 176 0 z" fill="#C48535"/>
-<ellipse cx="180" cy="238" rx="104" ry="15" fill="#121111" opacity="0.12"/>
-<rect x="76" y="236" width="208" height="20" rx="10" fill="#C48535"/>
-<circle cx="180" cy="134" r="12" fill="#C48535"/>
-<text x="180" y="316" font-family="system-ui" font-size="14" fill="#8A8783" text-anchor="middle">bell placeholder</text>
-</svg>

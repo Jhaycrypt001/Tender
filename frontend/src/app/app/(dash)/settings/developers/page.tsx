@@ -17,8 +17,12 @@ export const metadata = { title: "Developers · Tender" };
 
 export const dynamic = "force-dynamic";
 
-/** The base URL a merchant points their own client at. */
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api.tender.to";
+/**
+ * The base URL a merchant points their own client at. There is deliberately no
+ * made-up fallback: a host we do not control, shown here, would be copied into
+ * merchants' code. Unset means this screen says so.
+ */
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
 /**
  * Developer settings: the endpoint, the webhook, API keys, the signing secret,
@@ -86,9 +90,13 @@ export default async function DevelopersPage({
           <div className="flex flex-col gap-5">
             <ReadOnlyField
               label="Base URL"
-              action={<CopyValue value={API_BASE} />}
+              action={API_BASE ? <CopyValue value={API_BASE} /> : undefined}
             >
-              <code className="font-mono text-[0.8125rem]">{API_BASE}</code>
+              {API_BASE ? (
+                <code className="font-mono text-[0.8125rem]">{API_BASE}</code>
+              ) : (
+                <span className="text-[0.8125rem] text-mute">Not configured on this deployment.</span>
+              )}
             </ReadOnlyField>
             <ReadOnlyField
               label="Merchant ID"

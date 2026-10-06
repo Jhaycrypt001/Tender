@@ -4,6 +4,7 @@ import { EMAIL_RETRY_MS, EmailWorker } from "../src/workers/email.worker.js";
 import { escapeHtml, renderWelcome, sendEmail } from "../src/services/email.service.js";
 import { resolveGoogleMerchant } from "../src/services/merchant.service.js";
 import { createLogger } from "../src/lib/logger.js";
+import { CHAINS } from "../src/aurora/chains.js";
 
 const logger = createLogger("fatal", false);
 const cfg = { apiKey: "re_test", from: "Tender <hello@tenderr.xyz>", replyTo: "reply@example.com", appUrl: "https://tenderr.xyz" };
@@ -41,7 +42,8 @@ describe("renderWelcome", () => {
     expect(m.subject).toBe("You're in. Set where your money lands.");
     expect(m.html).toContain("https://tenderr.xyz/app/settings");
     expect(m.html).toContain("Not set yet");
-    expect(m.text).toContain("30 chains");
+    expect(m.text).toContain(`${CHAINS.length} chains`);
+    expect(m.html).toContain(`${CHAINS.length} chains`);
     expect(m.html).not.toContain("31+");
   });
 

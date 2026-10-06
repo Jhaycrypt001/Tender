@@ -15,6 +15,17 @@ import { apiKeyPrefix } from "../services/merchant.service.js";
  */
 type Group = { name: string; max: number };
 
+/**
+ * Only /v1 routes can be a platform call. The header is just text until the
+ * key is checked, which happens later, so on any other route it proves nothing:
+ * trusting it there would let anyone claim the platform bucket with a made-up
+ * `Bearer tp_x` and skip the tight per-IP limits on the routes that cost money.
+ */
+function viaPlatform(req: FastifyRequest): boolean {
+  const url = req.routeOptions.url ?? req.url;
+  return url.startsWith("/v1/") && !!req.headers.authorization?.startsWith("Bearer tp_");
+}
+
 function groupFor(req: FastifyRequest): Group {
   const url = req.routeOptions.url ?? req.url;
   if (url.startsWith("/internal/")) return { name: "internal", max: 120 };
@@ -25,7 +36,7 @@ function groupFor(req: FastifyRequest): Group {
   if (url.startsWith("/v1/transfers") && req.method === "POST") return { name: "transfers", max: 20 };
   // The dashboard's platform key fronts every signed-in merchant, so it is
   // limited per merchant it acts for, at its own ceiling.
-  if (req.headers.authorization?.startsWith("Bearer tp_")) return { name: "platform", max: 1200 };
+  if (viaPlatform(req)) return { name: "platform", max: 1200 };
   // Only the POST mints addresses. The GET preview is free, so it shares the ordinary public limit.
   if (url === "/public/links/:token" && req.method === "POST") return { name: "link-open", max: 10 };
   if (url === "/public/invoices/:token/submit-tx") return { name: "submit-tx", max: 10 };
@@ -35,8 +46,7 @@ function groupFor(req: FastifyRequest): Group {
 }
 
 function identity(req: FastifyRequest, group: Group): string {
-  const viaPlatform = req.headers.authorization?.startsWith("Bearer tp_");
-  if (group.name === "platform" || ((group.name === "assistant" || group.name === "transfers") && viaPlatform)) {
+  if (group.name === "platform" || ((group.name === "assistant" || group.name === "transfers") && viaPlatform(req))) {
     const id = req.headers["x-tender-merchant"];
     return `merchant:${typeof id === "string" ? id.slice(0, 40) : "none"}`;
   }

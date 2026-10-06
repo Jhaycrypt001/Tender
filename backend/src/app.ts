@@ -9,7 +9,7 @@ import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { ApiError } from "./lib/errors.js";
 import { loggerOptions } from "./lib/logger.js";
-import { httpRequests, registry } from "./lib/metrics.js";
+import { httpRequests, metricsAccess, registry } from "./lib/metrics.js";
 import { registerRateLimits } from "./lib/rate-limit.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import type { AuroraClient } from "./aurora/client.js";
@@ -98,9 +98,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.get("/metrics", async (req, reply) => {
-    if (config.METRICS_TOKEN && req.headers.authorization !== `Bearer ${config.METRICS_TOKEN}`) {
-      return reply.code(401).send({ error: "unauthorized", message: "Missing or invalid metrics token" });
-    }
+    const access = metricsAccess(config, req.headers.authorization);
+    if (access === "disabled") return reply.code(404).send({ error: "not_found", message: "Route not found" });
+    if (access === "denied") return reply.code(401).send({ error: "unauthorized", message: "Missing or invalid metrics token" });
     return reply.header("content-type", registry.contentType).send(await registry.metrics());
   });
 

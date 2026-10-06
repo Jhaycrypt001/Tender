@@ -40,13 +40,15 @@ const tenderMono = localFont({
   weight: "400",
 });
 
-const SITE = "https://tender.to";
+// Canonical origin for links, social cards and sitemaps. APP_URL is set per
+// deployment; the fallback is the real domain, never a guess.
+const SITE = (process.env.APP_URL ?? "https://tenderr.xyz").replace(/\/+$/, "");
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: "Tender · Get paid in any coin. Settle on Monad.",
   description:
-    "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, no gas.",
+    "Your customer pays with whatever they already hold, even the Bitcoin they swore they'd never sell. You receive one asset on Monad. No bridges, no network switching, and no MON to hold.",
   openGraph: {
     title: "Tender · Get paid in any coin. Settle on Monad.",
     description:
