@@ -38,6 +38,8 @@ export type NavItem = {
    * form still names the same thing; `label` is what everything else reads.
    */
   short?: string;
+  /** The feature is not live yet. The tab still works and the screen says so. */
+  soon?: boolean;
   /** Renders as a dropdown on desktop and a nested group on mobile. */
   children?: NavChild[];
 };
@@ -74,6 +76,7 @@ export const NAV: NavItem[] = [
     label: "Treasury",
     href: "/app/earn",
     icon: EarnIcon,
+    soon: true,
   },
   {
     label: "Checkout",
@@ -95,6 +98,7 @@ export const NAV: NavItem[] = [
     label: "Cash out",
     href: "/app/ramps",
     icon: RampsIcon,
+    soon: true,
   },
 ];
 

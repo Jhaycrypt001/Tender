@@ -7,6 +7,7 @@ import { TenderMark } from "@/components/logo";
 import { SignOutForm } from "@/components/auth/sign-out";
 import CurrencyFlag from "@/components/dash/currency-flag";
 import { currencyMeta, useCurrency } from "@/components/dash/currency";
+import { SoonTag } from "@/components/dash/coming-soon";
 import {
   CloseIcon,
   MenuIcon,
@@ -169,6 +170,7 @@ export default function DashNav({ session }: { session: Session }) {
                     short={item.short}
                     href={item.href}
                     active={isActive(pathname, item.href)}
+                    trailing={item.soon ? <SoonTag className="hidden xl:inline-block" /> : undefined}
                   />
                 </li>
               ),
@@ -467,6 +469,7 @@ function MobileSheet({
                   >
                     <Icon className="h-[1.125rem] w-[1.125rem]" />
                     {item.label}
+                    {item.soon ? <SoonTag className="ml-auto" /> : null}
                   </Link>
 
                   {/* Children are listed inline rather than behind another tap:

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { ComingSoonNotice } from "@/components/dash/coming-soon";
 import { RampsIcon } from "@/components/dash/icons";
 import { Money } from "@/components/dash/money";
 import { getCorridors } from "@/lib/api/ramps";
@@ -65,6 +66,10 @@ export default async function RampsPage() {
         title="From Monad to your bank."
         description="Move settled revenue out to a bank account."
       />
+
+      <ComingSoonNotice>
+        Cashing out to a bank needs a licensed partner we have not signed yet. Nothing on this screen moves money.
+      </ComingSoonNotice>
 
       {!result.ok ? (
         <ErrorState error={result.error} />

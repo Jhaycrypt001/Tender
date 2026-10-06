@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { Empty, ErrorState } from "@/components/dash/empty";
+import { ComingSoonNotice } from "@/components/dash/coming-soon";
 import { EarnIcon } from "@/components/dash/icons";
 import { Money, Timestamp } from "@/components/dash/money";
 import { getPositions } from "@/lib/api/earn";
@@ -45,6 +46,10 @@ export default async function EarnPage() {
         title="Make idle revenue work."
         description="Settled revenue put to work on Monad, instead of sitting still."
       />
+
+      <ComingSoonNotice>
+        Treasury is not switched on yet. Nothing on this screen is live, and no rate you will see here is a promise.
+      </ComingSoonNotice>
 
       {!result.ok ? (
         <ErrorState error={result.error} />
