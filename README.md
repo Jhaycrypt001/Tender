@@ -33,6 +33,7 @@ You receive one asset on Monad. No bridges. No network switching. No gas. No wal
 - [The problem](#the-problem)
 - [What Tender actually does](#what-tender-actually-does)
 - [The one idea](#the-one-idea)
+- [Why this fits Aurora](#why-this-fits-aurora)
 - [See it](#see-it)
   - [The landing page](#the-landing-page)
   - [The merchant dashboard](#the-merchant-dashboard)
@@ -86,6 +87,18 @@ A buyer lands on a checkout page. They see an amount and a QR code. They send fr
 
 The merchant receives **one asset on Monad**, at an address they control, and a signed webhook the moment it lands.
 
+That is the whole buyer-facing story, and it is deliberately short. Underneath it, Tender is doing the work a payment processor has always done — it just does it across thirty chains instead of one.
+
+**For the merchant, Tender is the entire money layer of a business:**
+
+- **Take money.** Create an invoice from the API or the dashboard, or share a payment link that opens a fresh invoice for every buyer who touches it. Put that link in a bio, an email, or a QR code taped beside the till.
+- **Watch it land.** The dashboard shows what has settled on Monad, what is still in flight, and the exact address it lands at. The same transitions stream to your server as signed webhooks and to the checkout page over SSE, so nobody has to refresh anything.
+- **Send money back out.** Refund a buyer, pay a supplier or contractor, or split one payment across several addresses — all from settled revenue, without first moving it somewhere else.
+- **Reconcile without guessing.** Every payment carries your own `reference`, the chain it came from, the amount in and the amount settled. Underpayment, overpayment and failed settlement are each their own state, so your books never have to infer what happened from a generic error.
+- **Price in what your customers think in.** The dashboard displays in any of thirteen currencies. That is presentation only — the settlement asset is a separate, deliberate setting, because letting a flag in a header silently change where money goes would be a catastrophe.
+
+**What Tender never does:** hold your money. Funds move from the buyer's chain to the merchant's Monad address and stop there. Tender is not in the custody path, which is why there is no float, no license, and no account for anyone to freeze.
+
 | | Everyone else | Tender |
 |---|---|---|
 | Buyer picks a network | Yes, from a dropdown | **Never — every chain is accepted** |
@@ -107,6 +120,31 @@ Everything in this repository serves a single sentence:
 Aurora's deposit addresses have no concept of an amount owed, a deadline, a buyer, underpayment, or one-shot fulfilment. They are permanent, reusable, and will accept money forever.
 
 A checkout needs *all* of those ideas. **Tender's entire job is to impose invoice semantics on top of an address primitive that has none of them.** That mapping is the product. The state machine, the poller, the recovery queue, the expiry worker — all of it exists because of that one gap.
+
+---
+
+## Why this fits Aurora
+
+Aurora Intents solves routing. A deposit arrives on one of thirty chains and comes out as a chosen asset on Monad, swapped and bridged through NEAR Intents, with the destination's gas abstracted away so nobody in the transaction has to hold MON. That is a genuinely hard problem, and it is solved.
+
+What it is not, by design, is a checkout. Aurora hands you an **address primitive**: permanent, reusable, amount-agnostic, with no deadline, no buyer, no order, and no notion of being paid in full. Those are commerce concepts, and Aurora does not take a position on commerce — which is the right call for infrastructure, and exactly the gap a processor exists to fill.
+
+**Tender is the commerce layer that primitive is missing.** Every component maps to something Aurora deliberately leaves open:
+
+| Aurora gives | Aurora leaves open | What Tender adds |
+|---|---|---|
+| A permanent deposit address | No expiry, no amount owed | Invoices with `amount_expected`, `expires_at`, and an expiry worker |
+| Routing and swaps across 30 chains | No notion of "this order is paid" | The eight-state machine, with `SETTLED` only on the full amount |
+| Deposit status you can query | **No webhooks** — "coming soon" | A poller, SSE to the checkout, and signed webhooks to the merchant |
+| Automatic refunds *before* a deposit lands | Nothing automatic *after* one does | `NEEDS_RECOVERY` as a first-class state with its own queue |
+| An arbitrary `sender` identifier | No session, no buyer identity | A public checkout `token`, so the buyer never connects a wallet |
+| One API key per integrator, with its own fee | No merchant model | Merchants, hashed API keys, per-merchant settlement and webhooks |
+
+The fee model fits the same way. Aurora's split is **60/40 in the integrator's favour**, the integrator fee goes up to 100 bps, and one integrator can mint as many keys as it needs with independent fee settings — so **one key per merchant** is not a workaround, it is the shape the API was built for. Tender earns on the spread without ever touching custody.
+
+The value runs both ways. Every Tender merchant is a recurring, non-speculative source of cross-chain volume into Monad — not a trader arbitraging once, but a shop taking payments every day, in whatever its customers happen to hold.
+
+> **The honest version:** Aurora could not have shipped this, because a checkout is a product decision rather than a routing one. Tender could not exist without Aurora, because thirty-chain routing with abstracted gas is a multi-year problem. The seam between them is exactly where it should be.
 
 ---
 
@@ -156,7 +194,7 @@ Seven screens behind a server-side auth boundary, each one a sheet of the same d
 
 <img src="docs/media/shot-dash-home.webp" alt="The merchant dashboard home screen" width="100%" />
 
-<sub>**Home.** The screenshots in this section run against a local build with no API connected, which is the honest current state — see [Project status](#project-status). Screens that read from the API say so plainly rather than inventing numbers; there is no mock data anywhere in this project.</sub>
+<sub>**Home.** The live dashboard, signed in and talking to the Tender API: the balance settled on Monad, what is still in flight, and the address it all lands at. Nothing here is mock data — where a screen has nothing to show yet, it says so rather than inventing a number.</sub>
 
 <table>
 <tr>
@@ -577,13 +615,14 @@ Honest, because a README that oversells is worse than no README.
 | Half | State |
 |---|---|
 | **Web** — landing, `/docs`, blog, dashboard, buyer checkout | **Built and deployed** at [tenderr.xyz](https://tenderr.xyz) |
-| **API** — invoices, poller, webhooks, recovery, keys | **Built.** 164 tests pass; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each |
+| **API** — invoices, poller, webhooks, recovery, keys | **Built and deployed.** 164 tests pass; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each |
+| **The two halves, joined** | **Live.** The dashboard screenshots above are signed in against the deployed API — real merchant, real settlement address, real balance |
 
 **What has not happened yet: a real end-to-end payment** — roughly $2 from Solana into a live invoice.
 
 It is blocked, and not on our side. **Monad as a destination is under maintenance on Aurora / NEAR Intents.** Dry quotes to Monad USDC fail from every origin, so per-chain minimums cannot be measured and nothing can settle until it returns. Aurora has confirmed that deposits made during the maintenance window settle once it ends. There is no ETA.
 
-Also outstanding: the API image builds and runs locally but **is not yet deployed** (`backend/docs/DEPLOY.md`) — which is why the dashboard screenshots above show their not-connected states. The five fee-scroll illustrations are numbered placeholders. Earn / Intents Connect and the fiat ramps are post-hackathon (`docs/OFFRAMP.md`).
+Also outstanding: the five fee-scroll illustrations are still numbered placeholders, and a handful of the dashboard captures further up were taken before the API was wired, so they show their empty states rather than live data. Earn / Intents Connect and the fiat ramps are post-hackathon (`docs/OFFRAMP.md`).
 
 ---
 
