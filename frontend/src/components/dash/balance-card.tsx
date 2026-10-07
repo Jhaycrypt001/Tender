@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { Cta } from "@/components/dash/cta";
 import { CopyValue } from "@/components/dash/copy";
-import { EyeIcon, EyeOffIcon } from "@/components/dash/icons";
+import { EyeIcon, EyeOffIcon, RefreshIcon } from "@/components/dash/icons";
 import { Hash, Money } from "@/components/dash/money";
 import { FiatMoney, useCurrency } from "@/components/dash/currency";
 import { isUsdPegged } from "@/lib/fx";
@@ -36,7 +37,13 @@ export type BalanceCardProps = {
   unsettled: BalanceLine[];
   /** `Merchant.settlement_asset`. Picks which settled line is the headline. */
   asset?: string | null;
+  /** The merchant's settlement wallet. Only used to tell whether one is set; it is never shown as somewhere to send to. */
   address?: string | null;
+  /**
+   * The standing deposit address: the address a merchant hands out. Null when
+   * not created yet, undefined when it could not be read.
+   */
+  depositAddress?: string | null;
   /**
    * False when the merchant request failed. Then the address is UNKNOWN, not
    * missing, and the card must not tell the merchant to go and set one.
@@ -65,11 +72,14 @@ export default function BalanceCard({
   unsettled,
   asset,
   address,
+  depositAddress,
   addressKnown = true,
   verified,
   art,
 }: BalanceCardProps) {
   const [hidden, setHidden] = useState(false);
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const { code: displayCode, rates } = useCurrency();
 
   useEffect(() => {
@@ -144,6 +154,15 @@ export default function BalanceCard({
             <EyeIcon className="h-4 w-4" />
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => startRefresh(() => router.refresh())}
+          disabled={refreshing}
+          aria-label="Refresh balance"
+          className="-m-1.5 rounded-full p-1.5 text-paper/45 transition-colors hover:text-paper disabled:cursor-default"
+        >
+          <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       <div className="mt-6 md:max-w-[58%]">
@@ -193,7 +212,7 @@ export default function BalanceCard({
             Pay out
           </Cta>
         </div>
-        {addressKnown && <AddressRow address={address} verified={verified} />}
+        {addressKnown && <AddressRow address={address} depositAddress={depositAddress} verified={verified} />}
       </div>
     </section>
   );
@@ -243,11 +262,21 @@ function SubLine({
   );
 }
 
+/**
+ * The card's address line.
+ *
+ * ⚠️ It shows the DEPOSIT address (the one to hand out), never the settlement
+ * wallet. The settlement wallet used to be here under "Lands at" with a copy
+ * button, and a merchant copied it and sent money straight to it from another
+ * chain, where nothing converts it. The settlement wallet lives in Settings.
+ */
 function AddressRow({
   address,
+  depositAddress,
   verified,
 }: {
   address?: string | null;
+  depositAddress?: string | null;
   verified: boolean;
 }) {
   if (!address) {
@@ -261,13 +290,42 @@ function AddressRow({
     );
   }
 
+  if (depositAddress) {
+    return (
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-paper/40">
+            Deposit address
+          </span>
+          <Hash value={depositAddress} className="text-paper/80" />
+          <CopyValue value={depositAddress} tone="ink" />
+          {!verified && (
+            <Link
+              href="/app/settings"
+              className="rounded-full bg-sand/15 px-2.5 py-1 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-sand transition-colors hover:bg-sand/25"
+            >
+              Unverified
+            </Link>
+          )}
+        </div>
+        <Link
+          href="/app/deposit"
+          className="text-[0.75rem] text-paper/50 underline-offset-4 transition-colors hover:text-paper hover:underline"
+        >
+          Works on any EVM chain · how it works &rarr;
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-paper/40">
-        Lands at
-      </span>
-      <Hash value={address} className="text-paper/80" />
-      <CopyValue value={address} tone="ink" />
+      <Link
+        href="/app/deposit"
+        className="text-[0.8125rem] text-paper/70 underline-offset-4 transition-colors hover:text-paper hover:underline"
+      >
+        Get a deposit address &rarr;
+      </Link>
       {!verified && (
         // An unverified address must not receive money, so the card says so
         // on the address itself, not only in Settings.

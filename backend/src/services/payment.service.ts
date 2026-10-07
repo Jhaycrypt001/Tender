@@ -26,7 +26,7 @@ import { amount, toPayment } from "./serialize.js";
 const SUPPORT_URL = "https://aurora.dev/intents-support";
 
 const detailInclude = {
-  invoice: { select: { id: true, reference: true, amountExpected: true, currency: true, status: true, merchantId: true } },
+  invoice: { select: { id: true, reference: true, amountExpected: true, currency: true, status: true, kind: true, merchantId: true } },
   address: { select: { address: true } },
   recovery: true,
 } satisfies Prisma.PaymentInclude;
@@ -40,6 +40,7 @@ export async function listPayments(db: Db, merchantId: string, query: z.output<t
       invoice: { merchantId, ...(query.invoice_status ? { status: query.invoice_status } : {}) },
       ...(query.status ? { status: query.status } : {}),
     },
+    include: { invoice: { select: { kind: true } } },
     orderBy: [{ firstSeenAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -146,7 +147,7 @@ export function toPaymentDetail(p: PaymentWithDetail, refunded?: string): z.outp
   }
 
   return {
-    ...toPayment(p, refunded),
+    ...toPayment(p, refunded, p.invoice),
     invoice: {
       id: p.invoice.id,
       reference: p.invoice.reference,

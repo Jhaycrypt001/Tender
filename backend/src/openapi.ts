@@ -400,6 +400,22 @@ export const OPERATIONS: Record<string, Op> = {
     ok: { status: 200, schema: S.Merchant },
     errors: [400],
   },
+  "GET /v1/deposit-address": {
+    tag: "Merchant",
+    auth: true,
+    summary: "The standing deposit address, or null if none has been created",
+    description:
+      "One permanent address that accepts any supported EVM chain and settles as USDC on Monad, with no invoice. Each deposit to it appears under /v1/payments with source \"deposit\". Never creates anything.",
+    ok: { status: 200, schema: S.DepositAddress.nullable() },
+  },
+  "POST /v1/deposit-address": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Get (creating on first call) the standing deposit address",
+    description: "Idempotent: the same address comes back every time. Needs a verified settlement address.",
+    ok: { status: 201, schema: S.DepositAddress },
+    errors: [409, 502],
+  },
   "GET /v1/merchant/balance": {
     tag: "Merchant",
     auth: true,

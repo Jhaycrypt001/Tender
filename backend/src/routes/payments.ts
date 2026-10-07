@@ -23,7 +23,7 @@ export function paymentRoutes(app: FastifyInstance, deps: { db: Db }) {
     const query = S.ListPaymentsQuery.parse(req.query);
     const { page, hasMore, nextCursor } = await listPayments(deps.db, merchantOf(req).id, query);
     const refunded = await refundedByPayment(deps.db, page.map((p) => p.id));
-    return { data: page.map((p) => toPayment(p, refunded.get(p.id))), has_more: hasMore, next_cursor: nextCursor };
+    return { data: page.map((p) => toPayment(p, refunded.get(p.id), p.invoice)), has_more: hasMore, next_cursor: nextCursor };
   });
 
   app.get("/v1/payments/:id", async (req) => {

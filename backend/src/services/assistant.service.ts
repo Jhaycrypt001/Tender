@@ -99,7 +99,7 @@ export const TOOLS: Record<string, Tool> = {
         where: paymentWhere(merchant, filter),
         orderBy: [{ firstSeenAt: "desc" }, { id: "desc" }],
         take: limit,
-        include: { invoice: { select: { reference: true } } },
+        include: { invoice: { select: { reference: true, kind: true } } },
       });
       return {
         payments: rows.map((p) => ({
@@ -107,7 +107,9 @@ export const TOOLS: Record<string, Tool> = {
           from_chain: p.fromChain,
           amount_in: amount(p.amountIn),
           amount_settled: p.amountSettled ? amount(p.amountSettled) : null,
-          invoice_reference: p.invoice.reference,
+          // A direct deposit has no invoice: say so, not the internal key of the standing address.
+          invoice_reference: p.invoice.kind === "STANDING" ? null : p.invoice.reference,
+          source: p.invoice.kind === "STANDING" ? "deposit" : "invoice",
           first_seen_at: p.firstSeenAt.toISOString(),
           settled_at: p.settledAt?.toISOString() ?? null,
         })),
@@ -166,6 +168,7 @@ export const TOOLS: Record<string, Tool> = {
       const rows = await db.invoice.findMany({
         where: {
           merchantId: merchant.id,
+          kind: "STANDARD",
           ...(f.status ? { status: f.status } : {}),
           ...(f.since || f.until ? { createdAt: { ...(f.since ? { gte: f.since } : {}), ...(f.until ? { lt: f.until } : {}) } } : {}),
         },

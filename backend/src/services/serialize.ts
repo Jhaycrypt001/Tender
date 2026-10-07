@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { deliveryStatus } from "./merchant.service.js";
 import type * as S from "../../contract/schemas.js";
-import type { ApiKey, Invoice, WebhookDelivery, InvoiceAddress, Merchant, Payment } from "../generated/prisma/client.js";
+import type { ApiKey, Invoice, InvoiceKind, WebhookDelivery, InvoiceAddress, Merchant, Payment } from "../generated/prisma/client.js";
 import { chainById } from "../aurora/chains.js";
 import { Decimal } from "../lib/money.js";
 
@@ -84,7 +84,12 @@ function senderOf(p: Payment): string | null {
   return typeof from === "string" && from ? from : null;
 }
 
-export function toPayment(p: Payment, refunded?: string): Wire<typeof S.Payment> {
+/** A payment made straight to a merchant's standing deposit address has no bill behind it. */
+export function sourceOf(invoice: { kind: InvoiceKind } | undefined): "invoice" | "deposit" {
+  return invoice?.kind === "STANDING" ? "deposit" : "invoice";
+}
+
+export function toPayment(p: Payment, refunded?: string, invoice?: { kind: InvoiceKind }): Wire<typeof S.Payment> {
   return {
     id: p.id,
     invoice_id: p.invoiceId,
@@ -97,6 +102,7 @@ export function toPayment(p: Payment, refunded?: string): Wire<typeof S.Payment>
     status: p.status,
     first_seen_at: p.firstSeenAt.toISOString(),
     settled_at: p.settledAt?.toISOString() ?? null,
+    source: sourceOf(invoice),
   };
 }
 

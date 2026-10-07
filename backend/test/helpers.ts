@@ -54,12 +54,13 @@ export function fakeAurora() {
       alreadyExists: false,
     })),
     submitDeposit: vi.fn(async () => {}),
-    deposits: vi.fn(async (address: string, type: DepositListType) => {
+    deposits: vi.fn(async (address: string, type: DepositListType, page?: { limit: number; offset: number }) => {
       if (failing.has(address)) {
         const { AuroraError } = await import("../src/aurora/client.js");
         throw new AuroraError("upstream", "down", 503);
       }
-      return [...entry(address)[type]];
+      const all = [...entry(address)[type]];
+      return page && type === "received" ? all.slice(page.offset, page.offset + page.limit) : all;
     }),
     tokens: vi.fn(async () =>
       Object.values(ASSETS).map((a) => ({ assetId: a.id, symbol: a.id, blockchain: "test", decimals: a.decimals, price: a.price })),

@@ -78,6 +78,10 @@ model Invoice {
   /// to one InvoiceAddress by family; EVM chains share the evm address.
   chains         String[]
   status         InvoiceStatus @default(PENDING)
+  /// STANDING is a merchant's permanent deposit address, not a bill: it never
+  /// expires, is never judged against an amount, and each deposit to it becomes
+  /// its own Payment. See services/standing.service.ts.
+  kind           InvoiceKind   @default(STANDARD)
   expiresAt      DateTime
   redirectUrl    String?
   metadata       Json?
@@ -224,6 +228,11 @@ model RecoveryTask {
   updatedAt DateTime      @updatedAt
 
   payment Payment @relation(fields: [paymentId], references: [id])
+}
+
+enum InvoiceKind {
+  STANDARD
+  STANDING
 }
 
 enum InvoiceStatus {

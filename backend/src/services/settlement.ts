@@ -89,17 +89,37 @@ function band(input: JudgeInput, sign: 1 | -1): Decimal {
 /* Matching payout outcomes to deposits                                        */
 /* -------------------------------------------------------------------------- */
 
-export type OpenPayment = { id: string; auroraTxHash: string; firstSeenAt: Date };
-export type Outcome = { tx_hash: string; created_at: string };
+export type OpenPayment = {
+  id: string;
+  auroraTxHash: string;
+  firstSeenAt: Date;
+  /** USD value of what was sent, at detection. Used to tell apart deposits that are waiting at the same time. */
+  amountInUsd?: { toString(): string } | null;
+};
+/** `amount` (base units) and `decimals` are what was paid out, in the settlement stablecoin. */
+export type Outcome = { tx_hash: string; created_at: string; amount?: string; decimals?: number | null };
+
+/**
+ * How far above a deposit's USD value at detection its payout may be and still
+ * belong to it. A payout is normally a little LESS than the deposit (route
+ * costs come out of it); the allowance only absorbs price movement between
+ * detection and payout.
+ */
+const PAYOUT_ABOVE_DEPOSIT = new Decimal("1.02");
 
 /**
  * Pairs each unrecorded payout outcome (a `success` or `failed` entry) with
  * the deposit it belongs to.
  *
- * ⚠️ Unverified against a real payment (BACKEND.md §1): we do not yet know
- * whether an outcome carries the deposit's tx hash. So:
+ * Checked live on 2026-10-07: an outcome does NOT carry the deposit's tx hash
+ * (a Base deposit 0x9dec… was paid out as 0xdccb… on Monad). So:
  *   1. an outcome whose tx_hash equals a deposit's is matched to it directly;
- *   2. otherwise outcomes pair with open deposits in chronological order.
+ *   2. otherwise, if both values are known, to the waiting deposit whose USD
+ *      value best explains the payout (the payout is that value less route
+ *      costs). Deposits from different chains settle at different speeds, so
+ *      on an address that takes many deposits — a standing address — the
+ *      oldest waiting deposit is often NOT the one being paid out;
+ *   3. otherwise to the oldest waiting deposit.
  * Every invoice has its own addresses (sender = invoice id), so any outcome on
  * an address belongs to that invoice — only the pairing within it is inferred.
  * Outcomes with no open deposit left are returned as `orphans` and logged.
@@ -122,8 +142,41 @@ export function matchOutcomes(open: OpenPayment[], outcomes: Outcome[]) {
     else unmatched.push(outcome);
   }
   for (const outcome of unmatched) {
-    if (remaining.length) take(0, outcome);
-    else orphans.push(outcome);
+    if (!remaining.length) {
+      orphans.push(outcome);
+      continue;
+    }
+    const byValue = bestByValue(remaining, outcome);
+    take(byValue ?? 0, outcome);
   }
   return { pairs, orphans };
+}
+
+/**
+ * The index of the waiting deposit whose USD value best explains this payout,
+ * or null when that cannot be judged (no payout amount, or no deposit it fits).
+ * A deposit fits when it arrived before the payout and the payout is not more
+ * than it was worth (beyond `PAYOUT_ABOVE_DEPOSIT`). Among those that fit, the
+ * smallest gap wins: that is the deposit the payout is a fee-reduced copy of.
+ */
+function bestByValue(remaining: OpenPayment[], outcome: Outcome): number | null {
+  if (outcome.amount === undefined || outcome.decimals === undefined || outcome.decimals === null) return null;
+  let paid: Decimal;
+  try {
+    paid = new Decimal(outcome.amount).div(new Decimal(10).pow(outcome.decimals));
+  } catch {
+    return null;
+  }
+  const paidAt = new Date(outcome.created_at).getTime();
+
+  let best: { index: number; gap: Decimal } | null = null;
+  remaining.forEach((p, index) => {
+    if (p.amountInUsd === null || p.amountInUsd === undefined) return;
+    if (p.firstSeenAt.getTime() > paidAt) return;
+    const sent = new Decimal(p.amountInUsd.toString());
+    if (paid.gt(sent.mul(PAYOUT_ABOVE_DEPOSIT))) return;
+    const gap = sent.sub(paid).abs();
+    if (!best || gap.lt(best.gap)) best = { index, gap };
+  });
+  return best ? (best as { index: number }).index : null;
 }

@@ -206,3 +206,15 @@ export function EyeOffIcon(p: IconProps) {
     </Svg>
   );
 }
+
+/** Refresh — two arrows chasing round a circle, for re-reading the balance. */
+export function RefreshIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M20 12a8 8 0 0 1-13.7 5.6" />
+      <path d="M4 12a8 8 0 0 1 13.7-5.6" />
+      <path d="M18 3v4h-4" />
+      <path d="M6 21v-4h4" />
+    </Svg>
+  );
+}

@@ -4,12 +4,19 @@ import { AuroraError, type AuroraClient } from "../aurora/client.js";
 import type { PriceBook } from "../aurora/prices.js";
 import type { Deposit } from "../aurora/types.js";
 import type { Db } from "../db/client.js";
-import { Prisma, type InvoiceStatus } from "../generated/prisma/client.js";
+import { Prisma, type InvoiceKind, type InvoiceStatus } from "../generated/prisma/client.js";
 import { eventId } from "../lib/ids.js";
 import type { Logger } from "../lib/logger.js";
 import { depositsSeen, invoiceTransitions, pollerTicks } from "../lib/metrics.js";
 import { Decimal, fromBaseUnits } from "../lib/money.js";
-import { publishInvoiceEvent, webhookEventFor, webhookPayload, type InvoiceEventWire } from "../services/events.js";
+import {
+  DEPOSIT_EVENTS,
+  depositWebhookPayload,
+  publishInvoiceEvent,
+  webhookEventFor,
+  webhookPayload,
+  type InvoiceEventWire,
+} from "../services/events.js";
 import { amount } from "../services/serialize.js";
 import { judge, matchOutcomes } from "../services/settlement.js";
 
@@ -57,9 +64,13 @@ export type PollerDeps = {
 };
 
 type Transition = { token: string; event: InvoiceEventWire };
+type ResolvedOutcome = { paymentId: string; status: "SETTLED" | "FAILED" };
 type Tx = Prisma.TransactionClient;
 
 const MAX_BACKOFF_MS = 5 * 60_000;
+/** A standing address is read in pages of this size, at most this many per poll. */
+const STANDING_PAGE = 100;
+const STANDING_MAX_PAGES = 20;
 
 export class Poller {
   private timer: NodeJS.Timeout | undefined;
@@ -121,7 +132,7 @@ export class Poller {
       },
       orderBy: { nextPollAt: "asc" },
       take: this.deps.config.batchSize,
-      select: { id: true, address: true, invoiceId: true, pollFailures: true, invoice: { select: { status: true } } },
+      select: { id: true, address: true, invoiceId: true, pollFailures: true, invoice: { select: { status: true, kind: true } } },
     });
 
     let transitions = 0;
@@ -142,16 +153,19 @@ export class Poller {
     address: string;
     invoiceId: string;
     pollFailures: number;
-    invoice: { status: string };
+    invoice: { status: string; kind: InvoiceKind };
   }): Promise<number> {
     const { db, aurora, logger } = this.deps;
     let lists: { received: Deposit[]; success: Deposit[]; failed: Deposit[] };
     try {
-      const [received, success, failed] = await Promise.all([
-        aurora.deposits(addr.address, "received"),
-        aurora.deposits(addr.address, "success"),
-        aurora.deposits(addr.address, "failed"),
-      ]);
+      const received =
+        addr.invoice.kind === "STANDING" ? await this.allReceived(addr.address) : await aurora.deposits(addr.address, "received");
+      // Payout lists only matter when a deposit here is waiting for its payout:
+      // one already recorded, or one seen for the first time just now. An idle
+      // address costs one Aurora call per poll instead of three.
+      const [success, failed] = (await this.awaitingPayout(addr.id, received))
+        ? await Promise.all([aurora.deposits(addr.address, "success"), aurora.deposits(addr.address, "failed")])
+        : [[], []];
       lists = { received, success, failed };
     } catch (err) {
       if (!(err instanceof AuroraError)) throw err;
@@ -191,13 +205,22 @@ export class Poller {
         depositsSeen.inc(created.count);
       }
 
-      await this.recordOutcomes(tx, addr, lists.success, "SETTLED");
-      await this.recordOutcomes(tx, addr, lists.failed, "FAILED");
+      const resolved = [
+        ...(await this.recordOutcomes(tx, addr, lists.success, "SETTLED")),
+        ...(await this.recordOutcomes(tx, addr, lists.failed, "FAILED")),
+      ];
 
       await tx.invoiceAddress.update({
         where: { id: addr.id },
-        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.pollEveryMs(addr.invoice.status)) },
+        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.pollEveryMs(addr.invoice.status, addr.invoice.kind)) },
       });
+
+      // A standing deposit address is not a bill: nothing is judged, nothing
+      // closes. Each payment that resolved is reported on its own.
+      if (addr.invoice.kind === "STANDING") {
+        await this.notifyDeposits(tx, addr.invoiceId, resolved);
+        return [];
+      }
 
       // Polling one address never closes an invoice: its other addresses may
       // hold a payment not seen yet. Closing is expireDue's job alone.
@@ -208,10 +231,83 @@ export class Poller {
     return transitions.length;
   }
 
+  /**
+   * Every received deposit on a standing address, page by page. Aurora paginates
+   * this list and a standing address only ever grows, so reading one page would
+   * eventually stop seeing new money. Capped so one address cannot hold a poll
+   * open forever.
+   *
+   * ⚠️ Every poll starts again from the first page, and Aurora does not document
+   * the list's order. If it is oldest-first, deposits past the cap are never
+   * read. That is a lot of deposits for one address, but it must not happen
+   * silently, so hitting the cap is logged as an error.
+   */
+  private async allReceived(address: string): Promise<Deposit[]> {
+    const all: Deposit[] = [];
+    for (let page = 0; page < STANDING_MAX_PAGES; page++) {
+      const batch = await this.deps.aurora.deposits(address, "received", { limit: STANDING_PAGE, offset: page * STANDING_PAGE });
+      all.push(...batch);
+      if (batch.length < STANDING_PAGE) return all;
+    }
+    this.deps.logger.error(
+      { address, read: all.length, cap: STANDING_PAGE * STANDING_MAX_PAGES },
+      "standing address deposit list hit the page cap: newer deposits may not be read",
+    );
+    return all;
+  }
+
+  /**
+   * Whether anything on this address still needs its payout recorded: a deposit
+   * not yet paid out, a failed payout whose recovery is still open (Aurora may
+   * complete it later), or a deposit in `received` that we have not recorded yet.
+   */
+  private async awaitingPayout(addressId: string, received: Deposit[]): Promise<boolean> {
+    const waiting = await this.deps.db.payment.count({
+      where: {
+        invoiceAddressId: addressId,
+        OR: [
+          { status: "DETECTED", outcomeTxHash: null },
+          { status: "FAILED", recovery: { state: { in: ["OPEN", "RETRYING"] } } },
+        ],
+      },
+    });
+    if (waiting > 0) return true;
+    if (!received.length) return false;
+    const known = await this.deps.db.payment.count({ where: { auroraTxHash: { in: received.map((d) => d.tx_hash) } } });
+    return known < new Set(received.map((d) => d.tx_hash)).size;
+  }
+
   /** Open invoices are watched closely; closed ones only for late money. */
-  private pollEveryMs(invoiceStatus: string): number {
+  private pollEveryMs(invoiceStatus: string, kind: InvoiceKind): number {
     const { intervalMs, closedIntervalMs } = this.deps.config;
+    // A standing address is open forever, so it is polled at the slow rate: it is
+    // never waiting on one buyer's payment, and each poll is three Aurora calls.
+    if (kind === "STANDING") return closedIntervalMs;
     return invoiceStatus === "PENDING" || invoiceStatus === "DETECTED" ? intervalMs : closedIntervalMs;
+  }
+
+  /** Queues a webhook for each deposit on a standing address that has just settled or failed. */
+  private async notifyDeposits(tx: Tx, invoiceId: string, resolved: ResolvedOutcome[]) {
+    if (!resolved.length) return;
+    const invoice = await tx.invoice.findUniqueOrThrow({
+      where: { id: invoiceId },
+      select: { id: true, merchantId: true, merchant: { select: { webhookUrl: true } } },
+    });
+    if (!invoice.merchant.webhookUrl) return;
+    const now = this.now();
+    for (const { paymentId, status } of resolved) {
+      const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+      const event = status === "SETTLED" ? DEPOSIT_EVENTS.SETTLED : DEPOSIT_EVENTS.FAILED;
+      await tx.webhookDelivery.create({
+        data: {
+          merchantId: invoice.merchantId,
+          invoiceId: invoice.id,
+          event,
+          payload: depositWebhookPayload(event, invoice, payment, now) as Prisma.InputJsonValue,
+          nextRetryAt: now,
+        },
+      });
+    }
   }
 
   /** Converts base units and prices each deposit. Entries we cannot read are skipped loudly, never guessed. */
@@ -231,15 +327,21 @@ export class Poller {
   }
 
   /** Matches new payout outcomes to open deposits on this address and records them. */
-  private async recordOutcomes(tx: Tx, addr: { id: string; invoiceId: string }, outcomes: Deposit[], status: "SETTLED" | "FAILED") {
-    if (!outcomes.length) return;
+  private async recordOutcomes(
+    tx: Tx,
+    addr: { id: string; invoiceId: string },
+    outcomes: Deposit[],
+    status: "SETTLED" | "FAILED",
+  ): Promise<ResolvedOutcome[]> {
+    const resolved: ResolvedOutcome[] = [];
+    if (!outcomes.length) return resolved;
 
     // Every outcome already recorded on this address. A payment keeps the
     // entries it was matched to in `raw`, so a failure that was later
     // superseded by a success is still recognised as seen.
     const onAddress = await tx.payment.findMany({
       where: { invoiceAddressId: addr.id },
-      select: { id: true, auroraTxHash: true, firstSeenAt: true, raw: true, status: true, outcomeTxHash: true, recovery: true },
+      select: { id: true, auroraTxHash: true, firstSeenAt: true, amountInUsd: true, raw: true, status: true, outcomeTxHash: true, recovery: true },
     });
     const seen = new Set<string>();
     for (const p of onAddress) {
@@ -249,13 +351,14 @@ export class Poller {
       if (raw?.failed?.tx_hash) seen.add(raw.failed.tx_hash);
     }
     const fresh = outcomes.filter((o) => !seen.has(o.tx_hash));
-    if (!fresh.length) return;
+    if (!fresh.length) return resolved;
 
     const open = onAddress.filter((p) => p.status === "DETECTED" && !p.outcomeTxHash);
     const { pairs, orphans } = matchOutcomes(open, fresh);
 
     for (const { paymentId, outcome } of pairs) {
       await this.applyOutcome(tx, onAddress.find((p) => p.id === paymentId)!, outcome as Deposit, status);
+      resolved.push({ paymentId, status });
       if (status === "FAILED") {
         await tx.recoveryTask.create({
           data: { paymentId, reason: "Deposit received, but the onward payout to the settlement address failed" },
@@ -276,6 +379,7 @@ export class Poller {
       for (const { paymentId, outcome } of recovered.pairs) {
         const payment = recovering.find((p) => p.id === paymentId)!;
         await this.applyOutcome(tx, payment, outcome as Deposit, "SETTLED");
+        resolved.push({ paymentId, status: "SETTLED" });
         await tx.recoveryTask.update({
           where: { paymentId },
           data: {
@@ -296,6 +400,7 @@ export class Poller {
         "payout outcome with no matching deposit — left for the next poll",
       );
     }
+    return resolved;
   }
 
   private async applyOutcome(tx: Tx, payment: { id: string; raw: unknown }, deposit: Deposit, status: "SETTLED" | "FAILED") {

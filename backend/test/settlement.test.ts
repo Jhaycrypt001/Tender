@@ -80,6 +80,43 @@ describe("matchOutcomes", () => {
     ]);
   });
 
+  it("matches on value when deposits wait at the same time, not just on age", () => {
+    // A slow 40-dollar deposit arrives first, then a fast 5-dollar one, which is paid out first.
+    const waiting = [
+      { id: "slow", auroraTxHash: "in_slow", firstSeenAt: new Date("2026-01-01T00:01:00Z"), amountInUsd: "40" },
+      { id: "fast", auroraTxHash: "in_fast", firstSeenAt: new Date("2026-01-01T00:02:00Z"), amountInUsd: "5" },
+    ];
+    const paid = (tx_hash: string, minute: number, dollars: string) => ({
+      ...out(tx_hash, minute),
+      amount: String(Math.round(Number(dollars) * 1e6)),
+      decimals: 6,
+    });
+    const { pairs } = matchOutcomes(waiting, [paid("payout_fast", 3, "4.98"), paid("payout_slow", 9, "39.9")]);
+    expect(pairs.map((x) => [x.paymentId, x.outcome.tx_hash])).toEqual([
+      ["fast", "payout_fast"],
+      ["slow", "payout_slow"],
+    ]);
+  });
+
+  it("never gives a payout to a deposit worth less than it, or one that arrived after it", () => {
+    const waiting = [
+      { id: "small", auroraTxHash: "a", firstSeenAt: new Date("2026-01-01T00:01:00Z"), amountInUsd: "1" },
+      { id: "later", auroraTxHash: "b", firstSeenAt: new Date("2026-01-01T00:08:00Z"), amountInUsd: "20" },
+      { id: "right", auroraTxHash: "c", firstSeenAt: new Date("2026-01-01T00:02:00Z"), amountInUsd: "25" },
+    ];
+    const { pairs } = matchOutcomes(waiting, [{ ...out("p", 5), amount: "19900000", decimals: 6 }]);
+    expect(pairs.map((x) => x.paymentId)).toEqual(["right"]);
+  });
+
+  it("falls back to the oldest deposit when values cannot decide", () => {
+    const waiting = [
+      { id: "old", auroraTxHash: "a", firstSeenAt: new Date("2026-01-01T00:01:00Z"), amountInUsd: null },
+      { id: "new", auroraTxHash: "b", firstSeenAt: new Date("2026-01-01T00:02:00Z"), amountInUsd: null },
+    ];
+    const { pairs } = matchOutcomes(waiting, [{ ...out("p", 5), amount: "1000000", decimals: 6 }]);
+    expect(pairs.map((x) => x.paymentId)).toEqual(["old"]);
+  });
+
   it("reports outcomes with no deposit left as orphans", () => {
     const { pairs, orphans } = matchOutcomes([open[1]!], [out("a", 3), out("b", 4)]);
     expect(pairs).toHaveLength(1);

@@ -193,6 +193,22 @@ export type Payment = {
   status: PaymentStatus;
   first_seen_at: Timestamp;
   settled_at?: Timestamp | null;
+  /** "invoice": paid against an invoice. "deposit": sent straight to the standing deposit address. */
+  source: "invoice" | "deposit";
+};
+
+/**
+ * The merchant's standing deposit address: one permanent address that works for
+ * any payer, with no invoice. Each deposit shows up as a payment with source
+ * "deposit". `settles_to` is the merchant's own wallet and is NOT a place to send to.
+ */
+export type DepositAddress = {
+  address: string;
+  /** What it settles as, on Monad. */
+  asset: string;
+  settles_to: string;
+  /** `minimum` is USD, measured, and absent when unknown. */
+  chains: { chain: ChainId; minimum?: Amount }[];
 };
 
 /**

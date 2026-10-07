@@ -28,6 +28,7 @@ export type Checks = [
   Assert<Matches<Out<typeof S.InvoiceStatus>, Wire.InvoiceStatus>>,
   Assert<Matches<Out<typeof S.PaymentStatus>, Wire.PaymentStatus>>,
   Assert<Matches<Out<typeof S.InvoiceAddress>, Wire.InvoiceAddress>>,
+  Assert<Matches<Out<typeof S.DepositAddress>, Wire.DepositAddress>>,
   Assert<Matches<Out<typeof S.Invoice>, Wire.Invoice>>,
   Assert<Matches<In<typeof S.CreateInvoiceInput>, Wire.CreateInvoiceInput>>,
   Assert<Matches<Out<typeof S.Payment>, Wire.Payment>>,

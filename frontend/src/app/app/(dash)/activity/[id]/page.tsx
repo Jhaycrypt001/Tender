@@ -133,28 +133,48 @@ export default async function PaymentPage({
           </div>
         </Card>
 
-        <Card tone="quiet">
-          <CardHeader
-            label="Against invoice"
-            hint="The order this payment was made towards."
-          />
-          <dl className="flex flex-col gap-3.5">
-            <Line label="Your reference">{p.invoice.reference}</Line>
-            <Line label="Amount owed">
-              <FiatMoney
-                amount={p.invoice.amount_expected}
-                currency={p.invoice.currency}
-              />
-            </Line>
-          </dl>
-          <Link
-            href={"/app/checkout/" + p.invoice.id}
-            className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-3.5 text-[0.875rem] text-sand underline-offset-4 hover:underline"
-          >
-            Open the invoice
-            <span aria-hidden="true">&rarr;</span>
-          </Link>
-        </Card>
+        {p.source === "deposit" ? (
+          <Card tone="quiet">
+            <CardHeader
+              label="Direct deposit"
+              hint="Sent to your deposit address, not against an invoice."
+            />
+            <p className="text-[0.875rem] leading-relaxed text-mute">
+              There is no order or amount owed behind this payment: it is
+              whatever was sent to your standing deposit address.
+            </p>
+            <Link
+              href="/app/deposit"
+              className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-3.5 text-[0.875rem] text-sand underline-offset-4 hover:underline"
+            >
+              Your deposit address
+              <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </Card>
+        ) : (
+          <Card tone="quiet">
+            <CardHeader
+              label="Against invoice"
+              hint="The order this payment was made towards."
+            />
+            <dl className="flex flex-col gap-3.5">
+              <Line label="Your reference">{p.invoice.reference}</Line>
+              <Line label="Amount owed">
+                <FiatMoney
+                  amount={p.invoice.amount_expected}
+                  currency={p.invoice.currency}
+                />
+              </Line>
+            </dl>
+            <Link
+              href={"/app/checkout/" + p.invoice.id}
+              className="mt-4 inline-flex items-center gap-1.5 border-t border-line pt-3.5 text-[0.875rem] text-sand underline-offset-4 hover:underline"
+            >
+              Open the invoice
+              <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </Card>
+        )}
       </div>
 
       <div className="mt-7">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { PageShell, SectionHeader } from "@/components/dash/shell";
+import { LiveRefresh } from "@/components/dash/live-refresh";
 import BalanceCard from "@/components/dash/balance-card";
 import { Card, CardCanvas } from "@/components/ui/animated-glow-card";
 import { Cta } from "@/components/dash/cta";
@@ -17,6 +18,7 @@ import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { getBalance, getMerchant } from "@/lib/api/merchant";
+import { getDepositAddress } from "@/lib/api/deposit";
 import { listPayments } from "@/lib/api/payments";
 import type { ApiResult, Merchant } from "@/lib/api/types";
 import { SESSION_COOKIE, decodeSession } from "@/lib/auth";
@@ -48,10 +50,11 @@ const CARD_ART = "/img/card.png";
  * into a blank screen.
  */
 export default async function HomePage() {
-  const [balance, merchant, recent, jar] = await Promise.all([
+  const [balance, merchant, recent, deposit, jar] = await Promise.all([
     getBalance(),
     getMerchant(),
     listPayments({ limit: RECENT }),
+    getDepositAddress(),
     cookies(),
   ]);
 
@@ -62,6 +65,7 @@ export default async function HomePage() {
 
   return (
     <PageShell>
+      <LiveRefresh />
       <Notice merchant={merchant} />
 
       <div className="mb-7">
@@ -87,6 +91,7 @@ export default async function HomePage() {
               unsettled={balance.ok ? balance.data.unsettled : []}
               asset={m?.settlement_asset}
               address={m?.settlement_address}
+              depositAddress={deposit.ok ? (deposit.data?.address ?? null) : undefined}
               addressKnown={merchant.ok}
               verified={m?.settlement_verified ?? false}
               art={CARD_ART}
@@ -109,10 +114,18 @@ export default async function HomePage() {
             bio, an email, or a QR by the till.
           </p>
           <div className="mt-auto pt-7">
-            <Cta href="/app/links">
-              <PlusIcon className="h-3.5 w-3.5" />
-              Create a link
-            </Cta>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+              <Cta href="/app/links">
+                <PlusIcon className="h-3.5 w-3.5" />
+                Create a link
+              </Cta>
+              <Link
+                href="/app/deposit"
+                className="text-[0.8125rem] text-mute underline-offset-4 hover:text-ink hover:underline"
+              >
+                or use your deposit address
+              </Link>
+            </div>
           </div>
         </section>
       </div>
@@ -180,7 +193,16 @@ export default async function HomePage() {
               href: `/app/activity/${p.id}`,
               cells: {
                 when: <Timestamp value={p.first_seen_at} />,
-                from: chainLabel(p.from_chain),
+                from: (
+                  <>
+                    {chainLabel(p.from_chain)}
+                    {p.source === "deposit" && (
+                      <span className="ml-2 rounded-full border border-line px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-mute">
+                        Deposit
+                      </span>
+                    )}
+                  </>
+                ),
                 sent: <Money amount={p.amount_in} maxDp={8} />,
                 tx: <Hash value={p.tx_hash} />,
                 state: <PaymentStatePill status={p.status} />,

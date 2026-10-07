@@ -1,4 +1,5 @@
 import { PageHeader, PageShell } from "@/components/dash/shell";
+import { LiveRefresh } from "@/components/dash/live-refresh";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import { ActivityIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
@@ -49,6 +50,7 @@ export default async function ActivityPage({
 
   return (
     <PageShell>
+      <LiveRefresh />
       <PageHeader
         back="/app/home"
         eyebrow="Activity"
@@ -110,7 +112,16 @@ export default async function ActivityPage({
               href: `/app/activity/${p.id}`,
               cells: {
                 when: <Timestamp value={p.first_seen_at} />,
-                from: chainLabel(p.from_chain),
+                from: (
+                  <>
+                    {chainLabel(p.from_chain)}
+                    {p.source === "deposit" && (
+                      <span className="ml-2 rounded-full border border-line px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-mute">
+                        Deposit
+                      </span>
+                    )}
+                  </>
+                ),
                 /**
                  * ⚠️ `amount_in` is in the SOURCE asset (BTC, SOL…), not the
                  * settlement currency, so it carries no currency prop and gets

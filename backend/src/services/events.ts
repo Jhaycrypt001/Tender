@@ -35,6 +35,35 @@ export function webhookEventFor(status: InvoiceStatus): string | undefined {
   return WEBHOOK_EVENTS[status];
 }
 
+/**
+ * A direct deposit has no invoice status to report, so it gets its own two
+ * events: the money reached the merchant's wallet, or the payout failed.
+ */
+export const DEPOSIT_EVENTS = { SETTLED: "deposit.settled", FAILED: "deposit.failed" } as const;
+
+export function depositWebhookPayload(
+  event: (typeof DEPOSIT_EVENTS)[keyof typeof DEPOSIT_EVENTS],
+  invoice: Pick<Invoice, "id">,
+  payment: Pick<Payment, "id" | "auroraTxHash" | "fromChain" | "amountIn" | "amountSettled" | "settledAt">,
+  at: Date,
+) {
+  return {
+    id: eventId(),
+    event,
+    created_at: at.toISOString(),
+    data: {
+      payment_id: payment.id,
+      tx_hash: payment.auroraTxHash,
+      from_chain: payment.fromChain,
+      amount_in: amount(payment.amountIn),
+      amount_settled: payment.amountSettled ? amount(payment.amountSettled) : null,
+      settled_at: payment.settledAt?.toISOString() ?? null,
+      // The webhook outbox is keyed by invoice; for a deposit this is the standing address's internal id.
+      deposit_address_id: invoice.id,
+    },
+  };
+}
+
 /** The payload shape published at /docs. */
 export function webhookPayload(
   event: string,

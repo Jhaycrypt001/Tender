@@ -32,7 +32,7 @@ export function invoiceRoutes(app: FastifyInstance, deps: InvoiceDeps & { catalo
   app.get("/v1/invoices/:id", async (req) => {
     const { id } = IdParams.parse(req.params);
     const invoice = await getInvoice(deps.db, merchantOf(req).id, id);
-    return { ...toInvoice(invoice, await deps.catalogue.minimums()), payments: invoice.payments.map((p) => toPayment(p)) };
+    return { ...toInvoice(invoice, await deps.catalogue.minimums()), payments: invoice.payments.map((p) => toPayment(p, undefined, invoice)) };
   });
 
   app.post("/v1/invoices/:id/cancel", async (req) => {

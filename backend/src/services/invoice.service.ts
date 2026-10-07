@@ -113,7 +113,7 @@ export async function getInvoice(db: Db, merchantId: string, id: string) {
 export async function listInvoices(db: Db, merchantId: string, query: z.output<typeof S.ListInvoicesQuery>) {
   const limit = query.limit ?? 20;
   const rows = await db.invoice.findMany({
-    where: { merchantId, ...statusFilter(query.status) },
+    where: { merchantId, kind: "STANDARD", ...statusFilter(query.status) },
     include: withAddresses,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
@@ -128,7 +128,7 @@ export async function listInvoices(db: Db, merchantId: string, query: z.output<t
 export async function cancelInvoice(db: Db, merchantId: string, id: string) {
   return db.$transaction(async (tx) => {
     const { count } = await tx.invoice.updateMany({
-      where: { id, merchantId, status: "PENDING", expiresAt: { gt: new Date() } },
+      where: { id, merchantId, kind: "STANDARD", status: "PENDING", expiresAt: { gt: new Date() } },
       data: { status: "CANCELLED" },
     });
     if (count === 0) {
@@ -150,7 +150,8 @@ export async function getPublicInvoice(db: Db, token: string) {
     where: { token },
     include: { addresses: true, merchant: { select: { name: true } } },
   });
-  if (!invoice) throw notFound("Invoice");
+  // A standing deposit address has no checkout page: it is not a bill.
+  if (!invoice || invoice.kind === "STANDING") throw notFound("Invoice");
   return invoice;
 }
 

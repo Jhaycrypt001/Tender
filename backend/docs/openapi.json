@@ -1631,6 +1631,13 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "invoice",
+                              "deposit"
+                            ]
                           }
                         },
                         "required": [
@@ -1640,7 +1647,8 @@
                           "from_chain",
                           "amount_in",
                           "status",
-                          "first_seen_at"
+                          "first_seen_at",
+                          "source"
                         ],
                         "additionalProperties": false
                       }
@@ -2040,6 +2048,13 @@
                                     "string",
                                     "null"
                                   ]
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "invoice",
+                                    "deposit"
+                                  ]
                                 }
                               },
                               "required": [
@@ -2049,7 +2064,8 @@
                                 "from_chain",
                                 "amount_in",
                                 "status",
-                                "first_seen_at"
+                                "first_seen_at",
+                                "source"
                               ],
                               "additionalProperties": false
                             }
@@ -2369,6 +2385,13 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "invoice",
+                              "deposit"
+                            ]
                           }
                         },
                         "required": [
@@ -2378,7 +2401,8 @@
                           "from_chain",
                           "amount_in",
                           "status",
-                          "first_seen_at"
+                          "first_seen_at",
+                          "source"
                         ],
                         "additionalProperties": false
                       }
@@ -2681,6 +2705,13 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "invoice",
+                              "deposit"
+                            ]
                           }
                         },
                         "required": [
@@ -2690,7 +2721,8 @@
                           "from_chain",
                           "amount_in",
                           "status",
-                          "first_seen_at"
+                          "first_seen_at",
+                          "source"
                         ],
                         "additionalProperties": false
                       }
@@ -2989,6 +3021,13 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "invoice",
+                              "deposit"
+                            ]
                           }
                         },
                         "required": [
@@ -2998,7 +3037,8 @@
                           "from_chain",
                           "amount_in",
                           "status",
-                          "first_seen_at"
+                          "first_seen_at",
+                          "source"
                         ],
                         "additionalProperties": false
                       }
@@ -3220,6 +3260,13 @@
                         "null"
                       ]
                     },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "invoice",
+                        "deposit"
+                      ]
+                    },
                     "invoice": {
                       "type": "object",
                       "properties": {
@@ -3338,6 +3385,7 @@
                     "amount_in",
                     "status",
                     "first_seen_at",
+                    "source",
                     "invoice",
                     "history"
                   ],
@@ -3545,6 +3593,13 @@
                         "null"
                       ]
                     },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "invoice",
+                        "deposit"
+                      ]
+                    },
                     "invoice": {
                       "type": "object",
                       "properties": {
@@ -3663,6 +3718,7 @@
                     "amount_in",
                     "status",
                     "first_seen_at",
+                    "source",
                     "invoice",
                     "history"
                   ],
@@ -3920,6 +3976,13 @@
                         "null"
                       ]
                     },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "invoice",
+                        "deposit"
+                      ]
+                    },
                     "invoice": {
                       "type": "object",
                       "properties": {
@@ -4038,6 +4101,7 @@
                     "amount_in",
                     "status",
                     "first_seen_at",
+                    "source",
                     "invoice",
                     "history"
                   ],
@@ -7899,6 +7963,345 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deposit-address": {
+      "get": {
+        "tags": [
+          "Merchant"
+        ],
+        "summary": "The standing deposit address, or null if none has been created",
+        "description": "One permanent address that accepts any supported EVM chain and settles as USDC on Monad, with no invoice. Each deposit to it appears under /v1/payments with source \"deposit\". Never creates anything.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string"
+                        },
+                        "asset": {
+                          "type": "string"
+                        },
+                        "settles_to": {
+                          "type": "string"
+                        },
+                        "chains": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "chain": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "minimum": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              }
+                            },
+                            "required": [
+                              "chain"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "address",
+                        "asset",
+                        "settles_to",
+                        "chains"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Merchant"
+        ],
+        "summary": "Get (creating on first call) the standing deposit address",
+        "description": "Idempotent: the same address comes back every time. Needs a verified settlement address.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "string"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "settles_to": {
+                      "type": "string"
+                    },
+                    "chains": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "chain": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "minimum": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          }
+                        },
+                        "required": [
+                          "chain"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "address",
+                    "asset",
+                    "settles_to",
+                    "chains"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Aurora could not be reached; nothing was written, retry",
             "content": {
               "application/json": {
                 "schema": {

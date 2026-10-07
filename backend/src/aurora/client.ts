@@ -95,9 +95,17 @@ export class AuroraClient {
     });
   }
 
-  /** One of the three deposit lists for an address. */
-  async deposits(address: string, type: DepositListType): Promise<Deposit[]> {
+  /**
+   * One of the three deposit lists for an address. Aurora paginates `received`
+   * only; an invoice address holds a handful of deposits so one page is the whole
+   * list, but a standing address grows without bound, so it passes `page`.
+   */
+  async deposits(address: string, type: DepositListType, page?: { limit: number; offset: number }): Promise<Deposit[]> {
     const qs = new URLSearchParams({ type, address });
+    if (page) {
+      qs.set("limit", String(page.limit));
+      qs.set("offset", String(page.offset));
+    }
     const res = await this.request("GET /api/persistent-deposit-status", DepositStatusResponse, {
       method: "GET",
       path: `/api/persistent-deposit-status/${this.key}?${qs}`,

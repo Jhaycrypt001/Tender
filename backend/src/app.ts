@@ -21,6 +21,7 @@ import { requireMerchant } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { internalRoutes } from "./routes/internal.js";
 import { invoiceRoutes } from "./routes/invoices.js";
+import { depositRoutes } from "./routes/deposit.js";
 import { merchantRoutes } from "./routes/merchants.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { paymentRoutes } from "./routes/payments.js";
@@ -154,6 +155,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ttlMinutes: config.INVOICE_TTL_MINUTES,
       catalogue: deps.catalogue,
     });
+    depositRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, catalogue: deps.catalogue });
   });
 
   return app;

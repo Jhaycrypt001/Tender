@@ -61,6 +61,23 @@ export const Payment = z.object({
   status: PaymentStatus,
   first_seen_at: Timestamp,
   settled_at: Timestamp.nullish(),
+  /** "invoice": paid against an invoice. "deposit": sent straight to the merchant's standing deposit address. */
+  source: z.enum(["invoice", "deposit"]),
+});
+
+/**
+ * The merchant's standing deposit address: one permanent address that works
+ * for any payer, with no invoice. Each deposit to it shows up as a payment with
+ * source "deposit".
+ */
+export const DepositAddress = z.object({
+  address: z.string(),
+  /** What it settles as, on Monad. */
+  asset: z.string(),
+  /** The merchant's own settlement wallet the money lands in. Not a place to send to. */
+  settles_to: z.string(),
+  /** Chains the address accepts. `minimum` is USD, measured, and omitted when unknown. */
+  chains: z.array(z.object({ chain: ChainId, minimum: Amount.optional() })),
 });
 
 export const Invoice = z.object({
