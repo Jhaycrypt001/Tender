@@ -24,7 +24,7 @@ export default async function SplitPage() {
         back="/app/pay"
         eyebrow="Pay · Split"
         title="Split a payment"
-        description="Divide one amount across several addresses. Everyone is paid together, or nobody is."
+        description="Split one amount across addresses."
         actions={
           <Link
             href="/app/pay"

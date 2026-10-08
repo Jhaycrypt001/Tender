@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { TenderMark } from "@/components/logo";
 import { SignOutForm } from "@/components/auth/sign-out";
 import CurrencyFlag from "@/components/dash/currency-flag";
@@ -431,8 +432,11 @@ function MobileSheet({
   onClose: () => void;
   onAsk: () => void;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 md:hidden">
+  // Portalled to <body>: the header has a backdrop-filter, which makes it the
+  // containing block for fixed children, so rendered in place the sheet was
+  // clipped to the header's 62px strip.
+  return createPortal(
+    <div className="fixed inset-0 z-[60] md:hidden">
       <button
         type="button"
         aria-label="Close menu"
@@ -537,6 +541,7 @@ function MobileSheet({
           <SignOutForm className="w-full rounded-xl px-3 py-2 text-left text-[0.875rem] text-ink transition-colors hover:bg-stone" />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

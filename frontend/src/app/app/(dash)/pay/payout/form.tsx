@@ -78,7 +78,7 @@ function PayoutLive({ wallet }: { wallet: WalletBalance }) {
 
   return (
     <Card>
-      <CardHeader label="Send from your wallet" hint="Paid from the money that has settled to you, on Monad. Tender pays the network fee." />
+      <CardHeader label="Send from your wallet" hint="From your settled balance. Tender pays the fee." />
       <div className="flex flex-col gap-5">
         <ReadOnlyField label="Your balance">
           <span className="tabular-nums text-[0.9375rem]">

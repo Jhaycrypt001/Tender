@@ -49,7 +49,7 @@ export default async function AskPage({
         back="/app/home"
         eyebrow="Ask"
         title="Question your ledger."
-        description="Questions about your money, answered from your live payment data."
+        description="Ask about your money."
       />
 
       {/* Rendered regardless of any result: these are navigation, and hiding
@@ -80,7 +80,7 @@ export default async function AskPage({
         <Card tone="quiet">
           <CardHeader
             label="Pick a question"
-            hint="Each one runs against your live payments. The answer shows what it counted and what it left out."
+            hint="Answers come from your live payments."
           />
           <p className="text-[0.9375rem] leading-relaxed text-mute">
             These are questions Tender can answer exactly. Anything needing a
@@ -184,7 +184,7 @@ async function Answer({ question }: { question: Question }) {
       <Card tone="quiet">
         <CardHeader
           label="What this counted"
-          hint="Every payment behind the number above, so you can check it yourself."
+          hint="The payments behind the number."
         />
         <ul className="flex flex-col">
           {rows.map((payment) => (

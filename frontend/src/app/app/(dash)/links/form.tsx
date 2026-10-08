@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader } from "@/components/dash/card";
 import { AmountField, Field, Select } from "@/components/dash/field";
 import { Submit } from "@/components/dash/action";
@@ -18,14 +19,19 @@ import { createLinkAction, type LinkState } from "./actions";
 const EMPTY: LinkState = {};
 
 export function LinkForm() {
+  const router = useRouter();
   const [state, action] = useActionState(createLinkAction, EMPTY);
+  // Reload after the success message has painted so the new link joins the list.
+  useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [state.ok, router]);
   const v = state.values ?? {};
 
   return (
     <Card marks>
       <CardHeader
         label="New link"
-        hint="One link, shared anywhere. Each buyer who opens it gets their own invoice."
+        hint="One link, a fresh invoice per buyer."
       />
 
       <form action={action} className="flex flex-col gap-5">
@@ -36,7 +42,7 @@ export function LinkForm() {
           placeholder="Monthly retainer"
           defaultValue={v.label}
           error={state.fields?.label}
-          hint="Only you see this. It is how you find the link again."
+          hint="Only you see this."
         />
 
         <AmountField
@@ -45,7 +51,7 @@ export function LinkForm() {
           currency={v.currency || "USDC"}
           defaultValue={v.amount}
           error={state.fields?.amount}
-          hint="Leave empty to let the buyer choose what to pay."
+          hint="Leave empty to let the buyer choose."
         />
 
         <Select
@@ -53,7 +59,7 @@ export function LinkForm() {
           name="currency"
           defaultValue={v.currency || "USDC"}
           error={state.fields?.currency}
-          hint="What the amount is priced in. Buyers still pay with any coin."
+          hint="Buyers still pay with any coin."
           // Only what the backend accepts for a link (USD or USDC): any other
           // value comes back as a validation error after the merchant has
           // already filled the form in. EUR and GBP return with a live FX rate.

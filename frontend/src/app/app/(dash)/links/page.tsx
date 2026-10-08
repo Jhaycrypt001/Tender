@@ -34,7 +34,7 @@ export default async function LinksPage() {
         back="/app/home"
         eyebrow="Payment links"
         title="One link, every buyer."
-        description="One link you can reuse. Every buyer who opens it gets their own invoice."
+        description="Reusable. Each buyer gets their own invoice."
       />
 
       <LinkForm />
@@ -48,7 +48,7 @@ export default async function LinksPage() {
           <Empty
             icon={<LinkIcon className="h-5 w-5" />}
             title="No links yet"
-            description="Create one above. A link is worth making when you get paid the same amount more than once — a retainer, a class, a standard service."
+            description="Best for repeat amounts: a retainer, a class."
           />
         ) : (
           <ul className="flex flex-col gap-3">

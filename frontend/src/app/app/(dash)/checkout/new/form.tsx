@@ -74,7 +74,7 @@ export function CreateInvoiceForm({
         <Card>
           <CardHeader
             label="Amount"
-            hint="What the buyer owes. They can pay it in any asset you accept."
+            hint="What the buyer owes."
           />
           <div className="flex flex-col gap-5">
             <AmountField
@@ -97,7 +97,7 @@ export function CreateInvoiceForm({
               required
               defaultValue={v.currency || "USD"}
               error={state.fields?.currency}
-              hint="What the amount is in. You are paid in your settlement asset on Monad, set in Settings."
+              hint="You are paid in your settlement asset."
               options={[
                 { value: "USD", label: "USD" },
                 { value: "USDC", label: "USDC" },
@@ -109,7 +109,7 @@ export function CreateInvoiceForm({
         <Card>
           <CardHeader
             label="Your reference"
-            hint="Your own order number, so this invoice matches your records."
+            hint="Your order number."
           />
           <div className="flex flex-col gap-5">
             <Field
@@ -119,7 +119,7 @@ export function CreateInvoiceForm({
               placeholder="ORD-1042"
               defaultValue={v.reference}
               error={state.fields?.reference}
-              hint="Must be unique. Creating twice with the same reference returns the first invoice rather than making a second."
+              hint="Must be unique."
             />
             <Field
               label="Redirect after payment"
@@ -129,7 +129,7 @@ export function CreateInvoiceForm({
               placeholder="https://yourshop.com/thanks"
               defaultValue={v.redirect_url}
               error={state.fields?.redirect_url}
-              hint="Where the buyer lands once it settles. Leave blank to keep them on the receipt."
+              hint="Where the buyer goes after paying. Optional."
             />
           </div>
         </Card>
@@ -139,7 +139,7 @@ export function CreateInvoiceForm({
         <Card>
           <CardHeader
             label="Chains accepted"
-            hint="One deposit address is minted per chain you tick."
+            hint="One address per chain you tick."
           />
 
           {/* The common chains come first in the list, so the ones most buyers

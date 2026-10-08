@@ -117,7 +117,7 @@ function RefundLive({ payments, wallet }: { payments: Payment[]; wallet: WalletB
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader label="Choose the payment" hint="Only settled payments can be refunded, and never for more than they delivered." />
+        <CardHeader label="Choose the payment" hint="Settled payments only." />
         <fieldset disabled={busy}>
           <legend className="sr-only">Payment to refund</legend>
           <ul className="flex flex-col gap-1.5">

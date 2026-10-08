@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LiveRefresh } from "@/components/dash/live-refresh";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { Hash, Timestamp } from "@/components/dash/money";
@@ -43,6 +44,7 @@ export default async function PayPage() {
 
   return (
     <PageShell>
+      <LiveRefresh />
       <PageHeader
         back="/app/home"
         eyebrow="Pay"
@@ -74,7 +76,7 @@ export default async function PayPage() {
       {recent.ok && recent.data.data.length > 0 && (
         <section className="mt-8" aria-labelledby="recent-transfers">
           <Card>
-            <CardHeader label="Recent transfers" hint="What you have sent from your wallet, and what the network says about each." />
+            <CardHeader label="Recent transfers" hint="Sent from your wallet." />
             <h2 id="recent-transfers" className="sr-only">
               Recent transfers
             </h2>

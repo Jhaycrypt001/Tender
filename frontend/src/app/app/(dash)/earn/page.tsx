@@ -44,7 +44,7 @@ export default async function EarnPage() {
         back="/app/home"
         eyebrow="Treasury"
         title="Make idle revenue work."
-        description="Settled revenue put to work on Monad, instead of sitting still."
+        description="Put settled revenue to work."
       />
 
       <ComingSoonNotice>
@@ -57,7 +57,7 @@ export default async function EarnPage() {
         <Empty
           icon={<EarnIcon className="h-5 w-5" />}
           title="Nothing earning yet"
-          description="Once revenue settles on Monad it can be put to work rather than sitting idle. Open positions appear here with what they have earned."
+          description="Open positions and earnings appear here."
         />
       ) : (
         <>

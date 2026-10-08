@@ -35,7 +35,7 @@ export default async function DepositPage() {
       back="/app/home"
       eyebrow="Deposit address"
       title="One address. Any payer."
-      description="Share this address and money sent to it from any supported chain arrives in your wallet as USDC on Monad."
+      description="Money sent here from any chain arrives as USDC on Monad."
     />
   );
 
@@ -62,7 +62,7 @@ export default async function DepositPage() {
         <Card tone="quiet">
           <CardHeader
             label="Not set up yet"
-            hint="Created once, then yours to keep."
+            hint="Yours to keep."
           />
           {m.settlement_address && m.settlement_verified ? (
             <>
@@ -92,7 +92,7 @@ export default async function DepositPage() {
           <Card tone="quiet">
             <CardHeader
               label="Your deposit address"
-              hint="Works on every EVM chain listed below."
+              hint="Works on every EVM chain below."
             />
             <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-paper px-3 py-2.5">
               <code className="min-w-0 break-all font-mono text-[0.8125rem]">
@@ -112,7 +112,7 @@ export default async function DepositPage() {
             <Card tone="quiet">
               <CardHeader
                 label="Accepted chains"
-                hint="Minimums are USD and change with network fees."
+                hint="Minimums in USD."
               />
               {address.chains.length === 0 ? (
                 <p className="text-[0.875rem] leading-relaxed text-mute">
@@ -141,7 +141,7 @@ export default async function DepositPage() {
             <Card tone="quiet">
               <CardHeader
                 label="Good to know"
-                hint="So nobody is surprised."
+                hint="Good to know."
               />
               <ul className="flex flex-col gap-2.5 text-[0.875rem] leading-relaxed text-mute">
                 <li>

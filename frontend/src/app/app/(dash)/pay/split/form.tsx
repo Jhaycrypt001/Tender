@@ -99,7 +99,7 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader label="Recipients" hint="Everyone is paid in one transaction: all of it goes through, or none of it does." />
+        <CardHeader label="Recipients" hint="Paid in one transaction, all or nothing." />
         <div className="flex flex-col gap-6">
           {rows.map((row, i) => (
             <div key={i} className="flex flex-col gap-3 border-t border-line pt-5 first:border-t-0 first:pt-0">

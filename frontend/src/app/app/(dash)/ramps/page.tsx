@@ -77,7 +77,7 @@ export default async function RampsPage() {
         <Empty
           icon={<RampsIcon className="h-5 w-5" />}
           title="No corridors yet"
-          description="Off-ramp corridors appear here as they open, with the countries and currencies each one covers."
+          description="Coming soon."
         />
       ) : (
         <>

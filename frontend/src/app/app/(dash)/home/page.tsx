@@ -110,8 +110,7 @@ export default async function HomePage() {
             Share one link. Take any coin.
           </h2>
           <p className="mt-3 max-w-[34ch] text-[0.875rem] leading-relaxed text-mute">
-            A payment link opens a fresh invoice for every buyer. Put it in a
-            bio, an email, or a QR by the till.
+            Each buyer gets a fresh invoice. Put it in a bio, email or QR.
           </p>
           <div className="mt-auto pt-7">
             <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -171,7 +170,7 @@ export default async function HomePage() {
           <Empty
             icon={<ActivityIcon className="h-5 w-5" />}
             title="No payments yet"
-            description="Create an invoice and the first payment shows up here the moment it is seen on chain."
+            description="Your first payment shows up here."
             action={
               <Cta href="/app/checkout/new">
                 <PlusIcon className="h-3.5 w-3.5" />
@@ -236,20 +235,20 @@ function Notice({ merchant }: { merchant: ApiResult<Merchant> }) {
     : !merchant.data.settlement_address
       ? {
           tag: "Set up",
-          text: "Payments cannot land until you set a settlement address.",
+          text: "Set a settlement address to get paid.",
           href: "/app/settings",
           warn: true,
         }
       : !merchant.data.settlement_verified
         ? {
             tag: "Verify",
-            text: "Your settlement address is not verified yet, so nothing can settle to it.",
+            text: "Verify your settlement address.",
             href: "/app/settings",
             warn: true,
           }
         : {
             tag: "New",
-            text: "Payment links: one URL any buyer can pay from any chain.",
+            text: "Share one link. Get paid from any chain.",
             href: "/app/links",
             warn: false,
           };

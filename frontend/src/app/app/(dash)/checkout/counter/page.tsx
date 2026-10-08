@@ -19,7 +19,7 @@ export default function CounterPage() {
         back="/app/checkout"
         eyebrow="Checkout · Counter"
         title="Take payment in person."
-        description="Key in the amount and turn the screen round. The customer scans the code, or taps an NFC sticker, and pays from their own phone."
+        description="Enter the amount. The customer scans or taps to pay."
       />
       <Counter appUrl={APP_URL} />
     </PageShell>

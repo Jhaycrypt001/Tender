@@ -55,7 +55,7 @@ export default async function ActivityPage({
         back="/app/home"
         eyebrow="Activity"
         title="Every coin, accounted for."
-        description="Every payment across every invoice, and the state it reached."
+        description="Every payment and its state."
       />
 
       {/* Rendered regardless of the result: these are navigation, and hiding

@@ -330,7 +330,7 @@ function SaleScreen({
               <NfcWrite
                 url={payUrl}
                 label="Write sale to sticker"
-                hint="Puts this sale's link on an NFC sticker at your counter. The customer taps it with their phone instead of scanning."
+                hint="Write this sale's link to an NFC sticker."
               />
             </div>
           </Card>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LiveRefresh } from "@/components/dash/live-refresh";
 import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
@@ -82,6 +83,7 @@ export default async function InvoicePage({
 
   return (
     <PageShell>
+      <LiveRefresh />
       <PageHeader
         back="/app/checkout"
         eyebrow={`Invoice ${invoice.reference}`}
@@ -95,7 +97,7 @@ export default async function InvoicePage({
         <Card marks>
           <CardHeader
             label="Send this to your buyer"
-            hint="Opens on any phone. They do not need a wallet connected or an account."
+            hint="Opens on any phone. No account needed."
           />
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -133,7 +135,7 @@ export default async function InvoicePage({
         <Card tone="quiet">
           <CardHeader
             label="Deposit addresses"
-            hint="One per chain — the buyer's page shows whichever they pick."
+            hint="One per chain."
           />
           {invoice.addresses.length === 0 ? (
             <p className="text-[0.875rem] leading-relaxed text-mute">
