@@ -140,11 +140,19 @@ export default function DashNav({ session }: { session: Session }) {
         {/* Tab rail. Shown from md, where the tabs run at their tighter size
             and the wordmark steps aside, which is what lets seven of them plus
             the right-hand controls fit a ~853px viewport — a 1280×720 screen
-            at 150% OS scaling. Below md the sheet takes over. */}
-        <GlowRail label="Dashboard" className="mx-auto hidden md:block">
+            at 150% OS scaling. Below md the sheet takes over.
+
+            `min-w-0 shrink` is load-bearing: without it the rail holds its
+            full natural width and the controls beside it are pushed past the
+            frame's right rail — visibly so from 768 to ~810px, and again at
+            xl, where the roomier tab sizing costs about 3px more than the
+            row has. The rail is the only thing here that can give way: every
+            control is a fixed-size circle that cannot compress. See the
+            scroll note in `GlowRail` for what happens once it does shrink. */}
+        <GlowRail label="Dashboard" className="mx-auto hidden min-w-0 shrink md:block">
             {NAV.map((item) =>
               item.children ? (
-                <li key={item.href} className="relative">
+                <li key={item.href} className="relative shrink-0">
                   <GlowTab
                     icon={item.icon}
                     label={item.label}
@@ -163,7 +171,7 @@ export default function DashNav({ session }: { session: Session }) {
                   />
                 </li>
               ) : (
-                <li key={item.href}>
+                <li key={item.href} className="shrink-0">
                   <GlowTab
                     icon={item.icon}
                     label={item.label}
@@ -177,7 +185,10 @@ export default function DashNav({ session }: { session: Session }) {
             )}
         </GlowRail>
 
-        <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+        {/* `shrink-0`: these are all fixed-size circles and a pill, so there
+            is nothing in here to compress — left shrinkable, flexbox would
+            still try, and the avatar would cross the frame edge instead. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
           {/* Ask — opens the assistant over this screen; no navigation. */}
           <button
             type="button"

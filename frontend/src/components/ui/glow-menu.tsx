@@ -103,7 +103,20 @@ export function GlowRail({
             style={{ background: RAIL_GLOW }}
           />
         </span>
-        <ul className="relative z-10 flex items-center gap-0.5">{children}</ul>
+        {/* The rail is allowed to shrink by whoever renders it (the dashboard
+            header does, so the account controls keep their place), so the tabs
+            have to be told what to do when it is narrower than they are.
+
+            `overflow-x-clip` rather than `auto`/`scroll`: any scrolling value
+            on one axis forces the other to compute to `auto` as well, which
+            makes the list a scroll container and clips the Pay dropdown — the
+            menu simply disappears. `clip` is the one value that confines the
+            tabs horizontally while leaving `overflow-y: visible` intact, so
+            the menu still escapes. The tab a shrunken rail hides is the last
+            one, and every item in the rail is also in the mobile sheet. */}
+        <ul className="relative z-10 flex items-center gap-0.5 overflow-x-clip">
+          {children}
+        </ul>
       </motion.nav>
     </MotionConfig>
   );
@@ -135,8 +148,14 @@ export function GlowTab(props: TabProps) {
   // 150% OS scaling reports ~853 CSS px, where seven tabs at the wide sizing
   // would not fit beside the account controls. `xl:` restores the roomier
   // spacing once there is width for it.
+  //
+  // The xl padding is `px-3`, not the `px-3.5` the rhythm would suggest: at
+  // 1280 CSS px — which is what a 1536px panel reports at 80% zoom, a common
+  // setting — seven tabs plus the controls came to about 3px more than the
+  // 76rem frame holds, and the avatar crossed its right rail. Two pixels a
+  // side across seven tabs buys that back with room to spare.
   const face =
-    "flex items-center gap-1 whitespace-nowrap rounded-xl px-2 py-[0.4375rem] font-mono text-[0.625rem] uppercase leading-none tracking-[0.02em] xl:gap-2 xl:px-3.5 xl:py-2 xl:text-[0.6875rem] xl:tracking-[0.12em]";
+    "flex items-center gap-1 whitespace-nowrap rounded-xl px-2 py-[0.4375rem] font-mono text-[0.625rem] uppercase leading-none tracking-[0.02em] xl:gap-2 xl:px-3 xl:py-2 xl:text-[0.6875rem] xl:tracking-[0.12em]";
   const text = active ? "text-paper" : "text-mute";
   const backText = active ? "text-paper" : "text-ink";
 
