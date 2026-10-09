@@ -32,6 +32,9 @@ function groupFor(req: FastifyRequest): Group {
   // Every call costs a model request, so it is far tighter than the rest, and is
   // counted per merchant whichever way they authenticate.
   if (url === "/v1/assistant/ask") return { name: "assistant", max: 10 };
+  // A route check is a live Aurora quote on the same key that mints invoice addresses, and the form asks
+  // as the merchant types. Its own bucket, so checking never eats the budget for actually sending.
+  if (url === "/v1/transfers/quote") return { name: "transfer-quote", max: 30 };
   // Preparing and submitting a transfer costs Tender network fees, so POSTs here are tight and per merchant.
   if (url.startsWith("/v1/transfers") && req.method === "POST") return { name: "transfers", max: 20 };
   // The dashboard's platform key fronts every signed-in merchant, so it is
@@ -46,11 +49,12 @@ function groupFor(req: FastifyRequest): Group {
 }
 
 function identity(req: FastifyRequest, group: Group): string {
-  if (group.name === "platform" || ((group.name === "assistant" || group.name === "transfers") && viaPlatform(req))) {
+  const perMerchant = group.name === "assistant" || group.name === "transfers" || group.name === "transfer-quote";
+  if (group.name === "platform" || (perMerchant && viaPlatform(req))) {
     const id = req.headers["x-tender-merchant"];
     return `merchant:${typeof id === "string" ? id.slice(0, 40) : "none"}`;
   }
-  if (group.name === "merchant" || group.name === "assistant" || group.name === "transfers") {
+  if (group.name === "merchant" || perMerchant) {
     const key = req.headers.authorization?.split(" ")[1];
     if (key) return `key:${apiKeyPrefix(key)}`;
   }

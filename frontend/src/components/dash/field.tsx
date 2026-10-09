@@ -216,6 +216,7 @@ export function Select({
   error,
   required,
   defaultValue,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -224,6 +225,7 @@ export function Select({
   error?: string;
   required?: boolean;
   defaultValue?: string;
+  onChange?: (value: string) => void;
 }) {
   const id = useId();
 
@@ -236,6 +238,7 @@ export function Select({
         name={name}
         options={options}
         defaultValue={defaultValue}
+        onChange={onChange}
         invalid={Boolean(error)}
         describedBy={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
         className={`${INPUT} ${border(error)}`}

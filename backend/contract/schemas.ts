@@ -295,7 +295,23 @@ export const Fx = z.object({
 export const TransferKind = z.enum(["PAYOUT", "REFUND", "SPLIT"]);
 export const TransferStatus = z.enum(["AWAITING_SIGNATURE", "SUBMITTED", "CONFIRMED", "FAILED", "EXPIRED"]);
 
-export const TransferLine = z.object({ to: z.string(), amount: Amount });
+/** Where a cross-chain line is going after Aurora carries it, and whether it has arrived. */
+export const TransferDestination = z.object({
+  chain: z.string(),
+  chain_name: z.string(),
+  address: z.string(),
+  asset: z.string(),
+  expected_out: z.string().nullish(),
+  status: z.enum(["PENDING", "DELIVERED", "FAILED"]),
+  delivered_at: Timestamp.nullish(),
+});
+
+export const TransferLine = z.object({
+  /** For a cross-chain line this is the one-off Monad address the wallet signs to; `dest` holds the real recipient. */
+  to: z.string(),
+  amount: Amount,
+  dest: TransferDestination.nullish(),
+});
 
 /** What the merchant's wallet must sign for one line (EIP-712 typed data, EIP-3009). */
 export const TransferAuthorization = z.object({
@@ -307,6 +323,30 @@ export const TransferAuthorization = z.object({
     message: z.record(z.string(), z.string()),
   }),
 });
+
+/** A chain a payout or refund can be sent to, and what the recipient receives there. */
+export const PayoutChain = z.object({
+  id: z.string(),
+  name: z.string(),
+  asset: z.string().describe("What the recipient receives, e.g. USDC, or the chain's own coin where it has no stablecoin"),
+  memo_risk: z.boolean().describe("True when exchange deposit addresses on this chain need a memo or tag, which cannot be attached"),
+});
+
+export const QuoteTransferBody = z.object({
+  dest_chain: z.string().min(1).max(32),
+  to: z.string().trim().min(1).max(200),
+  amount: z.string().trim(),
+});
+
+export const QuoteTransferResult = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    asset: z.string().describe("What the recipient receives"),
+    receive: z.string().nullable().describe("About how much of it, in whole units. Null when Aurora did not say."),
+    seconds: z.number().nullable(),
+  }),
+  z.object({ ok: z.literal(false), field: z.enum(["to", "amount", "chain"]), message: z.string() }),
+]);
 
 export const Transfer = z.object({
   id: z.string(),
@@ -330,7 +370,17 @@ export const Transfer = z.object({
 
 export const PrepareTransferBody = z.object({
   kind: TransferKind,
-  lines: z.array(z.object({ to: z.string().trim(), amount: z.string().trim() })).min(1).max(50),
+  lines: z
+    .array(
+      z.object({
+        to: z.string().trim(),
+        amount: z.string().trim(),
+        /** Send this line to another chain. Absent or "monad" is a plain Monad transfer. */
+        dest_chain: z.string().min(1).max(32).optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
   payment_id: z.string().min(1).max(64).optional(),
   note: z.string().trim().max(140).optional(),
 });

@@ -1,7 +1,10 @@
 import { request } from "./server";
 import type {
   ApiResult,
+  PayoutChain,
   PrepareTransferInput,
+  QuoteTransferInput,
+  QuoteTransferResult,
   SubmitTransferInput,
   Transfer,
   WalletBalance,
@@ -20,6 +23,16 @@ import type {
 /** Whether the merchant can send right now, and what their wallet holds. */
 export function getWalletBalance(): Promise<ApiResult<WalletBalance>> {
   return request<WalletBalance>("/v1/transfers/wallet");
+}
+
+/** The chains a payout or refund can be sent to, and what the recipient receives on each. */
+export function listPayoutChains(): Promise<ApiResult<{ data: PayoutChain[] }>> {
+  return request<{ data: PayoutChain[] }>("/v1/transfers/chains");
+}
+
+/** Would Aurora take this, and roughly what would arrive? Moves and creates nothing. */
+export function quoteTransfer(input: QuoteTransferInput): Promise<ApiResult<QuoteTransferResult>> {
+  return request<QuoteTransferResult>("/v1/transfers/quote", { method: "POST", body: input });
 }
 
 /** Step 1. Validates and returns the typed data to sign. Moves nothing. */

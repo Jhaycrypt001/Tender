@@ -55,6 +55,11 @@ export type AuroraClientOptions = {
   fetch?: typeof fetch;
 };
 
+export type RouteQuote =
+  | { ok: true; /** What the recipient would get, already in whole units ("0.997197"). */ amountOut: string | null; seconds: number | null }
+  | { ok: false; reason: "below_minimum"; /** The smallest amount Aurora will take, in the origin token's base units. */ minimumBaseUnits: string | null }
+  | { ok: false; reason: "invalid_recipient" | "no_trustline" | "unavailable" };
+
 export type MintInput = {
   /** Merchant's settlement address on the destination chain. */
   recipient: string;
@@ -156,6 +161,52 @@ export class AuroraClient {
     } catch (err) {
       // "Failed to get quote" is how Aurora says the amount is too small.
       if (err instanceof AuroraError && err.kind === "bad_request") return null;
+      throw err;
+    }
+  }
+
+  /**
+   * A dry quote for a payout leaving Monad, with the refusal explained. Unlike `dryQuote`
+   * (which reads "refused" as "below the minimum"), a payout has to tell the merchant WHY:
+   * a mistyped address, an amount too small to cover the fee, a Stellar-style account that
+   * cannot hold the asset, or a route that is simply down.
+   */
+  async routeQuote(input: {
+    originAsset: string;
+    destinationAsset: string;
+    amount: string;
+    recipient: string;
+    refundTo: string;
+  }): Promise<RouteQuote> {
+    try {
+      const res = await this.request("POST /api/quote", QuoteResponse, {
+        method: "POST",
+        path: `/api/quote/${this.key}`,
+        body: {
+          dry: true,
+          swapType: "EXACT_INPUT",
+          slippageTolerance: 100,
+          depositType: "ORIGIN_CHAIN",
+          recipientType: "DESTINATION_CHAIN",
+          refundType: "ORIGIN_CHAIN",
+          deadline: new Date(Date.now() + 10 * 60_000).toISOString(),
+          ...input,
+        },
+      });
+      return { ok: true, amountOut: res.quote.amountOutFormatted ?? null, seconds: res.quote.timeEstimate ?? null };
+    } catch (err) {
+      if (!(err instanceof AuroraError)) throw err;
+      // Aurora answers 400 for every refusal and signals the cause only in the text.
+      if (err.kind === "bad_request" || (err.kind === "upstream" && /internal server error/i.test(err.message))) {
+        const text = err.message;
+        if (/too low|minimum/i.test(text)) {
+          const atLeast = /at least (\d+)/i.exec(text);
+          return { ok: false, reason: "below_minimum", minimumBaseUnits: atLeast ? atLeast[1]! : null };
+        }
+        if (/recipient is not valid|invalid recipient|not a valid/i.test(text)) return { ok: false, reason: "invalid_recipient" };
+        if (/trustline/i.test(text)) return { ok: false, reason: "no_trustline" };
+        return { ok: false, reason: "unavailable" };
+      }
       throw err;
     }
   }

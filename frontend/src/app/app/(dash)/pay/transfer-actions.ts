@@ -1,7 +1,7 @@
 "use server";
 
-import { getTransfer, prepareTransfer, submitTransfer } from "@/lib/api/transfers";
-import type { ApiError, PrepareTransferInput, Transfer } from "@/lib/api/types";
+import { getTransfer, listPayoutChains, prepareTransfer, quoteTransfer, submitTransfer } from "@/lib/api/transfers";
+import type { ApiError, PayoutChain, PrepareTransferInput, QuoteTransferResult, Transfer } from "@/lib/api/types";
 
 /**
  * The browser's only way to the transfer endpoints: it cannot call them itself,
@@ -30,6 +30,20 @@ export async function submitTransferAction(id: string, signatures: string[]): Pr
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, message: "That transfer could not be found." };
   const result = await submitTransfer(id, { signatures });
   return result.ok ? { ok: true, transfer: result.data } : { ok: false, ...explain(result.error) };
+}
+
+/** The chains a payout or refund can go to. Empty when the list cannot be read: the form then offers Monad only. */
+export async function payoutChainsAction(): Promise<PayoutChain[]> {
+  const result = await listPayoutChains();
+  return result.ok ? result.data.data : [];
+}
+
+/** A dry run of a payout to another chain. Never throws; a failure is a sentence under the form. */
+export async function quoteTransferAction(input: { dest_chain: string; to: string; amount: string }): Promise<QuoteTransferResult> {
+  if (!/^[a-z]{2,32}$/.test(input.dest_chain)) return { ok: false, field: "chain", message: "Choose a chain." };
+  const result = await quoteTransfer(input);
+  if (result.ok) return result.data;
+  return { ok: false, field: "chain", message: result.error.message || "We could not check that just now. Try again." };
 }
 
 export async function transferStatusAction(id: string): Promise<TransferResult> {

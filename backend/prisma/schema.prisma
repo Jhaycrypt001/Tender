@@ -298,6 +298,12 @@ model Transfer {
   @@index([paymentId])
 }
 
+enum DestStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
 model TransferLine {
   id         String   @id @default(cuid())
   transferId String
@@ -310,7 +316,19 @@ model TransferLine {
   /// The merchant wallet's signature over this line, once given.
   signature  String?
 
+  /// Cross-chain only: `toAddress` is then a one-off Aurora deposit address on Monad, and Aurora
+  /// carries the money on to `destAddress` on `destChain`. All null for a plain Monad line.
+  destChain       String?
+  destAddress     String?
+  /// What the recipient receives, e.g. "USDC" or "BTC".
+  destAsset       String?
+  /// The quoted amount out, a display string. The real amount is whatever Aurora delivers.
+  destExpectedOut String?
+  destStatus      DestStatus?
+  destDeliveredAt DateTime?
+
   @@unique([transferId, index])
+  @@index([destStatus])
 }
 
 enum TransferKind {

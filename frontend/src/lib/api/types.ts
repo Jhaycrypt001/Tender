@@ -521,7 +521,23 @@ export type ApiResult<T> =
 export type TransferKind = "PAYOUT" | "REFUND" | "SPLIT";
 export type TransferStatus = "AWAITING_SIGNATURE" | "SUBMITTED" | "CONFIRMED" | "FAILED" | "EXPIRED";
 
-export type TransferLine = { to: string; amount: Amount };
+/** Where a cross-chain line is going after Aurora carries it, and whether it has arrived. */
+export type TransferDestination = {
+  chain: string;
+  chain_name: string;
+  address: string;
+  asset: string;
+  expected_out?: string | null;
+  status: "PENDING" | "DELIVERED" | "FAILED";
+  delivered_at?: Timestamp | null;
+};
+
+export type TransferLine = {
+  /** For a cross-chain line this is the one-off Monad address the wallet signs to; `dest` holds the real recipient. */
+  to: string;
+  amount: Amount;
+  dest?: TransferDestination | null;
+};
 
 /** What the merchant's wallet must sign for one line (EIP-712 typed data, EIP-3009). */
 export type TransferAuthorization = {
@@ -533,6 +549,29 @@ export type TransferAuthorization = {
     message: Record<string, string>;
   };
 };
+
+/** A chain a payout or refund can be sent to, and what the recipient receives there. */
+export type PayoutChain = {
+  id: string;
+  name: string;
+  /** What the recipient receives, e.g. USDC, or the chain's own coin where it has no stablecoin. */
+  asset: string;
+  /** True when exchange deposit addresses on this chain need a memo or tag, which cannot be attached. */
+  memo_risk: boolean;
+};
+
+export type QuoteTransferInput = { dest_chain: string; to: string; amount: string };
+
+export type QuoteTransferResult =
+  | {
+      ok: true;
+      /** What the recipient receives. */
+      asset: string;
+      /** About how much of it, in whole units. Null when Aurora did not say. */
+      receive: string | null;
+      seconds: number | null;
+    }
+  | { ok: false; field: "to" | "amount" | "chain"; message: string };
 
 export type Transfer = {
   id: string;
@@ -556,7 +595,12 @@ export type Transfer = {
 
 export type PrepareTransferInput = {
   kind: TransferKind;
-  lines: { to: string; amount: string }[];
+  lines: {
+    to: string;
+    amount: string;
+    /** Send this line to another chain. Absent or "monad" is a plain Monad transfer. */
+    dest_chain?: string;
+  }[];
   payment_id?: string;
   note?: string;
 };

@@ -10,7 +10,7 @@ import { chainLabel } from "@/lib/chains";
 import { fromMicro, toMicro } from "@/lib/micro";
 import { useSendTransfer, type SendStep } from "@/lib/use-send-transfer";
 import type { Payment, Transfer, WalletBalance } from "@/lib/api/types";
-import { CannotSend, Note, PRIVY_ON, Receipt, looksLikeAddress, looksLikeAmount, stepText } from "../send-ui";
+import { CannotSend, ChainPicker, MONAD, Note, PRIVY_ON, Receipt, RouteNote, looksLikeAddress, looksLikeAmount, routeReady, stepText, usePayoutChains, useRouteQuote } from "../send-ui";
 
 /**
  * Pick a payment, then send money back to the buyer.
@@ -39,24 +39,31 @@ function refundable(p: Payment): bigint {
   return settled > refunded ? settled - refunded : BigInt(0);
 }
 
-export function RefundForm({ payments, wallet, initialId }: { payments: Payment[]; wallet: WalletBalance; initialId?: string }) {
+export function RefundForm({ payments, wallet, initialId, initialAmount }: { payments: Payment[]; wallet: WalletBalance; initialId?: string; initialAmount?: string }) {
   if (!PRIVY_ON) return <CannotSend reason="Sign-in is not set up in this environment, so there is no wallet to send from." />;
   if (!wallet.can_send) return <CannotSend reason={wallet.reason} />;
-  return <RefundLive payments={payments} wallet={wallet} initialId={initialId} />;
+  return <RefundLive payments={payments} wallet={wallet} initialId={initialId} initialAmount={initialAmount} />;
 }
 
-function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wallet: WalletBalance; initialId?: string }) {
+function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: Payment[]; wallet: WalletBalance; initialId?: string; initialAmount?: string }) {
   const router = useRouter();
   const send = useSendTransfer();
   // Arriving from an overpaid invoice: that payment is already picked.
   const start = payments.find((p) => p.id === initialId && refundable(p) > BigInt(0));
   const [selected, setSelected] = useState(start?.id ?? "");
   const [to, setTo] = useState(start && isEvmAddress(start.sender) ? start.sender : "");
-  const [amount, setAmount] = useState(start ? fromMicro(refundable(start)) : "");
+  // A suggested amount (the overpaid part) is used only if it is valid and within what the payment can still return.
+  const suggested = start && initialAmount ? toMicro(initialAmount) : null;
+  const [amount, setAmount] = useState(
+    start ? fromMicro(suggested !== null && suggested > BigInt(0) && suggested <= refundable(start) ? suggested : refundable(start)) : "",
+  );
   const [step, setStep] = useState<SendStep | null>(null);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{ transfer: Transfer; settled: boolean } | null>(null);
+  const [chain, setChain] = useState(MONAD);
+  const [pickKey, setPickKey] = useState(0);
+  const chains = usePayoutChains();
   const busy = step !== null;
   const asset = wallet.asset ?? "";
 
@@ -64,13 +71,27 @@ function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wall
   const left = payment ? refundable(payment) : BigInt(0);
   const sender = payment?.sender ?? null;
   const senderUsable = isEvmAddress(sender);
+  const cross = chain !== MONAD;
+  const quote = useRouteQuote(chain, to, amount);
+  const quoteError = typeof quote === "object" && !quote.ok ? quote : null;
+  const chainName = chains.find((c) => c.id === chain)?.name;
 
   function choose(p: Payment) {
     setSelected(p.id);
     setError("");
     setFields({});
-    setTo(isEvmAddress(p.sender) ? p.sender : "");
     setAmount(fromMicro(refundable(p)));
+    // Back to where it came from: the buyer paid from that chain, so that is where they can be reached.
+    // Monad stays the choice for a payment that came from Monad, or from a chain we cannot send to.
+    const back = p.sender && p.from_chain !== MONAD && chains.some((c) => c.id === p.from_chain);
+    if (back) {
+      setChain(p.from_chain);
+      setTo(p.sender!);
+    } else {
+      setChain(MONAD);
+      setTo(isEvmAddress(p.sender) ? p.sender : "");
+    }
+    setPickKey((k) => k + 1);
   }
 
   const amountMicro = looksLikeAmount(amount) ? toMicro(amount) : null;
@@ -79,16 +100,17 @@ function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wall
       ? "Enter an amount above zero, with up to 6 decimals."
       : amountMicro !== null && amountMicro > left
         ? `You can refund at most ${fromMicro(left)} ${asset} of this payment.`
-        : fields["lines.0.amount"];
-  const toError = to && !looksLikeAddress(to) ? "That is not a valid address." : fields["lines.0.to"];
-  const differs = senderUsable && looksLikeAddress(to) && to.trim().toLowerCase() !== sender.toLowerCase();
-  const ready = !!payment && left > BigInt(0) && looksLikeAddress(to) && amountMicro !== null && amountMicro <= left && !busy;
+        : (fields["lines.0.amount"] ?? (quoteError?.field === "amount" ? quoteError.message : undefined));
+  const toError = !cross && to && !looksLikeAddress(to) ? "That is not a valid address." : (fields["lines.0.to"] ?? (quoteError?.field === "to" ? quoteError.message : undefined));
+  const differs = !!sender && to.trim() !== "" && to.trim().toLowerCase() !== sender.toLowerCase();
+  const ready =
+    !!payment && left > BigInt(0) && (cross ? to.trim() !== "" : looksLikeAddress(to)) && amountMicro !== null && amountMicro <= left && routeReady(chain, quote) && !busy;
 
   async function submit() {
     if (!payment) return;
     setError("");
     setFields({});
-    const outcome = await send({ kind: "REFUND", payment_id: payment.id, lines: [{ to: to.trim(), amount: amount.trim() }] }, setStep);
+    const outcome = await send({ kind: "REFUND", payment_id: payment.id, lines: [{ to: to.trim(), amount: amount.trim(), ...(cross ? { dest_chain: chain } : {}) }] }, setStep);
     setStep(null);
     if (!outcome.ok) {
       setError(outcome.message);
@@ -109,6 +131,8 @@ function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wall
           setSelected("");
           setTo("");
           setAmount("");
+          setChain(MONAD);
+          setPickKey((k) => k + 1);
           // The list above carries each payment's refunded total, so it must be read again.
           router.refresh();
         }}
@@ -166,19 +190,28 @@ function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wall
       {payment && (
         <Card tone="quiet">
           <div className="flex flex-col gap-5">
+            <ChainPicker chains={chains} value={chain} onChange={setChain} disabled={busy} resetKey={pickKey} />
+
             <ControlledField
               label="Send the refund to"
               value={to}
               onChange={setTo}
-              placeholder="0x…"
+              placeholder={cross ? "Address on that chain" : "0x…"}
               mono
               required
               error={toError}
               disabled={busy}
-              hint="An address on Monad that the buyer controls. Copy it from the buyer: a wrong address cannot be undone."
+              hint={`An address on ${cross ? (chainName ?? "that chain") : "Monad"} that the buyer controls. Copy it from the buyer: a wrong address cannot be undone.`}
             />
 
-            {senderUsable ? (
+            {cross && <RouteNote chain={chain} chains={chains} quote={quote} />}
+
+            {cross && sender ? (
+              <Note tone="info">
+                This payment came from <Hash value={sender} lead={8} tail={6} />, so it is filled in above. If the buyer paid from an exchange, that is the exchange&apos;s address and money sent back to it may not reach
+                them. If in doubt, ask the buyer for an address.
+              </Note>
+            ) : senderUsable ? (
               <Note tone="info">
                 This payment came from <Hash value={sender} lead={8} tail={6} />, so it is filled in above. If the buyer paid from an exchange, that is the exchange&apos;s
                 address and money sent back to it may not reach them. A smart-contract wallet is also a different account on Monad. If in doubt, ask the buyer for an address.

@@ -7,7 +7,10 @@ import type { Merchant, Prisma } from "../generated/prisma/client.js";
 import { ApiError, conflict, notFound, validation } from "../lib/errors.js";
 import { Decimal, isAmount } from "../lib/money.js";
 import { MONAD_CHAIN_ID, MULTICALL3, TRANSFER_WITH_AUTHORIZATION_TYPES, tokenFor, type TokenInfo } from "../lib/tokens.js";
+import type { AuroraClient } from "../aurora/client.js";
+import { SETTLEMENT_CHAIN, chainById } from "../aurora/chains.js";
 import { amount } from "./serialize.js";
+import { checkRoute, mintRoute, payoutChains, routeFailure } from "./payout-route.js";
 import { TransferRejected, type SignedLine, type TransferChain } from "./transfer-chain.js";
 
 /**
@@ -38,6 +41,8 @@ export type TransferConfig = {
 export type TransferDeps = {
   db: Db;
   chain: TransferChain | undefined;
+  /** Needed only to send to another chain, and to follow that delivery. Without it such a transfer is refused. */
+  aurora?: Partial<Pick<AuroraClient, "tokens" | "routeQuote" | "mintAddress" | "deposits">>;
   config: TransferConfig;
   now?: () => Date;
 };
@@ -95,7 +100,24 @@ export function toTransfer(t: TransferWithLines, withAuthorizations = false): Wi
     note: t.note,
     tx_hash: t.txHash,
     failure_reason: t.failureReason,
-    lines: [...t.lines].sort((a, b) => a.index - b.index).map((l) => ({ to: l.toAddress, amount: amount(l.amount) })),
+    lines: [...t.lines]
+      .sort((a, b) => a.index - b.index)
+      .map((l) => ({
+        to: l.toAddress,
+        amount: amount(l.amount),
+        dest:
+          l.destChain && l.destAddress && l.destStatus
+            ? {
+                chain: l.destChain,
+                chain_name: chainById(l.destChain)?.name ?? l.destChain,
+                address: l.destAddress,
+                asset: l.destAsset ?? "",
+                expected_out: l.destExpectedOut,
+                status: l.destStatus,
+                delivered_at: l.destDeliveredAt?.toISOString() ?? null,
+              }
+            : null,
+      })),
     created_at: t.createdAt.toISOString(),
     expires_at: t.expiresAt.toISOString(),
     submitted_at: t.submittedAt?.toISOString() ?? null,
@@ -159,6 +181,33 @@ export async function walletInfo(deps: TransferDeps, merchant: Merchant): Promis
 }
 
 /* -------------------------------------------------------------------------- */
+/* Sending to another chain: what is possible, and what it would deliver       */
+/* -------------------------------------------------------------------------- */
+
+function requireAurora(deps: TransferDeps) {
+  const a = deps.aurora;
+  if (!a?.tokens || !a.routeQuote || !a.mintAddress) {
+    throw new ApiError(503, "transfers_unavailable", "Sending to another chain is not switched on right now. Try again later.");
+  }
+  return { tokens: a.tokens.bind(a), routeQuote: a.routeQuote.bind(a), mintAddress: a.mintAddress.bind(a) };
+}
+
+/** Every chain a payout or refund can reach. */
+export async function listPayoutChains(deps: TransferDeps) {
+  return payoutChains(requireAurora(deps));
+}
+
+/** A dry run: would Aurora take this, and roughly what would the recipient get? Moves and creates nothing. */
+export async function quoteTransfer(deps: TransferDeps, merchant: Merchant, input: { dest_chain: string; to: string; amount: string }): Promise<z.output<typeof S.QuoteTransferResult>> {
+  const aurora = requireAurora(deps);
+  const { from, token } = senderOf(merchant);
+  if (!isAmount(input.amount) || new Decimal(input.amount).lte(0)) return { ok: false, field: "amount", message: "Enter an amount above zero." };
+  const route = await checkRoute(aurora, { chainId: input.dest_chain, to: input.to, amount: input.amount, from, token });
+  if (!route.ok) return { ok: false, field: route.field, message: route.message };
+  return { ok: true, asset: route.destination.symbol, receive: route.expectedOut, seconds: route.seconds };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Prepare                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -178,13 +227,18 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
 
   let total = new Decimal(0);
   const checked = lines.map((line, i) => {
+    // A line can go to another chain. Its Monad leg is still part of the one transaction, so a split
+    // still lands whole or not at all on Monad; only Aurora's delivery afterwards is per recipient.
+    const cross = !!line.dest_chain && line.dest_chain !== SETTLEMENT_CHAIN;
     const fields: Record<string, string> = {};
-    if (!isAddress(line.to, { strict: true })) fields[`lines.${i}.to`] = "Not a valid address (a mixed-case address must have the right checksum).";
-    const to = isAddress(line.to) ? getAddress(line.to) : null;
+    // For another chain the address is the destination chain's, so Aurora judges it (below), not these EVM checks.
+    if (!cross && !isAddress(line.to, { strict: true })) fields[`lines.${i}.to`] = "Not a valid address (a mixed-case address must have the right checksum).";
+    const to = !cross && isAddress(line.to) ? getAddress(line.to) : null;
     if (to === zeroAddress) fields[`lines.${i}.to`] = "That is the burn address. Money sent there is gone for good.";
     if (to && to.toLowerCase() === token.address.toLowerCase()) fields[`lines.${i}.to`] = `That is the ${token.symbol} contract itself. Money sent there is lost.`;
     if (to && to.toLowerCase() === MULTICALL3.toLowerCase()) fields[`lines.${i}.to`] = "That is a system contract, not a person's wallet.";
     if (to && to.toLowerCase() === from.toLowerCase()) fields[`lines.${i}.to`] = "That is your own wallet.";
+    if (cross && !line.to) fields[`lines.${i}.to`] = "Enter the recipient's address.";
 
     let units: bigint | null = null;
     if (!isAmount(line.amount) || new Decimal(line.amount).lte(0)) fields[`lines.${i}.amount`] = "Enter an amount above zero.";
@@ -194,7 +248,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
     }
     if (Object.keys(fields).length) throw validation(fields);
     total = total.add(line.amount);
-    return { to: to!, amount: line.amount };
+    return { to: cross ? line.to : to!, amount: line.amount, destChain: cross ? line.dest_chain! : null };
   });
 
   // ── The wallet must be able to cover it ─────────────────────────────────
@@ -213,6 +267,30 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
     throw new ApiError(429, "daily_limit", `You have reached today's limit of ${deps.config.dailyLimit} transfers. It resets within 24 hours.`);
   }
 
+  // ── Another chain: have Aurora vet each such line and mint the Monad address that delivers it ──
+  // The wallet signs a plain Monad transfer to that one-off address; the recipient's real address
+  // is kept in `destAddress` and is what the signing prompt shows. Every line is vetted BEFORE any
+  // address is minted, so a split with one bad line is refused up front and nothing is created.
+  type Dest = { chain: string; address: string; asset: string; expectedOut: string | null };
+  const dests = new Map<number, Dest>();
+  if (checked.some((l) => l.destChain)) {
+    const aur = requireAurora(deps);
+    // Minting creates an address at Aurora, so a refund over its cap is refused first.
+    if (kind === "REFUND") await assertRefundable(deps.db, merchant.id, input.payment_id!, total, token.symbol, now);
+    const routes = new Map<number, Extract<Awaited<ReturnType<typeof checkRoute>>, { ok: true }>>();
+    for (const [i, l] of checked.entries()) {
+      if (!l.destChain) continue;
+      const route = await checkRoute(aur, { chainId: l.destChain, to: l.to, amount: l.amount, from, token });
+      if (!route.ok) routeFailure(route, i);
+      routes.set(i, route);
+    }
+    for (const [i, route] of routes) {
+      const l = checked[i]!;
+      dests.set(i, { chain: route.chain.id, address: l.to, asset: route.destination.symbol, expectedOut: route.expectedOut });
+      l.to = getAddress(await mintRoute(aur, route, l.to));
+    }
+  }
+
   const expiresAt = new Date(now.getTime() + AUTHORIZATION_TTL_MS);
   const create = (tx: Prisma.TransactionClient) =>
     tx.transfer.create({
@@ -225,7 +303,18 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
         paymentId: input.payment_id ?? null,
         note: input.note || null,
         expiresAt,
-        lines: { create: checked.map((l, index) => ({ index, toAddress: l.to, amount: l.amount, nonce: `0x${randomBytes(32).toString("hex")}` })) },
+        lines: {
+          create: checked.map((l, index) => {
+            const d = dests.get(index);
+            return {
+              index,
+              toAddress: l.to,
+              amount: l.amount,
+              nonce: `0x${randomBytes(32).toString("hex")}`,
+              ...(d ? { destChain: d.chain, destAddress: d.address, destAsset: d.asset, destExpectedOut: d.expectedOut, destStatus: "PENDING" as const } : {}),
+            };
+          }),
+        },
       },
       include: { lines: true },
     });
@@ -236,29 +325,38 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
   // Under a row lock, so two refunds started at once cannot both pass the check.
   return deps.db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.payment_id!} FOR UPDATE`;
-    const payment = await tx.payment.findFirst({ where: { id: input.payment_id!, invoice: { merchantId: merchant.id } } });
-    if (!payment) throw notFound("Payment");
-    if (payment.status !== "SETTLED" || !payment.amountSettled) throw conflict("Only a payment that has settled can be refunded.");
-
-    const open = await tx.transfer.aggregate({
-      where: {
-        paymentId: payment.id,
-        OR: [{ status: { in: ["SUBMITTED", "CONFIRMED"] } }, { status: "AWAITING_SIGNATURE", expiresAt: { gt: now } }],
-      },
-      _sum: { totalAmount: true },
-    });
-    const refundable = new Decimal(payment.amountSettled.toString()).sub(new Decimal(open._sum.totalAmount?.toString() ?? "0"));
-    if (total.gt(refundable)) {
-      throw new ApiError(
-        409,
-        "over_refund",
-        refundable.lte(0)
-          ? "This payment has already been refunded in full."
-          : `You can refund at most ${amount(refundable)} ${token.symbol} of this payment (the rest is already refunded or being refunded).`,
-      );
-    }
+    await assertRefundable(tx, merchant.id, input.payment_id!, total, token.symbol, now);
     return create(tx);
   });
+}
+
+/**
+ * A refund may return at most what the payment delivered, minus refunds already made or in flight.
+ * Run once before anything is minted (so a refused refund creates nothing at Aurora), and again
+ * under the payment's row lock (so two refunds started at once cannot both pass).
+ */
+async function assertRefundable(tx: Prisma.TransactionClient | Db, merchantId: string, paymentId: string, total: Decimal, symbol: string, now: Date) {
+  const payment = await tx.payment.findFirst({ where: { id: paymentId, invoice: { merchantId } } });
+  if (!payment) throw notFound("Payment");
+  if (payment.status !== "SETTLED" || !payment.amountSettled) throw conflict("Only a payment that has settled can be refunded.");
+
+  const open = await tx.transfer.aggregate({
+    where: {
+      paymentId: payment.id,
+      OR: [{ status: { in: ["SUBMITTED", "CONFIRMED"] } }, { status: "AWAITING_SIGNATURE", expiresAt: { gt: now } }],
+    },
+    _sum: { totalAmount: true },
+  });
+  const refundable = new Decimal(payment.amountSettled.toString()).sub(new Decimal(open._sum.totalAmount?.toString() ?? "0"));
+  if (total.gt(refundable)) {
+    throw new ApiError(
+      409,
+      "over_refund",
+      refundable.lte(0)
+        ? "This payment has already been refunded in full."
+        : `You can refund at most ${amount(refundable)} ${symbol} of this payment (the rest is already refunded or being refunded).`,
+    );
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -425,5 +523,45 @@ export async function reconcileTransfers(deps: TransferDeps): Promise<{ confirme
       await decide("FAILED", "The transaction was never confirmed and the signatures have expired, so no money moved.");
     }
   }
+  await reconcileDeliveries(deps, now);
   return out;
+}
+
+const DELIVERY_CHECK_MS = 30_000;
+let lastDeliveryCheck = 0;
+
+/**
+ * The second leg of a cross-chain transfer: once the Monad transfer is CONFIRMED, Aurora should
+ * deliver to the recipient. Its per-address deposit list is the only record of that, so the answer
+ * comes from there and nowhere else. A transfer that never confirmed has nothing to deliver.
+ */
+async function reconcileDeliveries(deps: TransferDeps, now: Date) {
+  const aurora = deps.aurora;
+  if (!aurora?.deposits) return;
+  // The transfer loop ticks every 5s, but it shares Aurora's rate limit with the invoice poller, and a
+  // delivery takes a minute or two anyway. Asking every 30s keeps this from crowding out detection.
+  if (now.getTime() - lastDeliveryCheck < DELIVERY_CHECK_MS) return;
+  lastDeliveryCheck = now.getTime();
+
+  // A transfer that never confirmed moved nothing, so there is nothing to deliver.
+  await deps.db.transferLine.updateMany({ where: { destStatus: "PENDING", transfer: { status: { in: ["FAILED", "EXPIRED"] } } }, data: { destStatus: "FAILED" } });
+
+  const waiting = await deps.db.transferLine.findMany({
+    // A day is far beyond Aurora's delivery time; past it, stop asking and leave it for support.
+    where: { destStatus: "PENDING", transfer: { status: "CONFIRMED", confirmedAt: { gte: new Date(now.getTime() - 24 * 3_600_000) } } },
+    take: 20,
+    orderBy: { transfer: { confirmedAt: "asc" } },
+  });
+  for (const line of waiting) {
+    try {
+      // Each line has its own deposit address, so its own record at Aurora.
+      if ((await aurora.deposits(line.toAddress, "success")).length > 0) {
+        await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
+      } else if ((await aurora.deposits(line.toAddress, "failed")).length > 0) {
+        await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
+      }
+    } catch {
+      // Aurora trouble: look again next tick.
+    }
+  }
 }

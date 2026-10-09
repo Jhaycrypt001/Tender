@@ -108,6 +108,7 @@ const transferLoop = startLoop(
   async () => {
     const r = await reconcileTransfers({
       db,
+      aurora,
       chain: transferChain,
       config: { dailyLimit: config.TRANSFER_DAILY_LIMIT, maxLines: config.TRANSFER_MAX_LINES, minRelayerWei: parseEther(config.RELAYER_MIN_MON) },
     });

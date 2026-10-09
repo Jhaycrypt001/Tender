@@ -268,6 +268,23 @@ export const OPERATIONS: Record<string, Op> = {
       "Reads the settlement wallet's on-chain balance of its settlement asset. `can_send` is false, with a `reason`, when the wallet is not verified, the asset cannot be sent through Tender, or sending is switched off.",
     ok: { status: 200, schema: S.WalletBalance },
   },
+  "GET /v1/transfers/chains": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Chains a payout or refund can be sent to",
+    description: "Everything except Monad. `asset` is what the recipient receives there. `memo_risk` marks chains where exchange deposit addresses need a memo or tag, which cannot be attached.",
+    ok: { status: 200, schema: z.object({ data: z.array(S.PayoutChain) }) },
+    errors: [503],
+  },
+  "POST /v1/transfers/quote": {
+    tag: "Transfers",
+    auth: true,
+    summary: "Dry run of a payout or refund to another chain",
+    description: "Says whether Aurora will take the route, and about how much the recipient receives. Moves and creates nothing. A refusal comes back as `ok: false` with the field at fault.",
+    body: S.QuoteTransferBody,
+    ok: { status: 200, schema: S.QuoteTransferResult },
+    errors: [400, 409, 503],
+  },
   "POST /v1/transfers": {
     tag: "Transfers",
     auth: true,

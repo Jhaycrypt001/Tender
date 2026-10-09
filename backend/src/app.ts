@@ -47,7 +47,8 @@ export type AppDeps = {
   config: Config;
   db: Db;
   redis: Redis;
-  aurora: Pick<AuroraClient, "mintAddress" | "submitDeposit">;
+  /** `tokens`, `routeQuote` and `deposits` are needed only to send to another chain; without them that is refused. */
+  aurora: Pick<AuroraClient, "mintAddress" | "submitDeposit"> & Partial<Pick<AuroraClient, "tokens" | "routeQuote" | "deposits">>;
   stream: InvoiceStream;
   catalogue: ChainCatalogueReader;
   /** Monad RPC reader for smart-contract wallet proofs. Optional: without it, EOAs only. */
@@ -138,6 +139,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     paymentRoutes(merchantScope, { db: deps.db });
     transferRoutes(merchantScope, {
       db: deps.db,
+      aurora: deps.aurora,
       chain: deps.transferChain,
       config: {
         dailyLimit: config.TRANSFER_DAILY_LIMIT,

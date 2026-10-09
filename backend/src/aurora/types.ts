@@ -52,6 +52,8 @@ export const QuoteResponse = z.looseObject({
     amountIn: z.string(),
     minAmountIn: z.string().optional(),
     amountInUsd: z.string().optional(),
+    amountOutFormatted: z.string().optional(),
+    amountOutUsd: z.string().optional(),
     /** Seconds from deposit to delivery. */
     timeEstimate: z.number().optional(),
   }),

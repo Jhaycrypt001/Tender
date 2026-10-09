@@ -66,6 +66,11 @@ export function useSendTransfer() {
         for (const [i, auth] of authorizations.entries()) {
           onStep?.({ phase: "signing", index: i + 1, total: authorizations.length });
           const line = transfer.lines[auth.index]!;
+          // Another chain: the wallet signs to a one-off Monad address, so say where the money is REALLY going.
+          const dest = line.dest;
+          const goingTo = dest
+            ? `Send ${line.amount} ${transfer.asset} to ${dest.address} on ${dest.chain_name}${dest.expected_out ? `, arriving as about ${dest.expected_out} ${dest.asset}` : ""}. It is carried by Aurora, so it first goes to ${line.to} on Monad.`
+            : `Send ${line.amount} ${transfer.asset} to ${line.to}.`;
           const { signature } = await signTypedData(
             {
               domain: auth.typed_data.domain,
@@ -77,7 +82,7 @@ export function useSendTransfer() {
               address: transfer.from,
               uiOptions: {
                 title: authorizations.length > 1 ? `Confirm payment ${i + 1} of ${authorizations.length}` : "Confirm this payment",
-                description: `Send ${line.amount} ${transfer.asset} to ${line.to}. This only authorizes exactly that. It is free: Tender pays the network fee.`,
+                description: `${goingTo} This only authorizes exactly that. It is free: Tender pays the network fee.`,
                 buttonText: "Confirm",
               },
             },

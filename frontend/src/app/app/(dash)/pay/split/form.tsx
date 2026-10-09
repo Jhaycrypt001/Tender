@@ -7,22 +7,27 @@ import { ControlledField, ReadOnlyField } from "@/components/dash/field";
 import { fromMicro, toMicro as parseMicro } from "@/lib/micro";
 import { useSendTransfer, type SendStep } from "@/lib/use-send-transfer";
 import type { Transfer, WalletBalance } from "@/lib/api/types";
-import { CannotSend, Note, PRIVY_ON, Receipt, looksLikeAddress, looksLikeAmount, stepText } from "../send-ui";
+import { CannotSend, ChainPicker, MONAD, Note, PRIVY_ON, Receipt, RowRoute, looksLikeAddress, looksLikeAmount, stepText, usePayoutChains } from "../send-ui";
 
 /**
  * Divide one amount across several addresses.
  *
- * All or nothing, by construction: the backend puts every recipient's
- * authorization into ONE transaction, so it lands whole or not at all. A split
- * that "half-succeeds" cannot happen here, which is the reason this screen
- * exists as a feature and not as several payouts in a row.
+ * All or nothing on Monad, by construction: the backend puts every recipient's
+ * authorization into ONE transaction, so it lands whole or not at all.
+ *
+ * A recipient can be on another chain. That row's money still leaves in the same
+ * transaction (to a one-off address Aurora delivers from), so the Monad side stays
+ * whole. What is no longer all-or-nothing is Aurora's delivery afterwards: each
+ * such recipient is delivered on its own, and the receipt says which have arrived.
  */
 
 const MAX_ROWS = 10;
 const ZERO = BigInt(0);
 
-type Row = { to: string; amount: string };
-const blank = (): Row => ({ to: "", amount: "" });
+// `id` is the row's identity, so removing one row cannot hand its chain choice to the next.
+type Row = { id: number; to: string; amount: string; chain: string };
+let nextRow = 0;
+const blank = (): Row => ({ id: nextRow++, to: "", amount: "", chain: MONAD });
 
 export function SplitForm({ wallet }: { wallet: WalletBalance }) {
   if (!PRIVY_ON) return <CannotSend reason="Sign-in is not set up in this environment, so there is no wallet to send from." />;
@@ -39,6 +44,9 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{ transfer: Transfer; settled: boolean } | null>(null);
+  const chains = usePayoutChains();
+  // Whether each cross-chain row's route check passed, by row id. A Monad row needs none.
+  const [routeOk, setRouteOk] = useState<Record<number, boolean>>({});
   const busy = step !== null;
   const asset = wallet.asset ?? "";
 
@@ -47,9 +55,10 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
   const total = micro.reduce<bigint>((sum, v) => sum + (v ?? ZERO), ZERO);
   const balance = wallet.balance ? toMicro(wallet.balance) ?? ZERO : null;
   const over = balance !== null && total > balance;
-  const addresses = rows.map((r) => r.to.trim().toLowerCase());
+  const addresses = rows.map((r) => `${r.chain}:${r.to.trim().toLowerCase()}`);
   const duplicate = (i: number) => rows[i]!.to.trim() !== "" && addresses.indexOf(addresses[i]!) !== i;
-  const complete = rows.every((r, i) => looksLikeAddress(r.to) && micro[i] !== null && !duplicate(i));
+  const addressOk = (r: Row) => (r.chain === MONAD ? looksLikeAddress(r.to) : r.to.trim() !== "");
+  const complete = rows.every((r, i) => addressOk(r) && micro[i] !== null && !duplicate(i) && (r.chain === MONAD || routeOk[r.id] === true));
   const ready = complete && !over && !busy && rows.length >= 2;
 
   const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -68,7 +77,7 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
     setError("");
     setFields({});
     const outcome = await send(
-      { kind: "SPLIT", lines: rows.map((r) => ({ to: r.to.trim(), amount: r.amount.trim() })), ...(note.trim() ? { note: note.trim() } : {}) },
+      { kind: "SPLIT", lines: rows.map((r) => ({ to: r.to.trim(), amount: r.amount.trim(), ...(r.chain !== MONAD ? { dest_chain: r.chain } : {}) })), ...(note.trim() ? { note: note.trim() } : {}) },
       setStep,
     );
     setStep(null);
@@ -102,16 +111,23 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
         <CardHeader label="Recipients" hint="Paid in one transaction, all or nothing." />
         <div className="flex flex-col gap-6">
           {rows.map((row, i) => (
-            <div key={i} className="flex flex-col gap-3 border-t border-line pt-5 first:border-t-0 first:pt-0">
+            <div key={row.id} className="flex flex-col gap-3 border-t border-line pt-5 first:border-t-0 first:pt-0">
+              <ChainPicker chains={chains} value={row.chain} onChange={(c) => set(i, { chain: c })} disabled={busy} />
               <ControlledField
                 label={`Recipient ${i + 1}`}
                 value={row.to}
                 onChange={(v) => set(i, { to: v })}
-                placeholder="0x…"
+                placeholder={row.chain === MONAD ? "0x…" : "Address on that chain"}
                 mono
                 required
                 disabled={busy}
-                error={row.to && !looksLikeAddress(row.to) ? "That is not a valid address." : duplicate(i) ? "This address is already in the list." : fields[`lines.${i}.to`]}
+                error={
+                  row.chain === MONAD && row.to && !looksLikeAddress(row.to)
+                    ? "That is not a valid address."
+                    : duplicate(i)
+                      ? "This address is already in the list."
+                      : fields[`lines.${i}.to`]
+                }
               />
               <ControlledField
                 label="Amount"
@@ -124,6 +140,7 @@ function SplitLive({ wallet }: { wallet: WalletBalance }) {
                 disabled={busy}
                 error={row.amount && !looksLikeAmount(row.amount) ? "Enter an amount above zero, with up to 6 decimals." : fields[`lines.${i}.amount`]}
               />
+              <RowRoute chain={row.chain} chains={chains} to={row.to} amount={row.amount} onReady={(ok) => setRouteOk((m) => (m[row.id] === ok ? m : { ...m, [row.id]: ok }))} />
               {rows.length > 2 && (
                 <div>
                   <Action onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} disabled={busy}>

@@ -7,7 +7,7 @@ import { ControlledField } from "@/components/dash/field";
 import { ReadOnlyField } from "@/components/dash/field";
 import { useSendTransfer, type SendStep } from "@/lib/use-send-transfer";
 import type { Transfer, WalletBalance } from "@/lib/api/types";
-import { CannotSend, Note, PRIVY_ON, Receipt, looksLikeAddress, looksLikeAmount, stepText } from "../send-ui";
+import { CannotSend, ChainPicker, MONAD, Note, PRIVY_ON, Receipt, RouteNote, looksLikeAddress, looksLikeAmount, routeReady, stepText, usePayoutChains, useRouteQuote } from "../send-ui";
 
 /**
  * Pay someone from your own wallet.
@@ -31,24 +31,29 @@ function PayoutLive({ wallet }: { wallet: WalletBalance }) {
   const [step, setStep] = useState<SendStep | null>(null);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
+  const [chain, setChain] = useState(MONAD);
+  const chains = usePayoutChains();
+  const quote = useRouteQuote(chain, to, amount);
+  const cross = chain !== MONAD;
   const [done, setDone] = useState<{ transfer: Transfer; settled: boolean } | null>(null);
   const busy = step !== null;
   const asset = wallet.asset ?? "";
 
-  const toError = to && !looksLikeAddress(to) ? "That is not a valid address." : fields["lines.0.to"];
+  const quoteError = typeof quote === "object" && !quote.ok ? quote : null;
+  const toError = !cross && to && !looksLikeAddress(to) ? "That is not a valid address." : (fields["lines.0.to"] ?? (quoteError?.field === "to" ? quoteError.message : undefined));
   const amountError =
     amount && !looksLikeAmount(amount)
       ? "Enter an amount above zero, with up to 6 decimals."
       : amount && wallet.balance && Number(amount) > Number(wallet.balance)
         ? `Your wallet holds ${wallet.balance} ${asset}.`
-        : fields["lines.0.amount"];
-  const ready = looksLikeAddress(to) && looksLikeAmount(amount) && !amountError && !busy;
+        : (fields["lines.0.amount"] ?? (quoteError?.field === "amount" ? quoteError.message : undefined));
+  const ready = (cross ? to.trim() !== "" : looksLikeAddress(to)) && looksLikeAmount(amount) && !amountError && routeReady(chain, quote) && !busy;
 
   async function submit() {
     setError("");
     setFields({});
     const outcome = await send(
-      { kind: "PAYOUT", lines: [{ to: to.trim(), amount: amount.trim() }], ...(note.trim() ? { note: note.trim() } : {}) },
+      { kind: "PAYOUT", lines: [{ to: to.trim(), amount: amount.trim(), ...(cross ? { dest_chain: chain } : {}) }], ...(note.trim() ? { note: note.trim() } : {}) },
       setStep,
     );
     setStep(null);
@@ -71,6 +76,7 @@ function PayoutLive({ wallet }: { wallet: WalletBalance }) {
           setTo("");
           setAmount("");
           setNote("");
+          setChain(MONAD);
         }}
       />
     );
@@ -86,9 +92,23 @@ function PayoutLive({ wallet }: { wallet: WalletBalance }) {
           </span>
         </ReadOnlyField>
 
-        <ControlledField label="Recipient address" value={to} onChange={setTo} placeholder="0x…" mono required error={toError} hint="An address on Monad. Copy it from the person you are paying: a wrong address cannot be undone." disabled={busy} />
+        <ChainPicker chains={chains} value={chain} onChange={setChain} disabled={busy} />
+
+        <ControlledField
+          label="Recipient address"
+          value={to}
+          onChange={setTo}
+          placeholder={cross ? "Address on that chain" : "0x…"}
+          mono
+          required
+          error={toError}
+          hint={`An address on ${cross ? (chains.find((c) => c.id === chain)?.name ?? "that chain") : "Monad"}. Copy it from the person you are paying: a wrong address cannot be undone.`}
+          disabled={busy}
+        />
 
         <ControlledField label="Amount" value={amount} onChange={setAmount} suffix={asset} inputMode="decimal" placeholder="0.00" required error={amountError} disabled={busy} />
+
+        {cross && <RouteNote chain={chain} chains={chains} quote={quote} />}
 
         <ControlledField label="Note" value={note} onChange={setNote} placeholder="What this is for (only you see it)" hint="Optional." disabled={busy} />
 

@@ -149,11 +149,14 @@ export function AnimatedSelect({
   invalid,
   describedBy,
   className = "",
+  onChange,
 }: {
   id: string;
   name: string;
   options: SelectOption[];
   defaultValue?: string;
+  /** Called with the new value when one is picked, for a screen that reacts to the choice. */
+  onChange?: (value: string) => void;
   invalid?: boolean;
   describedBy?: string;
   /** Classes for the trigger, so it matches the other inputs in its form. */
@@ -189,6 +192,7 @@ export function AnimatedSelect({
 
   function choose(i: number) {
     setValue(options[i].value);
+    onChange?.(options[i].value);
     setOpen(false);
     trigger.current?.focus();
   }
