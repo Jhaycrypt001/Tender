@@ -109,7 +109,7 @@ export const capabilities = {
   cards: [
     {
       title: "Accept any coin",
-      body: "Bitcoin, Solana, USDT on Tron, USDC on Base, and 27 more. Your buyer pays from the wallet they already have open.",
+      body: "Bitcoin, Solana, USDT on Tron, USDC on Base, and 26 more. Your buyer pays from the wallet they already have open.",
       points: ["Scan and send", "No bridge", "No network picker"],
     },
     {
@@ -164,12 +164,12 @@ export const anywhere = {
       body: "Tender never asks for a signature or a connect prompt, so exchange withdrawals work exactly like wallet sends.",
     },
     {
-      title: "Priced for the whole minute",
-      body: "The quote is held to a visible deadline. If it lapses before they send, the deposit is refunded rather than silently repriced.",
+      title: "A clear deadline, and nothing lost after it",
+      body: "Every invoice shows how long it stays open. A payment that arrives late is not lost: it still settles to your address.",
     },
     {
       title: "Underpayment is a state, not a ticket",
-      body: "A short payment gets its own state and a webhook, never a support thread. A deposit below the chain minimum is refunded automatically; anything above it is yours, recorded against the invoice.",
+      body: "A short payment gets its own state and a webhook, never a support thread. What arrived is yours, recorded against the invoice, and the checkout shows each chain's minimum before the buyer sends.",
     },
   ],
   cta: { label: "Read the docs", href: "/docs" },
@@ -189,7 +189,8 @@ export const card = {
     "Spend anywhere cards are taken",
     "Non-custodial until the moment you spend",
   ],
-  cta: { label: "Join the waitlist", href: "/#get-started" },
+  // There is no waitlist yet, so the button starts what exists today instead of promising a signup.
+  cta: { label: "Start getting paid", href: "/app" },
   image: {
     src: "/img/tender-card.png",
     alt: "The Tender card, matte black with an ochre edge, half out of its sleeve",
@@ -202,7 +203,8 @@ export const settleLive = {
   eyebrow: "Settle · Live",
   heading: "Money that shows up while you are still looking at it",
   body: "Most payments clear in under a minute. You watch the invoice move from detected to settled on the same screen your customer is standing in front of.",
-  stat: { value: "~40s", label: "Median time to settled" },
+  // Measured, not hoped for: stablecoin payments have settled in one to two minutes live.
+  stat: { value: "<2 min", label: "Typical time to settled" },
   cta: { label: "Get started", href: "/app" },
   image: {
     src: "/img/settle-live.png",
@@ -286,7 +288,7 @@ export const faq = {
     },
     {
       q: "What happens if a customer underpays?",
-      a: "It's a first-class state, not an error. If less than the amount has arrived when the invoice closes, it moves to UNDERPAID and you get a webhook. A deposit below the chain minimum is refunded to the buyer automatically; anything above it reached your address, and the invoice's payments show exactly what arrived.",
+      a: "It's a first-class state, not an error. If less than the amount has arrived when the invoice closes, it moves to UNDERPAID and you get a webhook. What did arrive reached your address, and the invoice's payments show exactly how much.",
     },
     {
       q: "Does my customer need to connect anything?",
@@ -295,6 +297,18 @@ export const faq = {
     {
       q: "Can I take payments in person?",
       a: "Yes. The counter screen in your dashboard turns a phone, tablet or laptop into a till: key in the amount, and the customer scans the code or taps an NFC sticker, then pays from their own wallet. Writing a sticker needs Chrome on Android; any NFC phone, iPhone included, can tap it.",
+    },
+    {
+      q: "Do I need a crypto wallet to start?",
+      a: "No. Sign in with Google and a wallet on Monad is created for you. It is yours: Tender cannot move money out of it without your confirmation.",
+    },
+    {
+      q: "Can I get paid without making an invoice?",
+      a: "Yes. A payment link is one reusable link or QR code, and every buyer who uses it gets their own invoice. Your deposit address is permanent: anyone can send to it from any chain, with no invoice at all.",
+    },
+    {
+      q: "Can I pay out or refund from Tender?",
+      a: "Yes. From the dashboard you can pay anyone, refund a buyer, or split one amount across up to ten people. On Monad it is instant and Tender pays the network fee. To any of the other 29 chains, Aurora carries it, a small fee comes out of the amount, and it usually arrives in a minute or two.",
     },
     {
       q: "Do I need MON to receive payments?",
@@ -323,41 +337,31 @@ export const footer = {
   blurb:
     "Tender is an any-chain crypto checkout. Your buyer pays from the wallet they already have; you are settled in one asset on Monad.",
   cta: { label: "Get started", href: "/app" },
-  social: [
-    { label: "GitHub", href: "#github" },
-  ],
+  // Only links that lead somewhere. Pricing, Status, About, Contact, GitHub, Terms and Privacy
+  // were placeholders ("#pricing") that went nowhere; they come back when those pages exist.
+  social: [] as { label: string; href: string }[],
   columns: [
     {
       title: "Product",
       links: [
         { label: "Checkout", href: "/#product" },
+        { label: "In person", href: "/#in-person" },
         { label: "Chains", href: "/#chains" },
-        { label: "Pricing", href: "#pricing" },
-        { label: "Status", href: "#status" },
+        { label: "Pricing", href: "/#faq" },
       ],
     },
     {
       title: "Developers",
       links: [
         { label: "Docs", href: "/docs" },
-        { label: "API reference", href: "/docs" },
-        { label: "Quickstart", href: "/docs" },
-        { label: "GitHub", href: "#github" },
+        { label: "How it works", href: "/#how-it-works" },
       ],
     },
     {
       title: "Company",
       links: [
-        { label: "About", href: "#about" },
         { label: "Blog", href: "/blog" },
-        { label: "Contact", href: "#contact" },
-      ],
-    },
-    {
-      title: "Legal",
-      links: [
-        { label: "Terms", href: "#terms" },
-        { label: "Privacy", href: "#privacy" },
+        { label: "FAQ", href: "/#faq" },
       ],
     },
   ],

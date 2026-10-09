@@ -45,7 +45,7 @@ export const posts: Post[] = [
     body: [
       "Every payment system has to answer one awkward question: what do you do when the money that arrives is not the money you asked for? Most crypto processors answer it with silence, a stuck invoice and an email address.",
       "Underpayment happens for ordinary reasons. An exchange deducts its withdrawal fee from the amount the buyer typed. The price moved between the quote and the send. Someone typed the figure by hand and missed a decimal. None of these are fraud and none of them are rare.",
-      "Tender models the short payment as a first-class invoice state rather than an exception. A deposit below the minimum is refunded by the quote deadline, the invoice moves to UNDERPAID, and your server gets a webhook saying exactly that. Your system knows what happened without anyone reading a ticket.",
+      "Tender models the short payment as a first-class invoice state rather than an exception. The invoice moves to UNDERPAID, what did arrive is recorded against it, and your server gets a webhook saying exactly that. Your system knows what happened without anyone reading a ticket.",
       "There is a second case that matters more and is discussed less. If a deposit succeeds and the settlement step afterwards fails, there is no automatic refund, and recovery has to be explicit. We surface that as its own state, NEEDS_RECOVERY, instead of leaving the invoice sitting in limbo looking like it is still waiting.",
       "Naming the bad paths is not pessimism. It is the difference between a payment system your finance team can reconcile and one they cannot.",
     ],

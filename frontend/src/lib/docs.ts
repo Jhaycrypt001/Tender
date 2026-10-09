@@ -133,7 +133,7 @@ export const docs = {
       {
         name: "UNDERPAID",
         terminal: true,
-        desc: "Less than the amount arrived before the invoice closed. A deposit below the chain minimum is refunded automatically; anything above it reached your address — see the invoice's payments.",
+        desc: "Less than the amount arrived before the invoice closed. What arrived reached your address — see the invoice's payments.",
       },
       {
         name: "EXPIRED",

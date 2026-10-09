@@ -1,5 +1,6 @@
 "use client";
 
+import { reloadIfStale } from "@/lib/stale-deploy";
 import { useCallback } from "react";
 import { getIdentityToken, useSignMessage } from "@privy-io/react-auth";
 import {
@@ -81,6 +82,8 @@ export function useSettlementSetup() {
       } catch (err) {
         // Logged so a failure can be diagnosed; the merchant gets one plain sentence.
         console.error("[tender] wallet setup failed", err);
+        // This tab predates the latest deploy: reload onto it rather than show a dead end.
+        if (reloadIfStale(err)) return "Tender was just updated. Reloading…";
         const code = (err as { code?: string } | null)?.code;
         if (code === "user_rejected" || /reject|denied|cancel/i.test(String((err as Error)?.message))) {
           return "You closed the confirmation, so your wallet isn't verified yet. Try again when you're ready.";

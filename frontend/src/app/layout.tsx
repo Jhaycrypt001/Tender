@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Nav from "@/components/nav";
 import Footer from "@/components/footer";
+import { StaleDeployGuard } from "@/components/stale-deploy-guard";
 
 /**
  * Season Mix / Season Sans (the goldsand.fi pairing) are commercial fonts from
@@ -80,6 +81,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
+        <StaleDeployGuard />
         <Nav />
         <main id="main">{children}</main>
         <Footer />

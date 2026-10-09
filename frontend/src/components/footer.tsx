@@ -37,8 +37,8 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Link grid — 2-up on phones, 4-up from sm. */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 py-14 sm:grid-cols-4 md:py-20">
+        {/* Link grid — 2-up on phones, 3-up from sm. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 py-14 sm:grid-cols-3 md:py-20">
           {footer.columns.map((col) => (
             <div key={col.title}>
               <h2 className="mb-5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-mute">

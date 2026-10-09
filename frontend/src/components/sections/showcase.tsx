@@ -2,7 +2,7 @@ import { showcase } from "@/lib/copy";
 
 export default function Showcase() {
   return (
-    <section className="section-y" id="product">
+    <section className="section-y">
       <div className="shell">
         <h2 className="max-w-[16ch] text-balance">{showcase.heading}</h2>
 

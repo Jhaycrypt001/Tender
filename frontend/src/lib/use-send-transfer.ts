@@ -1,5 +1,6 @@
 "use client";
 
+import { reloadIfStale } from "@/lib/stale-deploy";
 import { useCallback } from "react";
 import { useSignTypedData } from "@privy-io/react-auth";
 import {
@@ -109,6 +110,8 @@ export function useSendTransfer() {
         return { ok: true, transfer: latest, settled: latest.status === "CONFIRMED" };
       } catch (err) {
         console.error("[tender] sending a transfer failed", err);
+        // Out-of-date tab after a deploy. Nothing was relayed with a stale action, so a reload is safe.
+        if (reloadIfStale(err)) return { ok: false, message: "Tender was just updated. Reloading, then try again. Nothing was sent." };
         const code = (err as { code?: string } | null)?.code;
         if (code === "user_rejected" || /reject|denied|cancel|closed/i.test(String((err as Error)?.message))) {
           return { ok: false, message: "You closed the confirmation, so nothing was sent." };

@@ -131,7 +131,7 @@ export const INVOICE_STATUS_HELP: Record<InvoiceStatus, string> = {
   OVERPAID:
     "Settled, and the buyer sent more than the invoice asked for. The excess is recorded against this invoice.",
   UNDERPAID:
-    "Less than the amount arrived before the invoice closed. A deposit below the chain minimum was refunded to the sender automatically; anything above it reached your address — see the payments below.",
+    "Less than the amount arrived before the invoice closed. What arrived reached your address — see the payments below.",
   EXPIRED: "The deadline passed with nothing received.",
   CANCELLED: "You cancelled this invoice before it was paid.",
   NEEDS_RECOVERY:

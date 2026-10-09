@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reloadIfStale } from "@/lib/stale-deploy";
 import Link from "next/link";
 import { PageShell } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
@@ -16,6 +17,8 @@ import { Action } from "@/components/dash/action";
  */
 export default function DashError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    // A tab left over from before a deploy: reload onto the new one instead of showing this page.
+    if (reloadIfStale(error)) return;
     console.error("[tender] dashboard page failed", error);
   }, [error]);
 

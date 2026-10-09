@@ -95,11 +95,37 @@ function buildUrl(
   return qs ? `${url}?${qs}` : url;
 }
 
+const TIMED_OUT = "The API did not respond in time.";
+const RETRY_AFTER_MS = 1200;
+
 /**
  * The transport. `auth` is null for public routes. Exported for `./server`
  * only; call `request()` or `publicRequest()` instead.
+ *
+ * A read that fails because the API could not be reached, or answered 502/503/504, is tried
+ * once more after a moment. Every push redeploys the API, and for a few seconds while the new
+ * instance takes over, calls fail: without this, a page loaded in that window shows "couldn't
+ * load your account" until it is reloaded. Only reads: a write might have landed the first time.
+ * A timeout is not retried, so a slow API does not double the wait.
  */
 export async function send<T>(
+  base: string,
+  path: string,
+  options: RequestOptions,
+  auth: MerchantAuth | null,
+): Promise<ApiResult<T>> {
+  const first = await sendOnce<T>(base, path, options, auth);
+  const isRead = (options.method ?? "GET") === "GET";
+  const transient =
+    !first.ok &&
+    ((first.error.kind === "network" && first.error.message !== TIMED_OUT) ||
+      [502, 503, 504].includes(first.error.status ?? 0));
+  if (!isRead || !transient) return first;
+  await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS));
+  return sendOnce<T>(base, path, options, auth);
+}
+
+async function sendOnce<T>(
   base: string,
   path: string,
   options: RequestOptions,
@@ -185,9 +211,7 @@ export async function send<T>(
       ok: false,
       error: err(
         "network",
-        aborted
-          ? "The API did not respond in time."
-          : "Could not reach the Tender API.",
+        aborted ? TIMED_OUT : "Could not reach the Tender API.",
       ),
     };
   } finally {

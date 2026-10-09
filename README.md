@@ -679,3 +679,7 @@ Built for the **Metropolis hackathon**, Aurora Intents × Monad bounty.
 
 <br/>
 </div>
+
+## License
+
+MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Tender team.
