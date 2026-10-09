@@ -41,6 +41,8 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
   - [Video](#video)
 - [Architecture](#architecture)
   - [System overview](#system-overview)
+  - [The whole system](#the-whole-system)
+  - [Sending money out](#sending-money-out)
   - [The invoice state machine](#the-invoice-state-machine)
   - [The poller](#the-poller)
   - [Why NEEDS_RECOVERY exists](#why-needs_recovery-exists)
@@ -91,10 +93,10 @@ That is the whole buyer-facing story, and it is deliberately short. Underneath i
 
 **For the merchant, Tender is the entire money layer of a business:**
 
-- **Take money.** Create an invoice from the API or the dashboard, or share a payment link that opens a fresh invoice for every buyer who touches it. Put that link in a bio, an email, or a QR code taped beside the till.
+- **Take money.** Create an invoice from the API or the dashboard, numbered for you (ORD-001, ORD-002…), or share a payment link that opens a fresh invoice for every buyer who touches it. Put that link in a bio, an email, or a QR code taped beside the till. Or skip invoices entirely: every merchant gets one permanent deposit address that accepts money from any chain, forever.
 - **Watch it land.** The dashboard shows what has settled on Monad, what is still in flight, and the exact address it lands at. The same transitions stream to your server as signed webhooks and to the checkout page over SSE, so nobody has to refresh anything.
-- **Send money back out.** Refund a buyer, pay a supplier or contractor, or split one payment across several addresses — all from settled revenue, without first moving it somewhere else.
-- **Reconcile without guessing.** Every payment carries your own `reference`, the chain it came from, the amount in and the amount settled. Underpayment, overpayment and failed settlement are each their own state, so your books never have to infer what happened from a generic error.
+- **Send money back out, to any chain.** Refund a buyer, pay a supplier or contractor, or split one payment across up to ten people — from settled revenue, to an address on Monad or on any of the other 29 chains. On Monad it is instant and Tender pays the network fee; to another chain Aurora carries it, and the screen shows what the recipient receives before you sign. A split stays one all-or-nothing transaction on Monad, even when its recipients are on different chains.
+- **Reconcile without guessing.** Every payment carries your own `reference`, the chain and coin it came from, the amount in and the amount settled, and a link to the transaction on that chain's explorer. Money in and money out sit on one timeline, and every row opens to its full detail. Underpayment, overpayment and failed settlement are each their own state, so your books never have to infer what happened from a generic error.
 - **Price in what your customers think in.** The dashboard displays in any of thirteen currencies. That is presentation only — the settlement asset is a separate, deliberate setting, because letting a flag in a header silently change where money goes would be a catastrophe.
 
 **What Tender never does:** hold your money. Funds move from the buyer's chain to the merchant's Monad address and stop there. Tender is not in the custody path, which is why there is no float, no license, and no account for anyone to freeze.
@@ -292,33 +294,94 @@ Two halves in one repository, meeting at a single documented contract.
    └──────────────────────┘
 ```
 
+### The whole system
+
+The overview above is the money. This is everything that runs, and who talks to whom.
+
+```mermaid
+flowchart LR
+    buyer["Buyer<br/>any wallet or exchange<br/>on any of 30 chains"]
+    merchantSrv["Merchant's server"]
+
+    subgraph vercel["Vercel"]
+        web["Tender Web · Next.js 15<br/>landing · docs · dashboard · checkout"]
+    end
+
+    subgraph railway["Railway"]
+        api["Tender API · Fastify<br/>invoices · links · transfers · balance · Ask"]
+        worker["Worker<br/>poller · webhooks · transfer tracking<br/>chain minimums · email"]
+        pg[("Postgres")]
+        redis[("Redis")]
+    end
+
+    subgraph outside["Services Tender relies on"]
+        aurora["Aurora Intents<br/>deposit addresses · quotes<br/>status · prices"]
+        privy["Privy<br/>Google sign-in · embedded wallets"]
+        monad["Monad · chain 143<br/>merchant wallet · USDC"]
+        resend["Resend · email"]
+        gemini["Google Gemini · Ask"]
+    end
+
+    buyer -->|pays to a deposit address| aurora
+    aurora -->|settles USDC| monad
+    buyer -->|opens the checkout| web
+    web -->|REST and live status, platform key stays server-side| api
+    web -->|sign-in and wallet signatures| privy
+    api -->|mint addresses, quote routes| aurora
+    api -->|relays signed transfers, reads balances| monad
+    api --> pg
+    api --> redis
+    api -->|questions| gemini
+    worker -->|poll deposits and deliveries, prices| aurora
+    worker -->|confirm transfers| monad
+    worker --> pg
+    worker -->|publish status| redis
+    worker -->|signed webhooks| merchantSrv
+    worker -->|welcome email| resend
+```
+
+- **Two backend services.** The API answers requests; the worker does everything that runs on its own clock. Both read and write the same Postgres, and the worker publishes status changes through Redis for the API to stream to open checkout pages.
+- **Three kinds of Aurora address.** One per invoice and chain family, one permanent deposit address per merchant, and a one-off address for each cross-chain payout.
+- **Keys never reach the browser.** The dashboard calls the API from the server with the platform key; the merchant's wallet keys live with Privy, and only the merchant can sign.
+### Sending money out
+
+```
+   Merchant's wallet on Monad (Privy, self-custodial)
+         │  signs one EIP-3009 authorization per recipient — no gas needed
+         ▼
+   Tender relayer — submits them in ONE Monad transaction, pays the gas
+         │
+         ├──▶ recipient on Monad ............................ done, instantly
+         │
+         └──▶ one-off Aurora address on Monad ──▶ Aurora ──▶ recipient on Base,
+                                                            Solana, Bitcoin, …
+```
+
+The wallet signs exactly who gets what, so the relayer can submit but never change a send. For another chain, Tender mints a one-off Aurora address that delivers to the recipient there, and follows Aurora until it lands.
+
 **The seam is the contract.** `frontend/src/lib/docs.ts` renders a public API reference at [`/docs`](https://tenderr.xyz/docs). The paths, field names, invoice states, ID prefixes and webhook payloads there are the real ones the backend is built to. Because that page is already published, changing one is a breaking change to a public promise — not a refactor.
 
 ### The invoice state machine
 
-Six terminal states. **Once terminal, an invoice never moves again.**
+Six terminal states. **Once terminal, an invoice never moves again**, with one published exception: a second payment turns SETTLED into OVERPAID.
 
-```
-                        ┌─────────┐
-                        │ PENDING │  created, addresses minted
-                        └────┬────┘
-          ┌──────────┬───────┴───────┬────────────┐
-          ▼          ▼               ▼            ▼
-    ┌──────────┐ ┌─────────┐   ┌─────────┐  ┌──────────┐
-    │ DETECTED │ │UNDERPAID│   │ EXPIRED │  │CANCELLED │
-    │ on-chain │ │ auto-   │   │deadline │  │ merchant │
-    │ not yet  │ │ refunded│   │ passed  │  │  action  │
-    │ settled  │ │         │   └─────────┘  └──────────┘
-    └────┬─────┘ └─────────┘
-         ▼
-    ┌─────────┐        ┌──────────┐
-    │ SETTLED │───────▶│ OVERPAID │  settled; excess recorded
-    └────┬────┘        └──────────┘
-         │
-         ▼  Aurora reports OPERATION_FAILED *after* a successful deposit
-    ┌────────────────┐
-    │ NEEDS_RECOVERY │  ⚠ NOT auto-refunded. Explicit queue.
-    └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: created, addresses minted
+    PENDING --> DETECTED: a deposit is seen on-chain
+    PENDING --> EXPIRED: deadline passed, nothing arrived
+    PENDING --> CANCELLED: merchant cancels
+    DETECTED --> SETTLED: one payment covers the amount
+    DETECTED --> OVERPAID: it covers it, with more
+    DETECTED --> UNDERPAID: the invoice closed while short
+    DETECTED --> NEEDS_RECOVERY: deposit landed, onward settlement failed
+    SETTLED --> OVERPAID: a second payment arrives
+    SETTLED --> [*]
+    OVERPAID --> [*]
+    UNDERPAID --> [*]
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+    NEEDS_RECOVERY --> [*]
 ```
 
 | State | Terminal | Meaning |
@@ -327,7 +390,7 @@ Six terminal states. **Once terminal, an invoice never moves again.**
 | `DETECTED` | — | A deposit is visible on the source chain but has not settled. |
 | `SETTLED` | ✓ | The full amount landed at the merchant's address in their chosen asset. |
 | `OVERPAID` | ✓ | Settled, and more came in than was owed. The excess is recorded. |
-| `UNDERPAID` | ✓ | Below the chain minimum — refunded automatically by the quote deadline. |
+| `UNDERPAID` | ✓ | Less than the amount arrived before the invoice closed. What did arrive reached the merchant, and the invoice's payments show exactly how much. |
 | `EXPIRED` | ✓ | The deadline passed with nothing received. |
 | `CANCELLED` | ✓ | The merchant cancelled before payment. |
 | `NEEDS_RECOVERY` | ✓ | Deposit succeeded, onward settlement failed. **Not auto-refunded.** |
@@ -354,12 +417,9 @@ Six terminal states. **Once terminal, an invoice never moves again.**
 
 This is the part most processors — and nearly every hackathon entry — collapse into a generic "failed". It is the clearest signal that this system was designed against the real API rather than against an assumption of how payments "usually" work.
 
-Aurora's refund behaviour is **asymmetric**:
+When a buyer's deposit has landed but the onward settlement to the merchant fails, Aurora does **not** refund it. Recovery is explicit — a retry or a withdrawal.
 
-- A failure **before** the deposit lands is refunded automatically, by the quote deadline.
-- A failure **after** the deposit lands is **not**. Recovery is explicit — a retry or a withdrawal.
-
-Collapse both into one error state and a merchant whose buyer's money succeeded on the way in but failed on the way out sees "failed", assumes a refund happened, and tells their customer so. **It didn't.** Tender gives that case its own state, its own queue, and its own row in the dashboard, so a support team can see it and act.
+Collapse that into a generic "failed" and a merchant whose buyer's money succeeded on the way in but failed on the way out sees "failed", assumes a refund happened, and tells their customer so. **It didn't.** Tender gives that case its own state, its own queue, and its own row in the dashboard, so a support team can see it and act.
 
 ---
 
@@ -444,10 +504,18 @@ The `token` is **not** the invoice id. It is unguessable, carries nothing mercha
 
 | Scope | Method | Path | |
 |---|---|---|---|
-| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Not idempotent: a retry creates a second invoice. |
+| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Idempotent on your `reference`: the same one again returns the original. Leave `reference` out and Tender numbers the invoice ORD-001, ORD-002… |
 | | `GET` | `/v1/invoices/:id` | Fetch one. |
 | | `GET` | `/v1/invoices` | List, filterable, paginated. |
 | | `POST` | `/v1/invoices/:id/cancel` | Cancel before payment. |
+| | `GET` | `/v1/payments` · `/v1/payments/:id` | Every payment in: chain, coin, amounts, transaction, state. |
+| | `GET` `POST` | `/v1/links` | Reusable payment links: one link, a fresh invoice per buyer. |
+| | `GET` `POST` | `/v1/deposit-address` | The merchant's permanent deposit address. |
+| | `GET` | `/v1/transfers/chains` | The chains money can be sent to, and what the recipient receives on each. |
+| | `POST` | `/v1/transfers/quote` | Dry run of a cross-chain send: what arrives, or why it cannot. |
+| | `POST` | `/v1/transfers` · `/v1/transfers/:id/submit` | Payout, refund or split: prepare, then submit the wallet's signatures. |
+| | `GET` | `/v1/transfers` · `/v1/transfers/:id` | Money sent out, with delivery status per recipient. |
+| | `GET` | `/v1/merchant/balance` | What the settlement wallet holds, read on-chain. |
 | | `GET` `PATCH` | `/v1/merchant` | Settings, settlement address, webhook URL. |
 | | `GET` `POST` | `/v1/merchant/api-keys` | List / create. Shown once, max 10 active. |
 | | `DELETE` | `/v1/merchant/api-keys/:id` | Revoke — effective immediately. |
@@ -591,7 +659,6 @@ Not assumed, not read off a blog post — probed against the real API with a rea
 | 2 | **Addresses are unique per chain *family*** — all EVM chains share one | One EVM mint covers fourteen chains. |
 | 2a | **Stellar requires a `memo`**, or the deposit is never credited | Stellar is excluded until the contract carries one. |
 | 3 | **Per-deposit quotes, no batching** | Two partial payments are two `Payment` rows, never one. |
-| 4 | **Sub-minimum deposits are auto-refunded** | Underpayment is a normal state, not an error. |
 | 5 | **Addresses are permanent** — no TTL | Invoice expiry is *Tender's* invention, layered on top. |
 | 6 | **`sender` is an arbitrary identifier** | **The core UX unlock: the buyer never connects a wallet.** |
 | 7 | **Refund asymmetry** after a successful deposit | `NEEDS_RECOVERY` exists as a first-class state. |
@@ -603,6 +670,7 @@ Not assumed, not read off a blog post — probed against the real API with a rea
 
 - Persistent deposit address creation is an **entitlement, not a bug.** It returned `403` for every chain, destination and sender until Aurora enabled the feature for the key's organization.
 - Aurora **serialises address creation per `sender`** and answers `429` to concurrent mints for the same invoice. Fired in parallel, the last family could exhaust its retries and fail the invoice with a 502 — seen live. Addresses are now minted **one family at a time**: about 3 seconds for the default four, and it cannot collide.
+- **Sending out to another chain works end to end.** A payout from a Tender wallet on Monad to an address on Base arrived in about 90 seconds, at about 0.3% total cost, and Tender marked it Delivered on its own. Aurora's dry quote validates the recipient address and the per-chain minimum before anything is signed, which is what lets the dashboard refuse a bad address or a too-small amount up front.
 - A full 30-chain minimum measurement takes **7–13 minutes**, not 2–3. One chain failing is retried once and then left out rather than aborting the run, and on a cold start each chain is published as it is measured, so `/public/chains` answers immediately instead of 503-ing for the whole run.
 
 ---
@@ -614,12 +682,14 @@ Honest, because a README that oversells is worse than no README.
 | Half | State |
 |---|---|
 | **Web** — landing, `/docs`, blog, dashboard, buyer checkout | **Built and deployed** at [tenderr.xyz](https://tenderr.xyz) |
-| **API** — invoices, poller, webhooks, recovery, keys | **Built and deployed.** 164 tests pass; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each |
+| **API** — invoices, poller, webhooks, recovery, keys, transfers | **Built and deployed.** 164 tests cover the core; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each. Cross-chain sending was verified live on mainnet. |
 | **The two halves, joined** | **Live.** The dashboard screenshots above are signed in against the deployed API — real merchant, real settlement address, real balance |
 
 **The Monad maintenance is over.** For most of the build, Monad as a destination was under maintenance on Aurora / NEAR Intents: dry quotes to Monad USDC failed from every origin, per-chain minimums could not be measured, and nothing could settle. That has been resolved, and routing to Monad works again — payouts, refunds and splits now go out to any supported chain through Aurora.
 
 Outstanding: the five fee-scroll illustrations are still numbered placeholders, and a handful of the dashboard captures further up were taken before the API was wired, so they show their empty states rather than live data. Earn / Intents Connect and the fiat ramps are post-hackathon (`docs/OFFRAMP.md`).
+
+**Next builds.** Treasury and Cash out (shown as "coming soon" in the dashboard), and **confidential payments**: Aurora's confidential mode hides the link between where money came from and where it went, and offering it as an opt-in for merchants who want their payouts private is a goal for a future build.
 
 ---
 
