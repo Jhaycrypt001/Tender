@@ -4,6 +4,7 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
+import { TxLink } from "@/components/dash/tx-link";
 import { FiatMoney } from "@/components/dash/currency";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { getPayment } from "@/lib/api/payments";
@@ -125,9 +126,8 @@ export default async function PaymentPage({
               Transaction
             </p>
             <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-stone/60 px-3 py-2">
-              <code className="min-w-0 break-all font-mono text-[0.75rem]">
-                {p.tx_hash}
-              </code>
+              {/* On the BUYER's chain, so it opens that chain's explorer. */}
+              <TxLink chain={p.from_chain} hash={p.tx_hash} full className="min-w-0" />
               <CopyValue value={p.tx_hash} />
             </div>
           </div>

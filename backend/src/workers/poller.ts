@@ -518,10 +518,15 @@ export class Poller {
         await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { payments: true } });
         if (invoice.status !== "UNDERPAID") return [];
+        // Judged on exactly the payments `settle` will count (none that arrived after the window
+        // closed). Judging on more could say SETTLED here, then `settle` re-closes it as
+        // UNDERPAID and sends the merchant a second underpaid webhook for nothing.
+        const closesAt = new Date(invoice.expiresAt.getTime() + this.deps.config.graceMinutes * 60_000);
+        const counted = invoice.payments.filter((p) => p.firstSeenAt <= closesAt);
         const next = judge({
           status: "DETECTED",
           amountExpected: invoice.amountExpected.toString(),
-          payments: invoice.payments.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null })),
+          payments: counted.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null })),
           closed: true,
           toleranceBps: this.deps.config.toleranceBps,
         });

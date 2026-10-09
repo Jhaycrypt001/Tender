@@ -5,6 +5,7 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
+import { TxLink } from "@/components/dash/tx-link";
 import { TransferStatePill } from "@/components/dash/state-pill";
 import { getTransfer } from "@/lib/api/transfers";
 import type { Transfer } from "@/lib/api/types";
@@ -28,7 +29,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   if (!result.ok) {
     return (
       <PageShell>
-        <PageHeader back="/app/activity?filter=sent-out" eyebrow="Sent out" title="Transfer" />
+        <PageHeader back="/app/activity?filter=outgoing" eyebrow="Outgoing" title="Transfer" />
         <ErrorState error={result.error} />
       </PageShell>
     );
@@ -41,8 +42,8 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
     <PageShell>
       <LiveRefresh />
       <PageHeader
-        back="/app/activity?filter=sent-out"
-        eyebrow={`Sent out · ${KIND[t.kind]}`}
+        back="/app/activity?filter=outgoing"
+        eyebrow={`Outgoing · ${KIND[t.kind]}`}
         title={`${t.total_amount} ${t.asset} out`}
         actions={<TransferStatePill status={t.status} />}
       />
@@ -116,7 +117,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
             <div className="mt-4 border-t border-line pt-3.5">
               <p className="mb-1.5 text-[0.75rem] uppercase tracking-[0.1em] text-mute">Transaction</p>
               <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-paper px-3 py-2">
-                <code className="min-w-0 break-all font-mono text-[0.75rem]">{t.tx_hash}</code>
+                <TxLink chain="monad" hash={t.tx_hash} full className="min-w-0" />
                 <CopyValue value={t.tx_hash} />
               </div>
               <a href={`${EXPLORER_TX}${t.tx_hash}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[0.8125rem] text-sand underline-offset-4 hover:underline">

@@ -4,7 +4,8 @@ import { PageHeader, PageShell, SectionHeader } from "@/components/dash/shell";
 import { Card, CardHeader } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
-import { Hash, Money, Timestamp, UsdMinimum } from "@/components/dash/money";
+import { Money, Timestamp, UsdMinimum } from "@/components/dash/money";
+import { TxLink } from "@/components/dash/tx-link";
 import { FiatMoney } from "@/components/dash/currency";
 import {
   INVOICE_STATUS_HELP,
@@ -89,7 +90,7 @@ export default async function InvoicePage({
       ) : (
         <span className="text-mute">&mdash;</span>
       ),
-      tx: <Hash value={p.tx_hash} />,
+      tx: <TxLink chain={p.from_chain} hash={p.tx_hash} />,
       state: <PaymentStatePill status={p.status} />,
     },
   }));

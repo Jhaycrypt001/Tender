@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/dash/card";
 import { Action } from "@/components/dash/action";
 import { ControlledField } from "@/components/dash/field";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
+import { TxLink } from "@/components/dash/tx-link";
 import { chainLabel } from "@/lib/chains";
 import { fromMicro, toMicro } from "@/lib/micro";
 import { useSendTransfer, type SendStep } from "@/lib/use-send-transfer";
@@ -173,7 +174,7 @@ function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: 
                         </span>
                       </span>
                       <span className="flex items-baseline justify-between gap-3 text-[0.75rem] opacity-70">
-                        <Hash value={p.tx_hash} />
+                        <TxLink chain={p.from_chain} hash={p.tx_hash} />
                         <span>
                           {remaining === BigInt(0) ? "Refunded in full" : p.refunded_amount && Number(p.refunded_amount) > 0 ? `${p.refunded_amount} refunded` : <Timestamp value={p.first_seen_at} />}
                         </span>

@@ -68,3 +68,54 @@ export const DEFAULT_CHAIN_IDS: ReadonlySet<string> = new Set([
   "monad", "gnosis", "scroll", "berachain", "plasma", "xlayer", "adi",
   "bitcoin", "solana", "tron",
 ]);
+
+/**
+ * Where to look a transaction up, per chain: the page for one transaction hash on that chain's
+ * public explorer. A payment's hash is on the BUYER's chain, a transfer's is on Monad, so each
+ * link has to go to the explorer of the chain the hash belongs to. ADI has no public explorer
+ * we can link to yet, so its hashes stay plain text.
+ */
+const TX_EXPLORER: Record<string, (hash: string) => string> = {
+  monad: (h) => `https://monadvision.com/tx/${h}`,
+  ethereum: (h) => `https://etherscan.io/tx/${h}`,
+  base: (h) => `https://basescan.org/tx/${h}`,
+  arbitrum: (h) => `https://arbiscan.io/tx/${h}`,
+  optimism: (h) => `https://optimistic.etherscan.io/tx/${h}`,
+  polygon: (h) => `https://polygonscan.com/tx/${h}`,
+  bnb: (h) => `https://bscscan.com/tx/${h}`,
+  avalanche: (h) => `https://snowtrace.io/tx/${h}`,
+  gnosis: (h) => `https://gnosisscan.io/tx/${h}`,
+  scroll: (h) => `https://scrollscan.com/tx/${h}`,
+  berachain: (h) => `https://berascan.com/tx/${h}`,
+  plasma: (h) => `https://plasmascan.to/tx/${h}`,
+  xlayer: (h) => `https://www.oklink.com/xlayer/tx/${h}`,
+  bitcoin: (h) => `https://mempool.space/tx/${h}`,
+  solana: (h) => `https://solscan.io/tx/${h}`,
+  tron: (h) => `https://tronscan.org/#/transaction/${h.replace(/^0x/, "")}`,
+  near: (h) => `https://nearblocks.io/txns/${h}`,
+  sui: (h) => `https://suiscan.xyz/mainnet/tx/${h}`,
+  aptos: (h) => `https://explorer.aptoslabs.com/txn/${h}?network=mainnet`,
+  ton: (h) => `https://tonviewer.com/transaction/${h}`,
+  xrp: (h) => `https://xrpscan.com/tx/${h}`,
+  cardano: (h) => `https://cardanoscan.io/transaction/${h}`,
+  dogecoin: (h) => `https://blockchair.com/dogecoin/transaction/${h}`,
+  litecoin: (h) => `https://blockchair.com/litecoin/transaction/${h}`,
+  bitcoincash: (h) => `https://blockchair.com/bitcoin-cash/transaction/${h}`,
+  zcash: (h) => `https://blockchair.com/zcash/transaction/${h}`,
+  dash: (h) => `https://blockchair.com/dash/transaction/${h}`,
+  starknet: (h) => `https://voyager.online/tx/${h}`,
+  aleo: (h) => `https://explorer.provable.com/transaction/${h}`,
+};
+
+/** The explorer page for `hash` on `chain`, or null when there is none to link to. */
+export function txUrl(chain: string | null | undefined, hash: string | null | undefined): string | null {
+  if (!chain || !hash) return null;
+  const build = TX_EXPLORER[chain];
+  return build ? build(hash) : null;
+}
+
+/** The explorer's name, for link text and accessible labels. */
+export function explorerName(chain: string | null | undefined): string {
+  const url = txUrl(chain, "x");
+  return url ? new URL(url).hostname.replace(/^www\./, "") : "the explorer";
+}

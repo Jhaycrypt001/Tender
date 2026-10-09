@@ -15,7 +15,8 @@ import {
   PlusIcon,
   RampsIcon,
 } from "@/components/dash/icons";
-import { Hash, Money, Timestamp } from "@/components/dash/money";
+import { Money, Timestamp } from "@/components/dash/money";
+import { TxLink } from "@/components/dash/tx-link";
 import { PaymentStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { getBalance, getMerchant } from "@/lib/api/merchant";
@@ -206,7 +207,7 @@ export default async function HomePage() {
                   </>
                 ),
                 sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
-                tx: <Hash value={p.tx_hash} />,
+                tx: <TxLink chain={p.from_chain} hash={p.tx_hash} />,
                 state: <PaymentStatePill status={p.status} />,
               },
             }))}
