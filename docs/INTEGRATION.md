@@ -68,7 +68,7 @@ Also closed:
 New things to know:
 
 - **Aurora gated persistent deposit addresses.** Creating new addresses returned `403 … not enabled for this API key` until Aurora enabled it for our Client Portal organization. The key in use now is the one in the `Tender` organization.
-- **Monad as a destination is under maintenance on Aurora's side.** Quotes to Monad fail from every origin, so minimums cannot be measured (`/public/chains` stays 503) and **no payment can settle yet**. Aurora says deposits made during it settle when it ends. There is no ETA. Everything in §5 that needs a settled payment waits on this.
+- **Monad as a destination was under maintenance on Aurora's side — resolved.** For most of the build, quotes to Monad failed from every origin, so minimums could not be measured (`/public/chains` stayed 503) and nothing could settle. Aurora has since brought Monad back and routing to it works again: payouts, refunds and split recipients go out to any supported chain through Aurora. §5 is no longer blocked on this.
 - **Addresses are minted one family at a time**, because Aurora answers 429 to concurrent mints for the same invoice. Creating an invoice takes about 3 seconds.
 
 Still open: a real settled payment and the §5 demo on a deployed stack, the frontend wiring for items 10 to 15, backups and alert rules (the host's job), and everything in the "Screens with nothing behind them" table (Ramps is planned for after the hackathon, see `docs/OFFRAMP.md`).

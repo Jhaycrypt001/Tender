@@ -617,11 +617,9 @@ Honest, because a README that oversells is worse than no README.
 | **API** — invoices, poller, webhooks, recovery, keys | **Built and deployed.** 164 tests pass; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each |
 | **The two halves, joined** | **Live.** The dashboard screenshots above are signed in against the deployed API — real merchant, real settlement address, real balance |
 
-**What has not happened yet: a real end-to-end payment** — roughly $2 from Solana into a live invoice.
+**The Monad maintenance is over.** For most of the build, Monad as a destination was under maintenance on Aurora / NEAR Intents: dry quotes to Monad USDC failed from every origin, per-chain minimums could not be measured, and nothing could settle. That has been resolved, and routing to Monad works again — payouts, refunds and splits now go out to any supported chain through Aurora.
 
-It is blocked, and not on our side. **Monad as a destination is under maintenance on Aurora / NEAR Intents.** Dry quotes to Monad USDC fail from every origin, so per-chain minimums cannot be measured and nothing can settle until it returns. Aurora has confirmed that deposits made during the maintenance window settle once it ends. There is no ETA.
-
-Also outstanding: the five fee-scroll illustrations are still numbered placeholders, and a handful of the dashboard captures further up were taken before the API was wired, so they show their empty states rather than live data. Earn / Intents Connect and the fiat ramps are post-hackathon (`docs/OFFRAMP.md`).
+Outstanding: the five fee-scroll illustrations are still numbered placeholders, and a handful of the dashboard captures further up were taken before the API was wired, so they show their empty states rather than live data. Earn / Intents Connect and the fiat ramps are post-hackathon (`docs/OFFRAMP.md`).
 
 ---
 
