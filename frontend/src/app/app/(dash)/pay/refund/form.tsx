@@ -39,18 +39,20 @@ function refundable(p: Payment): bigint {
   return settled > refunded ? settled - refunded : BigInt(0);
 }
 
-export function RefundForm({ payments, wallet }: { payments: Payment[]; wallet: WalletBalance }) {
+export function RefundForm({ payments, wallet, initialId }: { payments: Payment[]; wallet: WalletBalance; initialId?: string }) {
   if (!PRIVY_ON) return <CannotSend reason="Sign-in is not set up in this environment, so there is no wallet to send from." />;
   if (!wallet.can_send) return <CannotSend reason={wallet.reason} />;
-  return <RefundLive payments={payments} wallet={wallet} />;
+  return <RefundLive payments={payments} wallet={wallet} initialId={initialId} />;
 }
 
-function RefundLive({ payments, wallet }: { payments: Payment[]; wallet: WalletBalance }) {
+function RefundLive({ payments, wallet, initialId }: { payments: Payment[]; wallet: WalletBalance; initialId?: string }) {
   const router = useRouter();
   const send = useSendTransfer();
-  const [selected, setSelected] = useState("");
-  const [to, setTo] = useState("");
-  const [amount, setAmount] = useState("");
+  // Arriving from an overpaid invoice: that payment is already picked.
+  const start = payments.find((p) => p.id === initialId && refundable(p) > BigInt(0));
+  const [selected, setSelected] = useState(start?.id ?? "");
+  const [to, setTo] = useState(start && isEvmAddress(start.sender) ? start.sender : "");
+  const [amount, setAmount] = useState(start ? fromMicro(refundable(start)) : "");
   const [step, setStep] = useState<SendStep | null>(null);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});

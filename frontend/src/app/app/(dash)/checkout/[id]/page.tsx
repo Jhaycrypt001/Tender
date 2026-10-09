@@ -64,6 +64,9 @@ export default async function InvoicePage({
   const invoice = result.data;
   const payUrl = `${APP_URL}/pay/${invoice.token}`;
   const payments = invoice.payments ?? [];
+  // The payment to refund: the latest settled one. With a single payment it is that one (the buyer paid too much in one go).
+  const settledPayments = payments.filter((p) => p.status === "SETTLED");
+  const extra = settledPayments[settledPayments.length - 1];
 
   const rows: Row[] = payments.map((p) => ({
     id: p.id,
@@ -165,6 +168,23 @@ export default async function InvoicePage({
           )}
         </Card>
       </div>
+
+      {invoice.status === "OVERPAID" && extra && (
+        <Card tone="quiet" className="mt-4">
+          <CardHeader label="Overpaid" hint="The buyer sent more than the amount due." />
+          <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
+            {payments.filter((p) => p.status === "SETTLED").length > 1
+              ? "A second payment arrived after this invoice settled. You can send it back."
+              : `They sent more than ${invoice.amount_expected} ${invoice.currency}. Refund the difference.`}
+          </p>
+          <Link
+            href={`/app/pay/refund?payment=${extra.id}`}
+            className="mt-4 inline-flex rounded-full bg-ink px-4 py-2 text-[0.875rem] text-paper"
+          >
+            Refund the extra
+          </Link>
+        </Card>
+      )}
 
       <div className="mt-7">
         <SectionHeader label="Payments against this invoice" />
