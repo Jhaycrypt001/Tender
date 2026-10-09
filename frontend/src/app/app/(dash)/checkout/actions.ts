@@ -46,16 +46,13 @@ export async function createInvoiceAction(
 ): Promise<CreateState> {
   const amount = String(form.get("amount_expected") ?? "");
   const currency = String(form.get("currency") ?? "").trim();
-  const reference = String(form.get("reference") ?? "").trim();
   const redirectUrl = String(form.get("redirect_url") ?? "").trim();
   const chains = form.getAll("chains").map(String) as ChainId[];
 
-  // Echoed back so a rejected form is never cleared. Retyping an order
-  // reference because the API said no is how a merchant stops trusting a tool.
+  // Echoed back so a rejected form is never cleared.
   const values = {
     amount_expected: amount,
     currency,
-    reference,
     redirect_url: redirectUrl,
   };
 
@@ -65,9 +62,6 @@ export async function createInvoiceAction(
   if (!clean) {
     fields.amount_expected =
       "Enter an amount as digits, for example 49.00. No currency symbol.";
-  }
-  if (!reference) {
-    fields.reference = "Your own order number. It has to be unique.";
   }
   if (chains.length === 0) {
     fields.chains = "Pick at least one chain the buyer can pay from.";
@@ -79,14 +73,11 @@ export async function createInvoiceAction(
     {
       amount_expected: clean as string,
       currency: currency || "USDC",
-      reference,
+      // No reference: Tender numbers the invoice ORD-001, ORD-002… The submit button is
+      // disabled while this runs, so one click is one invoice.
       ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
       ...(chains.length ? { chains } : {}),
     },
-    // The order reference IS the idempotency key: it is already unique per
-    // merchant, so a double-click or a retried request returns the original
-    // invoice instead of creating a second one for the same order.
-    reference,
   );
 
   if (!result.ok) {

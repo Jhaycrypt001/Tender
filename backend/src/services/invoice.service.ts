@@ -62,8 +62,11 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
     );
   }
 
-  const existing = await findByReference(deps.db, merchant.id, input.reference);
-  if (existing) return { invoice: sameOrConflict(existing, input.amount_expected, currency), created: false };
+  // A reference the caller gave is the idempotency key: the same one again returns the original.
+  if (input.reference) {
+    const existing = await findByReference(deps.db, merchant.id, input.reference);
+    if (existing) return { invoice: sameOrConflict(existing, input.amount_expected, currency), created: false };
+  }
 
   const id = invoiceId();
   const addresses = await mintAll(deps.aurora, {
@@ -73,13 +76,17 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
     asset: merchant.settlementAsset ?? "USDC",
   });
 
+  // No reference: number it ORD-001, ORD-002… Taken only after minting succeeded, so a failed
+  // create does not burn a number.
+  const reference = input.reference ?? (await nextReference(deps.db, merchant.id));
+
   try {
     const invoice = await deps.db.invoice.create({
       data: {
         id,
         token: checkoutToken(),
         merchantId: merchant.id,
-        reference: input.reference,
+        reference,
         amountExpected: input.amount_expected,
         currency,
         chains,
@@ -94,7 +101,7 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
     return { invoice, created: true };
   } catch (err) {
     if (isUniqueViolation(err)) {
-      const winner = await findByReference(deps.db, merchant.id, input.reference);
+      const winner = await findByReference(deps.db, merchant.id, reference);
       if (winner) return { invoice: sameOrConflict(winner, input.amount_expected, currency), created: false };
     }
     throw err;
@@ -188,6 +195,20 @@ async function mintAll(
     }
     throw err;
   }
+}
+
+/**
+ * The merchant's next free ORD-number. The counter is incremented atomically in the database, so
+ * two invoices created at once never get the same number; a number the merchant already typed by
+ * hand is skipped.
+ */
+async function nextReference(db: Db, merchantId: string): Promise<string> {
+  for (let tries = 0; tries < 20; tries++) {
+    const { invoiceSeq } = await db.merchant.update({ where: { id: merchantId }, data: { invoiceSeq: { increment: 1 } }, select: { invoiceSeq: true } });
+    const reference = `ORD-${String(invoiceSeq).padStart(3, "0")}`;
+    if (!(await findByReference(db, merchantId, reference))) return reference;
+  }
+  throw new ApiError(500, "internal", "Could not number this invoice. Try again.");
 }
 
 function findByReference(db: Db, merchantId: string, reference: string) {

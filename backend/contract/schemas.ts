@@ -101,7 +101,8 @@ export const Invoice = z.object({
 export const CreateInvoiceInput = z.object({
   amount_expected: Amount.refine((s) => !/^0(\.0+)?$/.test(s), "must be greater than zero"),
   currency: z.string().trim().min(1).max(10),
-  reference: z.string().trim().min(1).max(200),
+  /** Your own order id, and the idempotency key. Omitted, Tender numbers the invoice ORD-001, ORD-002… (not idempotent). */
+  reference: z.string().trim().min(1).max(200).optional(),
   redirect_url: z.url({ protocol: /^https?$/ }).optional(),
   chains: z.array(ChainId).min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),

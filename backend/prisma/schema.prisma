@@ -35,6 +35,8 @@ model Merchant {
   settlementAsset    String?
   settlementVerified Boolean  @default(false)
   feeBps             Int      @default(0)
+  /// The last ORD-number handed out to an invoice created without a reference.
+  invoiceSeq         Int      @default(0)
   webhookUrl         String?
   webhookSecret      String
   createdAt          DateTime @default(now())

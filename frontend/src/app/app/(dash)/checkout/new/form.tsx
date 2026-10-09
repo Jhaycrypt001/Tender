@@ -106,21 +106,13 @@ export function CreateInvoiceForm({
           </div>
         </Card>
 
+        {/* No order number to type: Tender numbers every invoice ORD-001, ORD-002… itself. */}
         <Card>
           <CardHeader
-            label="Your reference"
-            hint="Your order number."
+            label="After payment"
+            hint="Tender numbers the invoice for you."
           />
           <div className="flex flex-col gap-5">
-            <Field
-              label="Order reference"
-              name="reference"
-              required
-              placeholder="ORD-1042"
-              defaultValue={v.reference}
-              error={state.fields?.reference}
-              hint="Must be unique."
-            />
             <Field
               label="Redirect after payment"
               name="redirect_url"

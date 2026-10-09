@@ -155,7 +155,8 @@ export type Invoice = {
 export type CreateInvoiceInput = {
   amount_expected: Amount;
   currency: string;
-  reference: string;
+  /** Your own order id, and the idempotency key. Omitted, Tender numbers the invoice ORD-001, ORD-002… (not idempotent). */
+  reference?: string;
   redirect_url?: string;
   /** Which chains to accept. Omitted means the merchant's configured default. */
   chains?: ChainId[];
