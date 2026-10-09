@@ -465,6 +465,9 @@ function MobileSheet({
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    // Close at once: the page behind loads from the server, and a sheet that stays up
+                    // until then looks like the tap did nothing.
+                    onClick={onClose}
                     aria-current={active ? "page" : undefined}
                     className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] transition-colors ${
                       active ? "bg-ink text-paper" : "text-ink hover:bg-stone"
@@ -484,6 +487,7 @@ function MobileSheet({
                         <li key={child.href}>
                           <Link
                             href={child.href}
+                            onClick={onClose}
                             className={`block rounded-lg px-2.5 py-1.5 text-[0.8125rem] transition-colors ${
                               isActive(pathname, child.href)
                                 ? "text-ink"
@@ -533,6 +537,7 @@ function MobileSheet({
           </div>
           <Link
             href="/app/settings"
+            onClick={onClose}
             className="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2 text-[0.875rem] text-ink transition-colors hover:bg-stone"
           >
             <SettingsIcon className="h-4 w-4 text-mute" />
