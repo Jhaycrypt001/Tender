@@ -130,6 +130,7 @@ export default async function ActivityPage({
             rows={sent.data.data.map(
               (t): Row => ({
                 id: t.id,
+                href: `/app/activity/sent/${t.id}`,
                 cells: {
                   when: <Timestamp value={t.submitted_at ?? t.created_at} />,
                   kind: KIND_LABEL[t.kind],
@@ -202,7 +203,7 @@ export default async function ActivityPage({
                  */
                 sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
                 settled: p.amount_settled ? (
-                  <FiatMoney amount={p.amount_settled} />
+                  <FiatMoney amount={p.amount_settled} maxDp={6} />
                 ) : null,
                 tx: <Hash value={p.tx_hash} />,
                 state: <PaymentStatePill status={p.status} />,

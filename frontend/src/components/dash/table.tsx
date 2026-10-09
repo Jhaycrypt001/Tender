@@ -70,13 +70,16 @@ export function DataTable({
                 <th
                   key={c.key}
                   scope="col"
-                  className={`eyebrow px-4 py-3.5 text-mute ${
+                  // ⚠️ Not `eyebrow` on the <th> itself: that class is display:inline-flex,
+                  // which stops a header cell being a table column, so every header bunched
+                  // up on the left above columns spread across the full width.
+                  className={`px-4 py-3.5 text-mute ${
                     c.align === "right" ? "text-right" : ""
                   } ${c.secondary ? "hidden lg:table-cell" : ""}`}
                 >
                   {/* The eyebrow's leading square would repeat on every column
                       and read as noise, so it is suppressed in the header. */}
-                  <span className="before:hidden">{c.label}</span>
+                  <span className="eyebrow before:hidden">{c.label}</span>
                 </th>
               ))}
             </tr>
@@ -144,8 +147,8 @@ export function DataTable({
               <dl className="flex min-w-0 flex-col gap-2">
                 {rest.map((c) => (
                   <div key={c.key} className="flex min-w-0 justify-between gap-4">
-                    <dt className="eyebrow shrink-0 text-mute">
-                      <span className="before:hidden">{c.label}</span>
+                    <dt className="shrink-0 text-mute">
+                      <span className="eyebrow before:hidden">{c.label}</span>
                     </dt>
                     <dd className="min-w-0 text-right text-[0.875rem]">
                       <Cell value={row.cells[c.key]} />

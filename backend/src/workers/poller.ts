@@ -484,6 +484,62 @@ export class Poller {
   }
 
   /**
+   * Repairs payments recorded with no USD value. Until the asset-id fix (see `assetKey`), no
+   * price was ever found, so every payment was stored at "unknown" and judged as $0: invoices
+   * paid in full were closed as UNDERPAID. Idempotent, so it simply runs at worker start.
+   *
+   * Valuation: a dollar stablecoin is worth today what it was worth then, so it is priced now.
+   * Anything else has moved since, and its price at detection was never recorded, so it is
+   * valued at what actually SETTLED: a floor, since the buyer sent at least that much.
+   *
+   * Then an UNDERPAID invoice is judged again. Only a payment that now covers it moves it (to
+   * SETTLED or OVERPAID), through the normal path: history event, webhook and live update.
+   */
+  async repairUnvalued(): Promise<{ valued: number; reopened: number }> {
+    const out = { valued: 0, reopened: 0 };
+    const rows = await this.deps.db.payment.findMany({
+      where: { amountInUsd: null, assetIn: { not: null } },
+      take: 500,
+      include: { invoice: { select: { id: true, status: true, kind: true } } },
+    });
+    const recheck = new Set<string>();
+    for (const p of rows) {
+      const price = await this.deps.prices.usd(p.assetIn).catch(() => null);
+      if (price === null) continue;
+      const stable = price > 0.97 && price < 1.03;
+      const usd = stable || !p.amountSettled ? new Decimal(p.amountIn.toString()).mul(price) : new Decimal(p.amountSettled.toString());
+      await this.deps.db.payment.updateMany({ where: { id: p.id, amountInUsd: null }, data: { amountInUsd: usd.toDecimalPlaces(18).toFixed() } });
+      out.valued += 1;
+      if (p.invoice.kind === "STANDARD" && p.invoice.status === "UNDERPAID") recheck.add(p.invoice.id);
+    }
+
+    for (const invoiceId of recheck) {
+      const transitions = await this.deps.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
+        const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { payments: true } });
+        if (invoice.status !== "UNDERPAID") return [];
+        const next = judge({
+          status: "DETECTED",
+          amountExpected: invoice.amountExpected.toString(),
+          payments: invoice.payments.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null })),
+          closed: true,
+          toleranceBps: this.deps.config.toleranceBps,
+        });
+        // Still short with real values: UNDERPAID was right, leave it alone.
+        if (next !== "SETTLED" && next !== "OVERPAID") return [];
+        // Reopened to DETECTED only inside this transaction, so `settle` can make the move itself.
+        await tx.invoice.update({ where: { id: invoiceId }, data: { status: "DETECTED" } });
+        return this.settle(tx, invoiceId, { mayClose: true });
+      });
+      if (transitions.length) {
+        out.reopened += 1;
+        await this.publish(transitions);
+      }
+    }
+    return out;
+  }
+
+  /**
    * Closes invoices whose window has passed: PENDING → EXPIRED, and a DETECTED
    * invoice whose payments all resolved short → UNDERPAID.
    *

@@ -16,7 +16,7 @@ export class PriceBook {
   async usd(assetId: string | null): Promise<number | null> {
     if (!assetId) return null;
     const prices = await this.load();
-    const price = prices.get(assetId);
+    const price = prices.get(assetKey(assetId));
     return typeof price === "number" && price > 0 ? price : null;
   }
 
@@ -24,8 +24,19 @@ export class PriceBook {
     if (this.cache && Date.now() - this.cache.at < this.ttlMs) return this.cache.prices;
     const tokens = await this.aurora.tokens();
     const prices = new Map<string, number>();
-    for (const t of tokens) if (typeof t.price === "number") prices.set(t.assetId, t.price);
+    for (const t of tokens) if (typeof t.price === "number") prices.set(assetKey(t.assetId), t.price);
     this.cache = { at: Date.now(), prices };
     return prices;
   }
+}
+
+/**
+ * One key for an asset however Aurora spells it. ⚠️ The token list says
+ * "nep141:base-0x8335….omft.near" but a deposit's `asset_id` says
+ * "base-0x8335….omft.near", with no standard prefix. Looking one up in the other
+ * found nothing, so every payment was stored with no USD value and judged as $0:
+ * invoices paid in full were marked UNDERPAID.
+ */
+export function assetKey(assetId: string): string {
+  return assetId.replace(/^nep\d+:/i, "").toLowerCase();
 }

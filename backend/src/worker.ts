@@ -73,6 +73,13 @@ registerWorkerGauges({ db, catalogue: new ChainCatalogueReader(redis, 0) });
 
 poller.start();
 
+// Payments stored with no USD value before the asset-id fix: value them and re-judge their
+// invoices. Idempotent, so running it on every start is harmless.
+void poller
+  .repairUnvalued()
+  .then((r) => logger.info(r, "repaired payments with no USD value"))
+  .catch((err: unknown) => logger.error({ err }, "repairing payments with no USD value failed"));
+
 const webhookLog = logger.child({ component: "webhooks" });
 const webhooks = new WebhookWorker({ db, logger: webhookLog });
 const webhookLoop = startLoop("webhooks", 2_000, () => webhooks.tick(), webhookLog);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as S from "../../contract/schemas.js";
 import { ApiError } from "../lib/errors.js";
 import { balance } from "../services/balance.service.js";
+import type { TransferChain } from "../services/transfer-chain.js";
 import type { InvoiceDeps } from "../services/invoice.service.js";
 import { createLink, listLinks, toLink } from "../services/link.service.js";
 import { merchantOf } from "./auth.js";
@@ -15,8 +16,8 @@ const Page = z.object({ cursor: z.string().optional(), limit: z.coerce.number().
  * Ramps and Earn return what is TRUE today, not a demo: no off-ramp corridor
  * is live, and no Earn position exists (see BACKEND.md §9 for Earn's status).
  */
-export function dashboardRoutes(app: FastifyInstance, deps: InvoiceDeps) {
-  app.get("/v1/merchant/balance", async (req) => balance(deps.db, merchantOf(req)));
+export function dashboardRoutes(app: FastifyInstance, deps: InvoiceDeps & { wallet?: Pick<TransferChain, "tokenBalance"> }) {
+  app.get("/v1/merchant/balance", async (req) => balance(deps.db, merchantOf(req), deps.wallet));
 
   app.get("/v1/links", async (req) => {
     const { cursor, limit } = Page.parse(req.query);

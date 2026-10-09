@@ -58,7 +58,7 @@ export default async function PaymentPage({
       <PageHeader
         back="/app/activity"
         eyebrow={"Paid from " + chainLabel(p.from_chain)}
-        title={p.amount_in + " in"}
+        title={`${p.amount_in}${p.asset_in ? ` ${p.asset_in}` : ""} in`}
         actions={<PaymentStatePill status={p.status} />}
       />
 
@@ -98,7 +98,7 @@ export default async function PaymentPage({
             </Line>
             <Line label="Settled to you">
               {p.amount_settled ? (
-                <FiatMoney amount={p.amount_settled} currency={p.invoice.currency} />
+                <FiatMoney amount={p.amount_settled} currency={p.invoice.currency} maxDp={6} />
               ) : (
                 <span className="text-mute">Not settled yet</span>
               )}

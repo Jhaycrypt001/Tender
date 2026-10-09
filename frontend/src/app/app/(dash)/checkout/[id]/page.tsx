@@ -79,12 +79,13 @@ export default async function InvoicePage({
 
   const rows: Row[] = payments.map((p) => ({
     id: p.id,
+    href: `/app/activity/${p.id}`,
     cells: {
       when: <Timestamp value={p.first_seen_at} />,
       from: chainLabel(p.from_chain),
       sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
       settled: p.amount_settled ? (
-        <FiatMoney amount={p.amount_settled} currency={invoice.currency} />
+        <FiatMoney amount={p.amount_settled} currency={invoice.currency} maxDp={6} />
       ) : (
         <span className="text-mute">&mdash;</span>
       ),

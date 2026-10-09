@@ -1,4 +1,5 @@
 import type { AuroraClient } from "../aurora/client.js";
+import { assetKey } from "../aurora/prices.js";
 import type { Logger } from "../lib/logger.js";
 
 /**
@@ -12,11 +13,12 @@ import type { Logger } from "../lib/logger.js";
 const symbols = new Map<string, string>();
 
 export function assetSymbol(assetId: string | null | undefined): string | null {
-  return assetId ? (symbols.get(assetId) ?? null) : null;
+  return assetId ? (symbols.get(assetKey(assetId)) ?? null) : null;
 }
 
 export async function refreshAssetSymbols(aurora: Pick<AuroraClient, "tokens">): Promise<void> {
-  for (const t of await aurora.tokens()) symbols.set(t.assetId, t.symbol);
+  // Keyed without the "nep141:" prefix: deposits report ids without it (see assetKey).
+  for (const t of await aurora.tokens()) symbols.set(assetKey(t.assetId), t.symbol);
 }
 
 /** Loads the map now and every 15 minutes. Returns a stop function. */

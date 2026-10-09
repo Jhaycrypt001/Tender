@@ -82,17 +82,20 @@ export default async function PayPage() {
             </h2>
             <ul className="flex flex-col divide-y divide-line">
               {recent.data.data.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+                <li key={t.id} className="relative flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 transition-colors hover:bg-stone/40">
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className="text-[0.9375rem]">
-                      {KIND[t.kind] ?? t.kind}
+                      {/* The whole row opens the transfer; the Transaction link sits above it. */}
+                      <Link href={`/app/activity/sent/${t.id}`} className="after:absolute after:inset-0 after:content-['']">
+                        {KIND[t.kind] ?? t.kind}
+                      </Link>
                       <span className="ml-2 tabular-nums">
                         {t.total_amount} {t.asset}
                       </span>
                     </span>
                     <span className="flex flex-wrap items-baseline gap-x-3 text-[0.75rem] text-mute">
                       <span>
-                        to <Hash value={t.lines[0]?.to ?? ""} />
+                        to <Hash value={t.lines[0]?.dest?.address ?? t.lines[0]?.to ?? ""} />{t.lines[0]?.dest ? ` on ${t.lines[0].dest.chain_name}` : ""}
                         {t.lines.length > 1 ? ` and ${t.lines.length - 1} more` : ""}
                       </span>
                       <Timestamp value={t.created_at} />
@@ -104,7 +107,7 @@ export default async function PayPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     {t.tx_hash && (
-                      <a href={explorerTx(t.tx_hash)} target="_blank" rel="noreferrer" className="text-[0.8125rem] text-sand underline-offset-4 hover:underline">
+                      <a href={explorerTx(t.tx_hash)} target="_blank" rel="noreferrer" className="relative z-10 text-[0.8125rem] text-sand underline-offset-4 hover:underline">
                         Transaction
                       </a>
                     )}
