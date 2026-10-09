@@ -17,6 +17,7 @@ import { NfcWrite } from "@/components/dash/nfc-write";
 import { getInvoice } from "@/lib/api/invoices";
 import { APP_URL } from "@/lib/auth";
 import { chainLabel } from "@/lib/chains";
+import { fromMicro, toMicro } from "@/lib/micro";
 
 export const metadata = { title: "Invoice · Tender" };
 
@@ -67,6 +68,14 @@ export default async function InvoicePage({
   // The payment to refund: the latest settled one. With a single payment it is that one (the buyer paid too much in one go).
   const settledPayments = payments.filter((p) => p.status === "SETTLED");
   const extra = settledPayments[settledPayments.length - 1];
+  // One payment that was too large: prefill only the difference. Only when the invoice is in a
+  // dollar currency, so the figure is in the same unit as what settled; otherwise the full payment is offered.
+  let difference = "";
+  if (settledPayments.length === 1 && extra?.amount_settled && ["USD", "USDC"].includes(invoice.currency.toUpperCase())) {
+    const paid = toMicro(extra.amount_settled);
+    const due = toMicro(invoice.amount_expected);
+    if (paid !== null && due !== null && paid > due) difference = fromMicro(paid - due);
+  }
 
   const rows: Row[] = payments.map((p) => ({
     id: p.id,
@@ -175,10 +184,12 @@ export default async function InvoicePage({
           <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
             {payments.filter((p) => p.status === "SETTLED").length > 1
               ? "A second payment arrived after this invoice settled. You can send it back."
-              : `They sent more than ${invoice.amount_expected} ${invoice.currency}. Refund the difference.`}
+              : difference
+                ? `They sent ${difference} more than the ${invoice.amount_expected} ${invoice.currency} due. Refund the difference.`
+                : `They sent more than ${invoice.amount_expected} ${invoice.currency}. Refund the difference.`}
           </p>
           <Link
-            href={`/app/pay/refund?payment=${extra.id}`}
+            href={`/app/pay/refund?payment=${extra.id}${difference ? `&amount=${difference}` : ""}`}
             className="mt-4 inline-flex rounded-full bg-ink px-4 py-2 text-[0.875rem] text-paper"
           >
             Refund the extra

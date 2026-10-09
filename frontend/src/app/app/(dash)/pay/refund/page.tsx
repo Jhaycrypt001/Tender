@@ -23,8 +23,8 @@ const LIMIT = 25;
  * anyway and leave one devtools edit between a merchant and a request the API
  * will reject.
  */
-export default async function RefundPage({ searchParams }: { searchParams: Promise<{ payment?: string }> }) {
-  const { payment } = await searchParams;
+export default async function RefundPage({ searchParams }: { searchParams: Promise<{ payment?: string; amount?: string }> }) {
+  const { payment, amount } = await searchParams;
   const [result, wallet] = await Promise.all([listPayments({ status: "SETTLED", limit: LIMIT }), getWalletBalance()]);
 
   return (
@@ -65,7 +65,7 @@ export default async function RefundPage({ searchParams }: { searchParams: Promi
           </p>
         </Card>
       ) : (
-        <RefundForm payments={result.data.data} initialId={payment} wallet={wallet.ok ? wallet.data : { can_send: false, reason: "We could not check your wallet just now. Try again in a moment." }} />
+        <RefundForm payments={result.data.data} initialId={payment} initialAmount={amount} wallet={wallet.ok ? wallet.data : { can_send: false, reason: "We could not check your wallet just now. Try again in a moment." }} />
       )}
     </PageShell>
   );
