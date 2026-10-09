@@ -111,7 +111,8 @@ export function FiatMoney({
       return <Money amount={converted} currency={code} size={size} maxDp={displayDecimals(code)} className={className} />;
     }
   }
-  return <Money amount={amount} currency={currency} size={size} maxDp={maxDp} className={className} />;
+  // Unconverted, it still says what it is in: a bare "9.96" could be any coin.
+  return <Money amount={amount} currency={source ?? undefined} size={size} maxDp={maxDp} className={className} />;
 }
 
 /** The entry for a code, for the selector. */

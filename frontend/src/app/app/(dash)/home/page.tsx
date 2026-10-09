@@ -5,6 +5,7 @@ import { LiveRefresh } from "@/components/dash/live-refresh";
 import BalanceCard from "@/components/dash/balance-card";
 import { Card, CardCanvas } from "@/components/ui/animated-glow-card";
 import { Cta } from "@/components/dash/cta";
+import { SoonTag } from "@/components/dash/coming-soon";
 import { AskCta } from "@/components/ask/ask-cta";
 import { Empty, ErrorState } from "@/components/dash/empty";
 import {
@@ -147,6 +148,7 @@ export default async function HomePage() {
         <Cta href="/app/ramps" tone="outline">
           <RampsIcon className="h-4 w-4" />
           Cash out
+          <SoonTag className="ml-1" />
         </Cta>
         <AskCta />
       </nav>
@@ -157,7 +159,8 @@ export default async function HomePage() {
           action={
             <Link
               href="/app/activity"
-              className="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-mute underline-offset-4 hover:text-ink hover:underline"
+              // Padding with an equal negative margin: a thumb-sized target, the same look.
+              className="-my-2.5 py-2.5 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-mute underline-offset-4 hover:text-ink hover:underline"
             >
               See all
             </Link>
@@ -202,7 +205,7 @@ export default async function HomePage() {
                     )}
                   </>
                 ),
-                sent: <Money amount={p.amount_in} maxDp={8} />,
+                sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
                 tx: <Hash value={p.tx_hash} />,
                 state: <PaymentStatePill status={p.status} />,
               },

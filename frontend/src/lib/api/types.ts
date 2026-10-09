@@ -184,6 +184,8 @@ export type Payment = {
   from_chain: ChainId;
   /** What the buyer actually sent, in the source asset. */
   amount_in: Amount;
+  /** The ticker of what the buyer sent ("ETH", "USDC", "BTC"). Null when it is not known. */
+  asset_in?: string | null;
   /** What landed at the merchant's address, in the settlement asset. */
   amount_settled?: Amount | null;
   /** The address that sent the deposit on the buyer's chain, when Aurora reported it. May be an exchange's wallet. */

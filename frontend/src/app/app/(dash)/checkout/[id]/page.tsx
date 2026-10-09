@@ -82,7 +82,7 @@ export default async function InvoicePage({
     cells: {
       when: <Timestamp value={p.first_seen_at} />,
       from: chainLabel(p.from_chain),
-      sent: <Money amount={p.amount_in} maxDp={8} />,
+      sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
       settled: p.amount_settled ? (
         <FiatMoney amount={p.amount_settled} currency={invoice.currency} />
       ) : (

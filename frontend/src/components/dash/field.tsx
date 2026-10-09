@@ -68,7 +68,8 @@ function Shell({
 }
 
 const INPUT =
-  "w-full rounded-xl border bg-paper px-3.5 py-2.5 text-[0.9375rem] text-ink placeholder:text-mute/70 transition-colors";
+  // 16px on phones: iOS Safari zooms the whole page into any input smaller than that on focus.
+  "w-full rounded-xl border bg-paper px-3.5 py-2.5 text-base md:text-[0.9375rem] text-ink placeholder:text-mute/70 transition-colors";
 
 /** Border is the only thing an error changes — the field does not turn red.
  *  The message under it is what carries the meaning. */

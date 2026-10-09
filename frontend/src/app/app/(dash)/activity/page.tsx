@@ -5,12 +5,13 @@ import { ActivityIcon, PlusIcon } from "@/components/dash/icons";
 import { Cta } from "@/components/dash/cta";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { FiatMoney } from "@/components/dash/currency";
-import { PaymentStatePill } from "@/components/dash/state-pill";
+import { PaymentStatePill, TransferStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { FilterTabs } from "@/components/dash/filter-tabs";
 import { listPayments } from "@/lib/api/payments";
+import { listTransfers } from "@/lib/api/transfers";
 import { chainLabel } from "@/lib/chains";
-import type { ListPaymentsQuery } from "@/lib/api/types";
+import type { ListPaymentsQuery, Transfer } from "@/lib/api/types";
 
 export const metadata = { title: "Activity · Tender" };
 
@@ -31,7 +32,37 @@ const FILTERS: { label: string; query: ListPaymentsQuery }[] = [
   { label: "Seen on chain", query: { status: "DETECTED" } },
   { label: "Needs recovery", query: { invoice_status: "NEEDS_RECOVERY" } },
   { label: "Refunded", query: { status: "REFUNDED" } },
+  { label: "Failed", query: { status: "FAILED" } },
 ];
+
+/** Money going OUT (payouts, refunds, splits) is a different list from payments in, so it is its own tab. */
+const SENT = "Sent out";
+
+const KIND_LABEL: Record<Transfer["kind"], string> = { PAYOUT: "Payout", REFUND: "Refund", SPLIT: "Split" };
+
+/** Where a transfer went: the recipient, or how many, and on which chain. */
+function sentTo(t: Transfer): React.ReactNode {
+  if (t.lines.length > 1) {
+    const chains = new Set(t.lines.map((l) => l.dest?.chain_name ?? "Monad"));
+    return `${t.lines.length} recipients · ${[...chains].join(", ")}`;
+  }
+  const line = t.lines[0];
+  if (!line) return null;
+  return (
+    <span className="flex items-baseline gap-2">
+      <Hash value={line.dest?.address ?? line.to} />
+      <span className="text-mute">{line.dest?.chain_name ?? "Monad"}</span>
+    </span>
+  );
+}
+
+/** The Monad leg's state, unless it confirmed and something is still on its way to another chain. */
+function sentState(t: Transfer): React.ReactNode {
+  const dests = t.lines.map((l) => l.dest).filter((d) => !!d);
+  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "PENDING")) return <span className="text-[0.8125rem] text-mute">Arriving…</span>;
+  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "FAILED")) return <span className="text-[0.8125rem] text-ink">Not delivered</span>;
+  return <TransferStatePill status={t.status} />;
+}
 
 /** The slug that appears in the URL, so a filtered view is linkable. */
 function slug(label: string): string {
@@ -44,9 +75,10 @@ export default async function ActivityPage({
   searchParams: Promise<{ filter?: string }>;
 }) {
   const { filter } = await searchParams;
+  const sending = filter === slug(SENT);
   const active = FILTERS.find((f) => slug(f.label) === filter) ?? FILTERS[0];
 
-  const result = await listPayments(active.query);
+  const [result, sent] = await Promise.all([sending ? null : listPayments(active.query), sending ? listTransfers(50) : null]);
 
   return (
     <PageShell>
@@ -55,24 +87,64 @@ export default async function ActivityPage({
         back="/app/home"
         eyebrow="Activity"
         title="Every coin, accounted for."
-        description="Every payment and its state."
+        description="Every payment in, every transfer out."
       />
 
       {/* Rendered regardless of the result: these are navigation, and hiding
           them behind a failed fetch makes the screen look broken, not empty. */}
       <FilterTabs
         label="Filter payments"
-        tabs={FILTERS.map((f) => ({
-          label: f.label,
-          href:
-            f.label === "All"
-              ? "/app/activity"
-              : `/app/activity?filter=${slug(f.label)}`,
-          on: f.label === active.label,
-        }))}
+        tabs={[
+          ...FILTERS.map((f) => ({
+            label: f.label,
+            href:
+              f.label === "All"
+                ? "/app/activity"
+                : `/app/activity?filter=${slug(f.label)}`,
+            on: !sending && f.label === active.label,
+          })),
+          { label: SENT, href: `/app/activity?filter=${slug(SENT)}`, on: sending },
+        ]}
       />
 
-      {!result.ok ? (
+      {sent ? (
+        !sent.ok ? (
+          <ErrorState error={sent.error} />
+        ) : sent.data.data.length === 0 ? (
+          <Empty
+            icon={<ActivityIcon className="h-5 w-5" />}
+            title="Nothing sent yet"
+            description="Payouts, refunds and splits you send from your wallet appear here."
+            action={<Cta href="/app/pay">Send money</Cta>}
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { key: "when", label: "Sent" },
+              { key: "kind", label: "Type" },
+              { key: "to", label: "To" },
+              { key: "amount", label: "Amount", align: "right" },
+              { key: "tx", label: "Transaction", secondary: true },
+              { key: "state", label: "State", align: "right" },
+            ]}
+            rows={sent.data.data.map(
+              (t): Row => ({
+                id: t.id,
+                cells: {
+                  when: <Timestamp value={t.submitted_at ?? t.created_at} />,
+                  kind: KIND_LABEL[t.kind],
+                  to: sentTo(t),
+                  amount: <Money amount={t.total_amount} currency={t.asset} />,
+                  tx: t.tx_hash ? <Hash value={t.tx_hash} /> : <span className="text-mute">&mdash;</span>,
+                  state: sentState(t),
+                },
+              }),
+            )}
+            empty="Nothing sent."
+            caption="Money sent out"
+          />
+        )
+      ) : !result ? null : !result.ok ? (
         <ErrorState error={result.error} />
       ) : result.data.data.length === 0 ? (
         <Empty
@@ -128,7 +200,7 @@ export default async function ActivityPage({
                  * 8 decimal places. Labelling 0.00042 BTC as "USDC" would be a
                  * lie about what the buyer sent.
                  */
-                sent: <Money amount={p.amount_in} maxDp={8} />,
+                sent: <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />,
                 settled: p.amount_settled ? (
                   <FiatMoney amount={p.amount_settled} />
                 ) : null,

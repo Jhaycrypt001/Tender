@@ -3,6 +3,7 @@ import { deliveryStatus } from "./merchant.service.js";
 import type * as S from "../../contract/schemas.js";
 import type { ApiKey, Invoice, InvoiceKind, WebhookDelivery, InvoiceAddress, Merchant, Payment } from "../generated/prisma/client.js";
 import { chainById } from "../aurora/chains.js";
+import { assetSymbol } from "./asset-symbols.js";
 import { Decimal } from "../lib/money.js";
 
 /**
@@ -96,6 +97,7 @@ export function toPayment(p: Payment, refunded?: string, invoice?: { kind: Invoi
     tx_hash: p.auroraTxHash,
     from_chain: p.fromChain,
     amount_in: amount(p.amountIn),
+    asset_in: assetSymbol(p.assetIn),
     amount_settled: p.amountSettled ? amount(p.amountSettled) : null,
     sender: senderOf(p),
     refunded_amount: refunded ?? null,

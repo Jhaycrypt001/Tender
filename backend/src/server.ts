@@ -5,6 +5,7 @@ import { AuroraClient } from "./aurora/client.js";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { createLogger } from "./lib/logger.js";
+import { keepAssetSymbolsFresh } from "./services/asset-symbols.js";
 import { ChainCatalogueReader } from "./services/chains.service.js";
 import { createTransferChain } from "./services/transfer-chain.js";
 import { InvoiceStream } from "./services/stream.js";
@@ -39,6 +40,8 @@ const chain = createPublicClient({ chain: monad, transport: http(config.MONAD_RP
 
 const transferChain = createTransferChain({ client: chain, rpcUrl: config.MONAD_RPC_URL, relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined });
 const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
+// So a payment can name the coin the buyer sent, not just the amount.
+keepAssetSymbolsFresh(aurora, app.log);
 
 // Graceful shutdown: stop taking requests, then close connections. A second
 // signal forces exit.

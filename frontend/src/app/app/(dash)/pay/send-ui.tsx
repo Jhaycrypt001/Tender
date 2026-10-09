@@ -92,6 +92,8 @@ export function ChainPicker({ chains, value, onChange, disabled, resetKey }: { c
       <Select
         key={resetKey}
         label="Send to"
+        // Always has a value (Monad by default), so it is not "optional".
+        required
         name="dest_chain"
         defaultValue={value}
         onChange={onChange}

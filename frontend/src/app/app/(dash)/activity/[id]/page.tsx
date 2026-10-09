@@ -94,7 +94,7 @@ export default async function PaymentPage({
             <Line label={"Sent on " + chainLabel(p.from_chain)}>
               {/* No currency label: amount_in is in the SOURCE asset, and
                   labelling 0.00042 BTC as USDC would misstate what moved. */}
-              <Money amount={p.amount_in} maxDp={8} />
+              <Money amount={p.amount_in} currency={p.asset_in ?? undefined} maxDp={8} />
             </Line>
             <Line label="Settled to you">
               {p.amount_settled ? (

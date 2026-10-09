@@ -24,7 +24,9 @@ export function FilterTabs({
 }) {
   return (
     <nav aria-label={label} className="mb-5 max-w-full">
-      <div className="no-scrollbar inline-flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-paper p-1">
+      {/* On a phone the tabs outrun the screen. The scrollbar is hidden, so the right edge
+          fades out instead: a cut-off word under a fade reads as "swipe for more". */}
+      <div className="no-scrollbar inline-flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-paper p-1 [mask-image:linear-gradient(to_right,black_85%,transparent)] md:[mask-image:none]">
         {tabs.map((t) => (
           <Link
             key={t.label}

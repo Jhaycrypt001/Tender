@@ -53,6 +53,8 @@ export const Payment = z.object({
   tx_hash: z.string(),
   from_chain: ChainId,
   amount_in: Amount,
+  /** The ticker of what the buyer sent ("ETH", "USDC", "BTC"). Null when it is not known. */
+  asset_in: z.string().nullish(),
   amount_settled: Amount.nullish(),
   /** The address that sent the deposit on the buyer's chain, when Aurora reported it. May be an exchange's wallet. */
   sender: z.string().nullish(),

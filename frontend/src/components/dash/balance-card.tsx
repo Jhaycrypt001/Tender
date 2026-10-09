@@ -146,7 +146,7 @@ export default function BalanceCard({
           onClick={toggle}
           aria-pressed={hidden}
           aria-label={hidden ? "Show balance" : "Hide balance"}
-          className="-m-1.5 rounded-full p-1.5 text-paper/45 transition-colors hover:text-paper"
+          className="-m-2.5 rounded-full p-2.5 text-paper/45 transition-colors hover:text-paper"
         >
           {hidden ? (
             <EyeOffIcon className="h-4 w-4" />
@@ -159,7 +159,7 @@ export default function BalanceCard({
           onClick={() => startRefresh(() => router.refresh())}
           disabled={refreshing}
           aria-label="Refresh balance"
-          className="-m-1.5 rounded-full p-1.5 text-paper/45 transition-colors hover:text-paper disabled:cursor-default"
+          className="-m-2.5 rounded-full p-2.5 text-paper/45 transition-colors hover:text-paper disabled:cursor-default"
         >
           <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
         </button>

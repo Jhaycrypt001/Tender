@@ -46,7 +46,7 @@ export function LinkForm() {
         />
 
         <AmountField
-          label="Amount (optional)"
+          label="Amount"
           name="amount"
           currency={v.currency || "USDC"}
           defaultValue={v.amount}
