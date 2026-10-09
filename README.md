@@ -300,39 +300,39 @@ The overview above is the money. This is everything that runs, and who talks to 
 
 ```mermaid
 flowchart LR
-    buyer["Buyer<br/>any wallet or exchange<br/>on any of 30 chains"]
-    merchantSrv["Merchant's server"]
+    buyer[Buyer<br>any wallet or exchange<br>on any of 30 chains]
+    merchantSrv[Merchant server]
 
-    subgraph vercel["Vercel"]
-        web["Tender Web · Next.js 15<br/>landing · docs · dashboard · checkout"]
+    subgraph Vercel
+        web[Tender Web, Next.js 15<br>landing, docs, dashboard, checkout]
     end
 
-    subgraph railway["Railway"]
-        api["Tender API · Fastify<br/>invoices · links · transfers · balance · Ask"]
-        worker["Worker<br/>poller · webhooks · transfer tracking<br/>chain minimums · email"]
-        pg[("Postgres")]
-        redis[("Redis")]
+    subgraph Railway
+        api[Tender API, Fastify<br>invoices, links, transfers, balance, Ask]
+        worker[Worker<br>poller, webhooks, transfer tracking<br>chain minimums, email]
+        pg[(Postgres)]
+        redis[(Redis)]
     end
 
-    subgraph outside["Services Tender relies on"]
-        aurora["Aurora Intents<br/>deposit addresses · quotes<br/>status · prices"]
-        privy["Privy<br/>Google sign-in · embedded wallets"]
-        monad["Monad · chain 143<br/>merchant wallet · USDC"]
-        resend["Resend · email"]
-        gemini["Google Gemini · Ask"]
+    subgraph Services
+        aurora[Aurora Intents<br>deposit addresses, quotes<br>status, prices]
+        privy[Privy<br>Google sign-in, embedded wallets]
+        monad[Monad, chain 143<br>merchant wallet, USDC]
+        resend[Resend email]
+        gemini[Google Gemini for Ask]
     end
 
     buyer -->|pays to a deposit address| aurora
     aurora -->|settles USDC| monad
     buyer -->|opens the checkout| web
-    web -->|REST and live status, platform key stays server-side| api
+    web -->|REST and live status| api
     web -->|sign-in and wallet signatures| privy
-    api -->|mint addresses, quote routes| aurora
-    api -->|relays signed transfers, reads balances| monad
+    api -->|mint addresses and quote routes| aurora
+    api -->|relay signed transfers and read balances| monad
     api --> pg
     api --> redis
     api -->|questions| gemini
-    worker -->|poll deposits and deliveries, prices| aurora
+    worker -->|poll deposits, deliveries and prices| aurora
     worker -->|confirm transfers| monad
     worker --> pg
     worker -->|publish status| redis
