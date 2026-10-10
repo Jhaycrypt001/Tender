@@ -4,6 +4,7 @@ import "./globals.css";
 import Nav from "@/components/nav";
 import Footer from "@/components/footer";
 import { StaleDeployGuard } from "@/components/stale-deploy-guard";
+import { Analytics } from "@vercel/analytics/next";
 
 /**
  * Season Mix / Season Sans (the goldsand.fi pairing) are commercial fonts from
@@ -85,6 +86,7 @@ export default function RootLayout({
         <Nav />
         <main id="main">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
