@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { updateMerchant } from "@/lib/api/merchant";
+import { getMerchant, updateMerchant } from "@/lib/api/merchant";
 import { SETTLEMENT_ASSET_VALUES } from "@/lib/settlement-assets";
 
 /**
@@ -31,6 +31,13 @@ export async function saveSettlementAssetAction(
 
   if (!SETTLEMENT_ASSET_VALUES.includes(asset)) {
     return { fields: { settlement_asset: "Pick one of the assets listed." } };
+  }
+
+  if (asset === "MON") {
+    const current = await getMerchant();
+    if (!current.ok || current.data.settlement_asset !== "MON") {
+      return { fields: { settlement_asset: "Choose USDC or USDT0. MON cannot be sent out from Tender." } };
+    }
   }
 
   const result = await updateMerchant({ settlement_asset: asset });

@@ -1,7 +1,7 @@
 import type { Db } from "../db/client.js";
 import type { ApiKey, Merchant, WebhookDelivery } from "../generated/prisma/client.js";
 import { generateApiKey, generateWebhookSecret, hashApiKey, verifyApiKey } from "../lib/crypto.js";
-import { conflict, notFound } from "../lib/errors.js";
+import { conflict, notFound, validation } from "../lib/errors.js";
 import { apiKeyId } from "../lib/ids.js";
 
 /**
@@ -126,8 +126,16 @@ export async function updateMerchant(db: Db, merchant: Merchant, input: Merchant
     data.settlementAddress = input.settlement_address;
     if (changed) data.settlementVerified = false;
   }
-  if (input.settlement_asset !== undefined) data.settlementAsset = input.settlement_asset;
-  if (input.webhook_url !== undefined) data.webhookUrl = input.webhook_url;
+  if (input.settlement_asset !== undefined) {
+    // MON is the chain's gas coin, not a token, so Tender cannot send it out (a send is a signed token
+    // transfer). It is no longer a new choice. A merchant already on MON can keep or leave it.
+    if (input.settlement_asset === "MON" && merchant.settlementAsset !== "MON") {
+      throw validation({ settlement_asset: "Choose USDC or USDT0. MON cannot be sent out from Tender." });
+    }
+    data.settlementAsset = input.settlement_asset;
+  }
+  // "" clears it: no URL means no webhooks are sent.
+  if (input.webhook_url !== undefined) data.webhookUrl = input.webhook_url || null;
 
   return db.merchant.update({ where: { id: merchant.id }, data });
 }

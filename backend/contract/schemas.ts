@@ -193,7 +193,8 @@ export const ListWebhookDeliveriesQuery = z.object({
 export const UpdateMerchantInput = z.object({
   settlement_address: z.string().regex(/^0x[0-9a-fA-F]{40}$/, "must be an EVM address").optional(),
   settlement_asset: z.string().min(1).optional(),
-  webhook_url: z.url({ protocol: /^https$/ }).optional(),
+  // An empty string turns the webhook off: it is what the dashboard sends when the field is cleared.
+  webhook_url: z.union([z.url({ protocol: /^https$/ }), z.literal("")]).optional(),
 });
 
 const AssetAmount = z.object({ asset: z.string(), amount: Amount });

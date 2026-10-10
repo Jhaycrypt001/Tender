@@ -11,7 +11,7 @@ import {
   saveSettlementAssetAction,
   type SettlementState,
 } from "@/app/app/(dash)/settings/actions";
-import { SETTLEMENT_ASSETS, SETTLEMENT_ASSET_VALUES } from "@/lib/settlement-assets";
+import { SETTLEMENT_ASSET_VALUES, offeredAssets } from "@/lib/settlement-assets";
 import { useSettlementSetup } from "@/lib/use-settlement-setup";
 
 /**
@@ -112,8 +112,8 @@ export function SettlementPanel({
             name="settlement_asset"
             defaultValue={SETTLEMENT_ASSET_VALUES.includes(asset) ? asset : "USDC"}
             error={save.fields?.settlement_asset}
-            hint="The asset your payments arrive as on Monad. Applies to new payments."
-            options={SETTLEMENT_ASSETS.map((a) => ({ value: a.value, label: a.label }))}
+            hint="A stablecoin on Monad. Applies to new payments, and it is what you send out from Pay."
+            options={offeredAssets(asset)}
           />
 
           {save.message && <Note>{save.message}</Note>}
