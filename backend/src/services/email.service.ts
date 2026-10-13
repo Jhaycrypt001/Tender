@@ -310,6 +310,8 @@ export type MoneyOut = {
   to: Array<{ address: string; chain: string }>;
   /** Why it failed, in the words the dashboard uses. */
   reason?: string | null;
+  /** Sent, and still crossing to this chain. */
+  arrivingOn?: string;
 };
 
 const KIND_LABEL = { PAYOUT: "Payment", REFUND: "Refund", SPLIT: "Split" } as const;
@@ -346,6 +348,7 @@ export function renderMoneyOut(d: MoneyOut): Message {
       footer,
       label: `${kind} sent`,
       figure,
+      ...(d.arrivingOn ? { sub: `Left your wallet. Arriving on ${d.arrivingOn} in a few minutes.` } : {}),
       rows: [
         ["To", who],
         ["When", when(d.at)],

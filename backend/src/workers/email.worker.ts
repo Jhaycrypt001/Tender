@@ -116,13 +116,10 @@ export class EmailWorker {
     });
     for (const i of short) rows.push({ merchantId: i.merchantId, toEmail: i.merchant.email, kind: "payin", key: `short:${i.id}` });
 
-    // Money out: a transfer that confirmed and, if it goes to another chain, whose every leg has arrived.
+    // Money out: as soon as it leaves the wallet (the Monad transaction confirms), even if a cross-chain leg is
+    // still on its way. This email is also the owner's alert that money moved, so it must not wait on delivery.
     const sent = await db.transfer.findMany({
-      where: {
-        status: "CONFIRMED",
-        OR: [{ confirmedAt: { gte: recent } }, { lines: { some: { destDeliveredAt: { gte: recent } } } }],
-        lines: { none: { destStatus: { in: ["PENDING", "FAILED"] } } },
-      },
+      where: { status: "CONFIRMED", confirmedAt: { gte: recent } },
       select: { id: true, merchantId: true, merchant: { select: { email: true } } },
       take: 200,
     });
@@ -255,8 +252,11 @@ export class EmailWorker {
     const base = { appUrl, at: t.confirmedAt ?? t.submittedAt ?? t.createdAt, transferId: t.id, kind: t.kind, amount: amount(t.totalAmount), asset: t.asset, to };
 
     if (!failed) {
-      if (t.status !== "CONFIRMED" || t.lines.some((l) => l.destStatus === "PENDING" || l.destStatus === "FAILED")) return { skip: "transfer is not complete" };
-      return { message: renderMoneyOut({ ...base, variant: "sent" }) };
+      if (t.status !== "CONFIRMED") return { skip: "transfer is not confirmed" };
+      // Still crossing to another chain: say where it is heading. A failure gets its own email.
+      const arriving = t.lines.find((l) => l.destChain && l.destStatus === "PENDING");
+      const arrivingOn = arriving ? (chainById(arriving.destChain!)?.name ?? arriving.destChain!) : undefined;
+      return { message: renderMoneyOut({ ...base, variant: "sent", arrivingOn }) };
     }
     const lost = t.lines.find((l) => l.destStatus === "FAILED");
     if (t.status === "FAILED") return { message: renderMoneyOut({ ...base, variant: "failed", reason: t.failureReason }) };

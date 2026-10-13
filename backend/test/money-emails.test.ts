@@ -141,18 +141,26 @@ describe("money out", () => {
     expect(send.mock.calls[0]![1].html).toContain(`/app/activity/sent/${tr.id}`);
   });
 
-  it("waits for a cross-chain leg to arrive, and says so if it never does", async () => {
+  it("emails a cross-chain send as soon as it leaves the wallet, and again only if it never arrives", async () => {
     const { m } = await invoice();
     const tr = await transfer(m.id, {}, { destChain: "base", destAddress: "0x2222222222222222222222222222222222222222", destAsset: "USDC", destStatus: "PENDING" });
     const send = vi.fn(ok);
     const now = new Date();
-    expect(await worker(send, now).sweep()).toBe(0); // still on its way: nothing to say yet
+    expect(await worker(send, now).sweep()).toBe(1); // left the wallet: the owner hears now, not on delivery
+    await worker(send, now).tick();
+    expect(send.mock.calls[0]![1].subject).toBe("Refund sent · $4.99");
+    expect(send.mock.calls[0]![1].html).toContain("Arriving on Base");
 
-    await t.db.transferLine.updateMany({ where: { transferId: tr.id }, data: { destStatus: "FAILED" } });
+    // Delivered: nothing more to say.
+    await t.db.transferLine.updateMany({ where: { transferId: tr.id }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
+    expect(await worker(send, now).sweep()).toBe(0);
+
+    // Had it failed instead, one more email says so.
+    await t.db.transferLine.updateMany({ where: { transferId: tr.id }, data: { destStatus: "FAILED", destDeliveredAt: null } });
     expect(await worker(send, now).sweep()).toBe(1);
     await worker(send, now).tick();
-    expect(send.mock.calls[0]![1].subject).toBe("Refund not delivered · $4.99");
-    expect(send.mock.calls[0]![1].html).toContain("did not reach Base");
+    expect(send.mock.calls[1]![1].subject).toBe("Refund not delivered · $4.99");
+    expect(send.mock.calls[1]![1].html).toContain("did not reach Base");
   });
 
   it("emails a transfer the network refused after it was submitted, not one that merely expired unsigned", async () => {
