@@ -40,13 +40,29 @@ function refundable(p: Payment): bigint {
   return settled > refunded ? settled - refunded : BigInt(0);
 }
 
-export function RefundForm({ payments, wallet, initialId, initialAmount }: { payments: Payment[]; wallet: WalletBalance; initialId?: string; initialAmount?: string }) {
+type Props = {
+  payments: Payment[];
+  wallet: WalletBalance;
+  /** For a payment on an overpaid invoice: the overpaid part, by payment id. Picking it fills this in. */
+  suggestions?: Record<string, string>;
+  initialId?: string;
+  initialAmount?: string;
+};
+
+export function RefundForm(props: Props) {
   if (!PRIVY_ON) return <CannotSend reason="Sign-in is not set up in this environment, so there is no wallet to send from." />;
-  if (!wallet.can_send) return <CannotSend reason={wallet.reason} />;
-  return <RefundLive payments={payments} wallet={wallet} initialId={initialId} initialAmount={initialAmount} />;
+  if (!props.wallet.can_send) return <CannotSend reason={props.wallet.reason} />;
+  return <RefundLive {...props} />;
 }
 
-function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: Payment[]; wallet: WalletBalance; initialId?: string; initialAmount?: string }) {
+/** The amount to fill in for a payment: the suggested overpaid part when there is a valid one, else all it can return. */
+function startAmount(p: Payment, suggested: string | undefined): string {
+  const s = suggested ? toMicro(suggested) : null;
+  const max = refundable(p);
+  return fromMicro(s !== null && s > BigInt(0) && s <= max ? s : max);
+}
+
+function RefundLive({ payments, wallet, suggestions = {}, initialId, initialAmount }: Props) {
   const router = useRouter();
   const send = useSendTransfer();
   // Arriving from an overpaid invoice: that payment is already picked.
@@ -54,10 +70,7 @@ function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: 
   const [selected, setSelected] = useState(start?.id ?? "");
   const [to, setTo] = useState(start && isEvmAddress(start.sender) ? start.sender : "");
   // A suggested amount (the overpaid part) is used only if it is valid and within what the payment can still return.
-  const suggested = start && initialAmount ? toMicro(initialAmount) : null;
-  const [amount, setAmount] = useState(
-    start ? fromMicro(suggested !== null && suggested > BigInt(0) && suggested <= refundable(start) ? suggested : refundable(start)) : "",
-  );
+  const [amount, setAmount] = useState(start ? startAmount(start, initialAmount ?? suggestions[start.id]) : "");
   const [step, setStep] = useState<SendStep | null>(null);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -81,7 +94,7 @@ function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: 
     setSelected(p.id);
     setError("");
     setFields({});
-    setAmount(fromMicro(refundable(p)));
+    setAmount(startAmount(p, suggestions[p.id]));
     // Back to where it came from: the buyer paid from that chain, so that is where they can be reached.
     // Monad stays the choice for a payment that came from Monad, or from a chain we cannot send to.
     const back = p.sender && p.from_chain !== MONAD && chains.some((c) => c.id === p.from_chain);
@@ -237,7 +250,7 @@ function RefundLive({ payments, wallet, initialId, initialAmount }: { payments: 
               required
               error={amountError}
               disabled={busy}
-              hint={`Up to ${fromMicro(left)} ${asset}. Your wallet holds ${wallet.balance ?? "—"} ${asset}.`}
+              hint={`${payment && suggestions[payment.id] === amount ? "Filled in with the overpaid part. " : ""}Up to ${fromMicro(left)} ${asset}. Your wallet holds ${wallet.balance ?? "—"} ${asset}.`}
             />
 
             {error && <Note>{error}</Note>}

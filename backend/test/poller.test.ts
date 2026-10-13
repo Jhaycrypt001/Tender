@@ -245,6 +245,25 @@ describe("poller", () => {
     expect(hooks.map((h) => h.event)).toEqual(["invoice.detected", "invoice.settled"]);
   });
 
+  it("shows what has already been refunded on each payment of an invoice", async () => {
+    const m = await merchant(t.db);
+    const res = await t.app.inject({ method: "POST", url: "/v1/invoices", headers: m.auth, payload: { amount_expected: "10.00", currency: "USD", reference: "R-1", chains: ["base"] } });
+    const inv = res.json() as { id: string };
+    const addr = await t.db.invoiceAddress.findFirstOrThrow({ where: { invoiceId: inv.id } });
+    const pay = await t.db.payment.create({
+      data: { invoiceId: inv.id, invoiceAddressId: addr.id, auroraTxHash: "over", fromChain: "base", amountIn: "14.99", amountInUsd: "14.99", amountSettled: "14.99", status: "SETTLED", settledAt: new Date(), raw: {} },
+    });
+    await t.db.transfer.create({
+      data: {
+        merchantId: m.merchant.id, kind: "REFUND", status: "CONFIRMED", asset: "USDC", fromAddress: "0x88A7a4fFDDe961AF79582da333594e1Aa1c411F0",
+        totalAmount: "4.99", paymentId: pay.id, expiresAt: new Date(Date.now() + 3_600_000), confirmedAt: new Date(),
+        lines: { create: [{ index: 0, toAddress: "0x1111111111111111111111111111111111111111", amount: "4.99", nonce: `0x${"5".repeat(64)}` }] },
+      },
+    });
+    const detail = (await t.app.inject({ method: "GET", url: `/v1/invoices/${inv.id}`, headers: m.auth })).json() as { payments: { refunded_amount: string | null }[] };
+    expect(detail.payments[0]!.refunded_amount).toBe("4.99");
+  });
+
   it("expires an unpaid invoice only after a successful poll past the window", async () => {
     const inv = await invoice();
     const { poller, clock } = makePoller(t);

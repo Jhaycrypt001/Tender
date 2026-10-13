@@ -9,6 +9,7 @@ import {
   type InvoiceDeps,
 } from "../services/invoice.service.js";
 import { toInvoice, toPayment } from "../services/serialize.js";
+import { refundedByPayment } from "../services/transfer.service.js";
 import type { ChainCatalogueReader } from "../services/chains.service.js";
 import { merchantOf } from "./auth.js";
 
@@ -37,7 +38,9 @@ export function invoiceRoutes(app: FastifyInstance, deps: InvoiceDeps & { catalo
   app.get("/v1/invoices/:id", async (req) => {
     const { id } = IdParams.parse(req.params);
     const invoice = await getInvoice(deps.db, merchantOf(req).id, id);
-    return { ...toInvoice(invoice, await deps.catalogue.minimums()), payments: invoice.payments.map((p) => toPayment(p, undefined, invoice)) };
+    // With what has already gone back on each payment, so a screen never suggests refunding the same extra twice.
+    const refunded = await refundedByPayment(deps.db, invoice.payments.map((p) => p.id));
+    return { ...toInvoice(invoice, await deps.catalogue.minimums()), payments: invoice.payments.map((p) => toPayment(p, refunded.get(p.id), invoice)) };
   });
 
   app.post("/v1/invoices/:id/cancel", async (req) => {

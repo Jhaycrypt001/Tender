@@ -16,6 +16,7 @@ import { DataTable, type Row } from "@/components/dash/table";
 import { QRCode } from "@/components/pay/qr";
 import { NfcWrite } from "@/components/dash/nfc-write";
 import { getInvoice } from "@/lib/api/invoices";
+import { isDollarInvoice, overpaidRefund } from "@/lib/overpaid";
 import { APP_URL } from "@/lib/auth";
 import { chainLabel } from "@/lib/chains";
 import { fromMicro, toMicro } from "@/lib/micro";
@@ -66,17 +67,18 @@ export default async function InvoicePage({
   const invoice = result.data;
   const payUrl = `${APP_URL}/pay/${invoice.token}`;
   const payments = invoice.payments ?? [];
-  // The payment to refund: the latest settled one. With a single payment it is that one (the buyer paid too much in one go).
   const settledPayments = payments.filter((p) => p.status === "SETTLED");
-  const extra = settledPayments[settledPayments.length - 1];
-  // One payment that was too large: prefill only the difference. Only when the invoice is in a
-  // dollar currency, so the figure is in the same unit as what settled; otherwise the full payment is offered.
-  let difference = "";
-  if (settledPayments.length === 1 && extra?.amount_settled && ["USD", "USDC"].includes(invoice.currency.toUpperCase())) {
-    const paid = toMicro(extra.amount_settled);
-    const due = toMicro(invoice.amount_expected);
-    if (paid !== null && due !== null && paid > due) difference = fromMicro(paid - due);
-  }
+  // Overpaid: refund only the extra, worked out across every payment (they add up), on the payment that
+  // went over. Without a figure (not a dollar invoice) the latest settled payment is offered in full.
+  const suggestion = invoice.status === "OVERPAID" ? overpaidRefund(invoice) : null;
+  const extra = settledPayments.find((p) => p.id === suggestion?.paymentId) ?? settledPayments[settledPayments.length - 1];
+  const difference = suggestion?.amount ?? "";
+  // A dollar invoice with nothing extra left to return, and a refund on record: it has gone back.
+  const extraReturned =
+    invoice.status === "OVERPAID" && isDollarInvoice(invoice) && !suggestion && settledPayments.some((p) => Number(p.refunded_amount ?? 0) > 0);
+  // Overpaid by a payment that has not landed yet: nothing extra is in the wallet to send back, so offering
+  // the latest settled payment would refund money the buyer owed.
+  const extraArriving = invoice.status === "OVERPAID" && !suggestion && !extraReturned && payments.some((p) => p.status === "DETECTED");
 
   // Payments add up: how much has settled so far, and how much of the invoice is still unpaid. Dollar invoices only,
   // so the figures share a unit.
@@ -231,15 +233,29 @@ export default async function InvoicePage({
         </Card>
       )}
 
-      {invoice.status === "OVERPAID" && extra && (
+      {extraReturned && (
+        <Card tone="quiet" className="mt-4">
+          <CardHeader label="Overpaid" hint="The buyer sent more than the amount due." />
+          <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">The extra has been sent back.</p>
+        </Card>
+      )}
+
+      {extraArriving && (
         <Card tone="quiet" className="mt-4">
           <CardHeader label="Overpaid" hint="The buyer sent more than the amount due." />
           <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
-            {payments.filter((p) => p.status === "SETTLED").length > 1
-              ? "A second payment arrived after this invoice settled. You can send it back."
-              : difference
-                ? `They sent ${difference} more than the ${invoice.amount_expected} ${invoice.currency} due. Refund the difference.`
-                : `They sent more than ${invoice.amount_expected} ${invoice.currency}. Refund the difference.`}
+            The extra payment is still on its way. Once it lands you can send it back from here.
+          </p>
+        </Card>
+      )}
+
+      {invoice.status === "OVERPAID" && extra && !extraReturned && !extraArriving && (
+        <Card tone="quiet" className="mt-4">
+          <CardHeader label="Overpaid" hint="The buyer sent more than the amount due." />
+          <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
+            {difference
+              ? `${settledPayments.length > 1 ? "Together their payments came to" : "They sent"} ${difference} more than the ${invoice.amount_expected} ${invoice.currency} due. Refund the difference.`
+              : `They sent more than ${invoice.amount_expected} ${invoice.currency}. Refund the difference.`}
           </p>
           <Link
             href={`/app/pay/refund?payment=${extra.id}${difference ? `&amount=${difference}` : ""}`}

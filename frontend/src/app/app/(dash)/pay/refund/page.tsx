@@ -2,7 +2,9 @@ import Link from "next/link";
 import { PageHeader, PageShell } from "@/components/dash/shell";
 import { Card } from "@/components/dash/card";
 import { ErrorState } from "@/components/dash/empty";
+import { getInvoice } from "@/lib/api/invoices";
 import { listPayments } from "@/lib/api/payments";
+import { overpaidRefund } from "@/lib/overpaid";
 import { getWalletBalance } from "@/lib/api/transfers";
 import { RefundForm } from "./form";
 
@@ -25,7 +27,25 @@ const LIMIT = 25;
  */
 export default async function RefundPage({ searchParams }: { searchParams: Promise<{ payment?: string; amount?: string }> }) {
   const { payment, amount } = await searchParams;
-  const [result, wallet] = await Promise.all([listPayments({ status: "SETTLED", limit: LIMIT }), getWalletBalance()]);
+  const [result, wallet, overpaid] = await Promise.all([
+    listPayments({ status: "SETTLED", limit: LIMIT }),
+    getWalletBalance(),
+    listPayments({ status: "SETTLED", invoice_status: "OVERPAID", limit: LIMIT }),
+  ]);
+
+  // For each overpaid invoice, the extra to suggest when its payment is picked, so picking it from the list
+  // fills in the overpaid part rather than the whole payment. Usually none or one invoice: a handful of reads.
+  const suggestions: Record<string, string> = {};
+  if (overpaid.ok) {
+    // Only payments that can still return something: a fully refunded overpayment needs no suggestion.
+    const open = overpaid.data.data.filter((p) => Number(p.amount_settled ?? 0) > Number(p.refunded_amount ?? 0));
+    const ids = [...new Set(open.map((p) => p.invoice_id))].slice(0, 10);
+    const invoices = await Promise.all(ids.map((id) => getInvoice(id)));
+    for (const inv of invoices) {
+      const s = inv.ok ? overpaidRefund(inv.data) : null;
+      if (s) suggestions[s.paymentId] = s.amount;
+    }
+  }
 
   return (
     <PageShell>
@@ -65,7 +85,7 @@ export default async function RefundPage({ searchParams }: { searchParams: Promi
           </p>
         </Card>
       ) : (
-        <RefundForm payments={result.data.data} initialId={payment} initialAmount={amount} wallet={wallet.ok ? wallet.data : { can_send: false, reason: "We could not check your wallet just now. Try again in a moment." }} />
+        <RefundForm payments={result.data.data} suggestions={suggestions} initialId={payment} initialAmount={amount} wallet={wallet.ok ? wallet.data : { can_send: false, reason: "We could not check your wallet just now. Try again in a moment." }} />
       )}
     </PageShell>
   );
