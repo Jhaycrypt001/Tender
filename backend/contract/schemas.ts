@@ -95,6 +95,11 @@ export const Invoice = z.object({
   metadata: z.record(z.string(), z.unknown()).nullish(),
   addresses: z.array(InvoiceAddress),
   payments: z.array(Payment).optional(),
+  /**
+   * USD already settled against this invoice, all payments added up (the invoice settles when this reaches
+   * `amount_expected`). Present when the payments are, i.e. on GET /v1/invoices/:id.
+   */
+  amount_received: Amount.optional(),
 });
 
 /** Body of POST /v1/invoices. */
@@ -135,6 +140,8 @@ export const Merchant = z.object({
   settlement_asset: z.string().nullish(),
   settlement_verified: z.boolean(),
   webhook_url: z.string().nullish(),
+  /** Email a receipt for each payment received. Payout emails are always sent. */
+  email_pay_in: z.boolean(),
   fee_bps: z.number().int(),
   created_at: Timestamp,
 });
@@ -214,6 +221,7 @@ export const UpdateMerchantInput = z.object({
   settlement_asset: z.string().min(1).optional(),
   // An empty string turns the webhook off: it is what the dashboard sends when the field is cleared.
   webhook_url: z.union([z.url({ protocol: /^https$/ }), z.literal("")]).optional(),
+  email_pay_in: z.boolean().optional(),
 });
 
 const AssetAmount = z.object({ asset: z.string(), amount: Amount });
@@ -295,6 +303,8 @@ export const PublicInvoice = z.object({
   merchant_name: z.string(),
   addresses: z.array(InvoiceAddress),
   redirect_url: z.string().nullish(),
+  /** USD already settled against this invoice, all payments added up. "0.00" before any has. */
+  amount_received: Amount.optional(),
 });
 
 export const Chain = z.object({

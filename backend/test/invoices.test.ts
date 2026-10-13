@@ -246,7 +246,7 @@ describe("GET /public/invoices/:token", () => {
 
     const body = res.json();
     expect(Object.keys(body).sort()).toEqual(
-      ["addresses", "amount_expected", "currency", "expires_at", "merchant_name", "redirect_url", "status", "token"],
+      ["addresses", "amount_expected", "amount_received", "currency", "expires_at", "merchant_name", "redirect_url", "status", "token"],
     );
     expect(S.PublicInvoice.parse(body)).toMatchObject({ merchant_name: "Acme Store", status: "PENDING", amount_expected: "49.00" });
 

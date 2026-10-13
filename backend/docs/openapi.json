@@ -303,6 +303,10 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "amount_received": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     }
                   },
                   "required": [
@@ -1319,6 +1323,9 @@
                         "null"
                       ]
                     },
+                    "email_pay_in": {
+                      "type": "boolean"
+                    },
                     "fee_bps": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -1333,6 +1340,7 @@
                     "name",
                     "email",
                     "settlement_verified",
+                    "email_pay_in",
                     "fee_bps",
                     "created_at"
                   ],
@@ -1922,6 +1930,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "amount_received": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     }
                   },
                   "required": [
@@ -2345,6 +2357,10 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "amount_received": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                           }
                         },
                         "required": [
@@ -2688,6 +2704,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "amount_received": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     }
                   },
                   "required": [
@@ -3014,6 +3034,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "amount_received": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                     }
                   },
                   "required": [
@@ -7220,6 +7244,9 @@
                         "null"
                       ]
                     },
+                    "email_pay_in": {
+                      "type": "boolean"
+                    },
                     "fee_bps": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -7234,6 +7261,7 @@
                     "name",
                     "email",
                     "settlement_verified",
+                    "email_pay_in",
                     "fee_bps",
                     "created_at"
                   ],
@@ -7351,6 +7379,9 @@
                         "const": ""
                       }
                     ]
+                  },
+                  "email_pay_in": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -7396,6 +7427,9 @@
                         "null"
                       ]
                     },
+                    "email_pay_in": {
+                      "type": "boolean"
+                    },
                     "fee_bps": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -7410,6 +7444,7 @@
                     "name",
                     "email",
                     "settlement_verified",
+                    "email_pay_in",
                     "fee_bps",
                     "created_at"
                   ],
@@ -8856,6 +8891,9 @@
                         "null"
                       ]
                     },
+                    "email_pay_in": {
+                      "type": "boolean"
+                    },
                     "fee_bps": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -8870,6 +8908,7 @@
                     "name",
                     "email",
                     "settlement_verified",
+                    "email_pay_in",
                     "fee_bps",
                     "created_at"
                   ],

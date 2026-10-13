@@ -38,7 +38,7 @@ Every one of these was confirmed against Aurora's live documentation. They are l
 | 1 | **Aurora has no webhooks** (marked "coming soon") | You MUST own a poller. It is the heart of the system. §6. |
 | 2 | **Deposit addresses are unique per chain *family*.** ✅ *Verified live 2026-09-26.* **All EVM chains share one address** — minting for `base` then `arb`, `eth`, `monad` or `evm` returns the same address with `alreadyExists: true`. Every non-EVM chain (BTC, SOL, Tron, …) gets its own | One invoice = **one address per chain family**: one EVM address + one each for the non-EVM chains. Mint the EVM address **once** (`depositChain: "evm"`). On the wire, still return one `addresses[]` entry per accepted chain — the EVM chains simply repeat the same address — so the published contract does not change. |
 | 2a | **Stellar deposits require a `memo`.** ✅ *Verified live.* The mint response carries `memo`; a deposit without it is **not credited** | The published `InvoiceAddress` shape has no memo field. **Stellar is out of scope** until the contract carries one — do not offer it. |
-| 3 | **Per-deposit quotes, no batching.** Each deposit is processed independently | You **cannot** sum two partial payments into one settlement. Two payments against one invoice are two `Payment` rows. |
+| 3 | **Per-deposit quotes, no batching.** Each deposit is processed independently | Two payments against one invoice are two `Payment` rows, each paid out on its own. Whether the *invoice* is paid is Tender's call, made on the total of what has settled. |
 | 4 | **Sub-minimum deposits are refunded automatically** (`INCOMPLETE_DEPOSIT` → "refunded by the quote deadline") | Underpayment is a **normal expected state**, not an error. Model it. |
 | 5 | **Addresses are permanent.** No TTL, no regeneration, no expiry | Invoice expiry is **Tender's** concept, invented by us, layered on top. An expired invoice's address still works — you must decide and document what happens to late money. |
 | 6 | **`sender` is an arbitrary identifier** (minLength 1). An address can be minted with no wallet connected | **This is the core UX unlock.** The buyer never connects a wallet. Pass the invoice id as `sender`. |
@@ -413,7 +413,7 @@ Published at `/docs`. Six terminal states. **Once terminal, an invoice never mov
 | `DETECTED` | no | A deposit is visible on the source chain but has not settled. |
 | `SETTLED` | yes | Full amount landed at the merchant's address in their chosen asset. |
 | `OVERPAID` | yes | Settled, and more came in than was owed. Excess recorded. |
-| `UNDERPAID` | yes | Below minimum. Refunded automatically by the quote deadline. |
+| `UNDERPAID` | yes | The payments together stayed below the amount when the invoice closed. What settled reached the merchant; a deposit below the chain minimum is refunded by Aurora. |
 | `EXPIRED` | yes | Deadline passed with nothing received. |
 | `CANCELLED` | yes | Merchant cancelled before payment. |
 | `NEEDS_RECOVERY` | yes | Deposit succeeded, onward settlement failed. **Not auto-refunded.** |
@@ -633,7 +633,7 @@ The spec chose Redis + BullMQ. It was replaced by a Postgres **outbox** because 
 ### Decisions made while building
 
 - **Coverage is judged on what the buyer sent** (USD value at detection, from Aurora's price feed), with a 1% tolerance (`PAYMENT_TOLERANCE_BPS`). Fees come out of what the merchant receives, as with a card — judging on the settled amount would mark every correct payment short.
-- **Payments are judged one at a time, never summed** (as `types.ts` requires). A second payment after SETTLED makes it OVERPAID, as `/docs` promises — the one move out of a terminal state, matching the §5 diagram.
+- **Settled payments add up** (changed 2026-10-13; `types.ts` was updated to match). The invoice settles at the payment that brings the total to `amount_expected`, so $2 then $3 settles a $5 invoice. A payment after that, or a total above the amount plus tolerance, makes it OVERPAID: the one move out of a terminal state, matching the §5 diagram. `amount_received` on the invoice is that total.
 - **Deadline and late money.** A deposit that reaches Aurora up to `EXPIRY_GRACE_MINUTES` (15) after the deadline still counts. Later money is recorded against the invoice without reopening it. Closed invoices are watched for `LATE_WINDOW_HOURS` (24).
 - **Only the expiry step closes an invoice**, and only after every address was polled successfully past the window. An Aurora outage can never expire a paid invoice. (A test caught the bug this rule fixes.)
 - **Minimums are measured, not guessed.** The worker binary-searches dry quotes (`/api/quote`, `dry: true`) per chain every 30 min, refunding to an origin-chain probe address (an Intents-account refund under-measures by ~20%), adds a 20% margin, and caches in Redis. Live on 2026-09-26: Bitcoin $8.45, Tron $3.29, Solana $0.41, Ethereum $0.37, Base $0.19, Arbitrum/Monad $0.02. Minimums are **USD**, because a buyer may send more than one asset on a chain.

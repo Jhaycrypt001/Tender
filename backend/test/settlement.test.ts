@@ -33,10 +33,33 @@ describe("judge", () => {
     expect(j({ status: "SETTLED", payments: [p("SETTLED", "49"), p("DETECTED", "10")] })).toBe("OVERPAID");
   });
 
-  it("never sums partial payments into a settlement", () => {
+  it("adds settled partial payments up", () => {
     const halves = [p("SETTLED", "24.50"), p("SETTLED", "24.50")];
-    expect(j({ status: "DETECTED", payments: halves })).toBe("DETECTED");
-    expect(j({ status: "DETECTED", payments: halves, closed: true })).toBe("UNDERPAID");
+    expect(j({ status: "DETECTED", payments: halves })).toBe("SETTLED");
+    expect(j({ status: "DETECTED", payments: halves, closed: true })).toBe("SETTLED");
+    // Once settled by two payments, it stays settled; a third makes it overpaid.
+    expect(j({ status: "SETTLED", payments: halves })).toBe("SETTLED");
+    expect(j({ status: "SETTLED", payments: [...halves, p("DETECTED", "1")] })).toBe("OVERPAID");
+  });
+
+  it("stays open while the total is short, and a top-up inside the window settles it", () => {
+    const short = [p("SETTLED", "2")];
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: short })).toBe("DETECTED");
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [...short, p("DETECTED", "3")] })).toBe("DETECTED");
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [...short, p("SETTLED", "3")] })).toBe("SETTLED");
+  });
+
+  it("is OVERPAID when several payments total more than the amount", () => {
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [p("SETTLED", "3"), p("SETTLED", "4")] })).toBe("OVERPAID");
+  });
+
+  it("does not count a failed or unvalued payment toward the total", () => {
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [p("SETTLED", "2"), p("SETTLED", null)], closed: true })).toBe("UNDERPAID");
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [p("SETTLED", "2"), p("FAILED", "3")] })).toBe("NEEDS_RECOVERY");
+  });
+
+  it("is UNDERPAID when the total stays short after the window closes", () => {
+    expect(j({ amountExpected: "5.00", status: "DETECTED", payments: [p("SETTLED", "2"), p("SETTLED", "1.5")], closed: true })).toBe("UNDERPAID");
   });
 
   it("is UNDERPAID only once closed and fully resolved", () => {

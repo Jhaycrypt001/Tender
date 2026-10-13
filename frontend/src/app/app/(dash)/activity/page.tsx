@@ -6,7 +6,7 @@ import { Cta } from "@/components/dash/cta";
 import { Hash, Money, Timestamp } from "@/components/dash/money";
 import { TxLink } from "@/components/dash/tx-link";
 import { FiatMoney } from "@/components/dash/currency";
-import { PaymentStatePill, TransferStatePill } from "@/components/dash/state-pill";
+import { DeliveryStatePill, PaymentStatePill, TransferStatePill } from "@/components/dash/state-pill";
 import { DataTable, type Row } from "@/components/dash/table";
 import { FilterTabs } from "@/components/dash/filter-tabs";
 import { listPayments } from "@/lib/api/payments";
@@ -64,8 +64,9 @@ function sentTo(t: Transfer): React.ReactNode {
 /** The Monad leg's state, unless it confirmed and something is still on its way to another chain. */
 function sentState(t: Transfer): React.ReactNode {
   const dests = t.lines.map((l) => l.dest).filter((d) => !!d);
-  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "PENDING")) return <span className="text-[0.8125rem] text-mute">Arriving…</span>;
-  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "FAILED")) return <span className="text-[0.8125rem] text-ink">Not delivered</span>;
+  // Sent on Monad, but money meant for another chain has not all arrived: show how that went.
+  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "FAILED")) return <DeliveryStatePill status="FAILED" />;
+  if (t.status === "CONFIRMED" && dests.some((d) => d.status === "PENDING")) return <DeliveryStatePill status="PENDING" />;
   return <TransferStatePill status={t.status} />;
 }
 

@@ -288,7 +288,7 @@ export const faq = {
     },
     {
       q: "What happens if a customer underpays?",
-      a: "It's a first-class state, not an error. If less than the amount has arrived when the invoice closes, it moves to UNDERPAID and you get a webhook. What did arrive reached your address, and the invoice's payments show exactly how much.",
+      a: "It's a first-class state, not an error. Payments add up, so a buyer can top up a short payment and the invoice settles once the total reaches the amount. If it is still short when the invoice closes, it moves to UNDERPAID and you get a webhook. What did arrive reached your address, and the invoice shows exactly how much.",
     },
     {
       q: "Does my customer need to connect anything?",

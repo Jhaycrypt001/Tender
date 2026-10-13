@@ -133,7 +133,7 @@ export const docs = {
       {
         name: "UNDERPAID",
         terminal: true,
-        desc: "Less than the amount arrived before the invoice closed. What arrived reached your address — see the invoice's payments.",
+        desc: "All the payments together came to less than the amount by the time the invoice closed. What arrived reached your address; the invoice's payments and `amount_received` show how much.",
       },
       {
         name: "EXPIRED",
@@ -217,7 +217,7 @@ export function verify(rawBody: string, signature: string, timestamp: string, se
       },
       {
         q: "What happens if a buyer pays twice?",
-        a: "Each deposit is processed independently. The first settles the invoice; the second is recorded and reported as an overpayment.",
+        a: "Each deposit is processed on its own, and the invoice is judged on their total: a $2 payment and then a $3 payment settle a $5 invoice. Anything that arrives after the invoice is paid is reported as an overpayment.",
       },
     ],
   },

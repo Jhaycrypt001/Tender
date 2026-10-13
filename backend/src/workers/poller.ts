@@ -577,7 +577,7 @@ export class Poller {
     for (const invoiceId of recheck) {
       const transitions = await this.deps.db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
-        const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { payments: true } });
+        const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { payments: { orderBy: { firstSeenAt: "asc" } } } });
         if (invoice.status !== "UNDERPAID") return [];
         // Judged on exactly the payments `settle` will count (none that arrived after the window
         // closed). Judging on more could say SETTLED here, then `settle` re-closes it as

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Money, UsdMinimum } from "@/components/dash/money";
 import { ChainSelect } from "@/components/pay/chain-select";
 import { QRCode } from "@/components/pay/qr";
-import { submitTx } from "@/lib/api/public";
+import { getPublicInvoice, submitTx } from "@/lib/api/public";
 import type { InvoiceStatus, PublicInvoice } from "@/lib/api/types";
 import { chainLabel } from "@/lib/chains";
 
@@ -188,10 +188,19 @@ export default function Checkout({
 }) {
   const [status, setStatus] = useState<InvoiceStatus>(invoice.status);
   const [selected, setSelected] = useState(invoice.addresses[0]?.chain ?? "");
+  // USD already settled against this invoice. Payments add up, so a short one can be topped up.
+  const [received, setReceived] = useState(invoice.amount_received ?? "0.00");
+
+  const refreshReceived = useCallback(async () => {
+    const res = await getPublicInvoice(invoice.token).catch(() => null);
+    if (res?.ok && res.data.amount_received) setReceived(res.data.amount_received);
+  }, [invoice.token]);
 
   const remaining = useCountdown(invoice.expires_at);
   const expired = remaining !== null && remaining <= 0;
   const open = OPEN.includes(status) && !expired;
+  // What is still owed, once something has settled but not enough.
+  const shortBy = amountShort(invoice.amount_expected, received);
 
   const address = useMemo(
     () => invoice.addresses.find((a) => a.chain === selected),
@@ -223,6 +232,7 @@ export default function Checkout({
         const next = JSON.parse(event.data) as { status?: InvoiceStatus };
         if (!next.status) return;
         setStatus(next.status);
+        void refreshReceived();
         if (!OPEN.includes(next.status)) {
           done.current = true;
           source.close();
@@ -233,7 +243,15 @@ export default function Checkout({
     };
     // On error the browser reconnects on its own; nothing to do here.
     return () => source.close();
-  }, [eventsUrl]);
+  }, [eventsUrl, refreshReceived]);
+
+  // A payment settling while the invoice is already DETECTED changes no status, so no event is sent: look every so often.
+  useEffect(() => {
+    if (status !== "DETECTED") return;
+    void refreshReceived();
+    const id = setInterval(() => void refreshReceived(), 20_000);
+    return () => clearInterval(id);
+  }, [status, refreshReceived]);
 
   // Once paid, hand back to the merchant if they gave us somewhere to go.
   useEffect(() => {
@@ -346,6 +364,26 @@ export default function Checkout({
                 </p>
               )}
 
+              {shortBy && (
+                <p
+                  role="status"
+                  className="mt-4 rounded-xl border border-paper/15 bg-paper/5 px-4 py-3 text-[0.8125rem] leading-relaxed text-paper"
+                >
+                  <span className="font-mono">
+                    <Money amount={received} />
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-mono">
+                    <Money amount={invoice.amount_expected} />
+                  </span>{" "}
+                  has arrived. Send the remaining{" "}
+                  <span className="font-mono">
+                    <Money amount={shortBy} />
+                  </span>{" "}
+                  to the same address and the payment completes.
+                </p>
+              )}
+
               <p className="mt-4 border-t border-paper/10 pt-4 text-[0.8125rem] leading-relaxed text-paper/60">
                 {status === "DETECTED"
                   ? "Payment spotted. Waiting for it to confirm — you can close this page, it will still complete."
@@ -363,6 +401,14 @@ export default function Checkout({
       </div>
     </div>
   );
+}
+
+/** The USD still owed as a decimal string, or null when nothing has settled yet or it is paid. */
+function amountShort(expected: string, received: string): string | null {
+  const paid = Number(received);
+  const owed = Number(expected) - paid;
+  if (!(paid > 0) || !(owed > 0.005)) return null;
+  return owed.toFixed(2);
 }
 
 function Countdown({ remaining }: { remaining: number | null }) {
@@ -427,7 +473,7 @@ function Resolved({
     },
     UNDERPAID: {
       title: "Payment incomplete",
-      body: `Less than the amount due arrived. A deposit below the chain's minimum is sent back to the address it came from automatically; anything above it reached ${invoice.merchant_name}. Contact ${invoice.merchant_name} about the difference.`,
+      body: `Less than the amount due arrived before this invoice closed. A deposit below the chain's minimum is sent back to the address it came from automatically; anything above it reached ${invoice.merchant_name}. Contact ${invoice.merchant_name} about the difference.`,
       good: false,
     },
     EXPIRED: {

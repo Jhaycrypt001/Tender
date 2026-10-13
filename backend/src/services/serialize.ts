@@ -5,6 +5,7 @@ import type { ApiKey, Invoice, InvoiceKind, WebhookDelivery, InvoiceAddress, Mer
 import { chainById } from "../aurora/chains.js";
 import { assetSymbol } from "./asset-symbols.js";
 import { Decimal } from "../lib/money.js";
+import { settledTotal } from "./settlement.js";
 
 /**
  * Database rows → wire shapes. The only place camelCase becomes snake_case,
@@ -45,8 +46,12 @@ export function addressesFor(invoice: InvoiceWithAddresses, minimums?: Map<strin
   });
 }
 
-export function toInvoice(invoice: InvoiceWithAddresses, minimums?: Map<string, string>): Wire<typeof S.Invoice> {
+export function toInvoice(
+  invoice: InvoiceWithAddresses & { payments?: Array<Pick<Payment, "status" | "amountInUsd">> },
+  minimums?: Map<string, string>,
+): Wire<typeof S.Invoice> {
   return {
+    ...(invoice.payments ? { amount_received: amountReceived(invoice.payments) } : {}),
     id: invoice.id,
     token: invoice.token,
     status: effectiveStatus(invoice),
@@ -61,13 +66,24 @@ export function toInvoice(invoice: InvoiceWithAddresses, minimums?: Map<string, 
   };
 }
 
+/**
+ * USD settled against an invoice, all payments added up: what the judge counts, minus anything refunded.
+ * Rounded DOWN to the cent: it is shown to people and subtracted from the amount due, so it must never
+ * claim more arrived than did (a USD value at detection carries up to 18 decimals).
+ */
+export function amountReceived(payments: Array<Pick<Payment, "status" | "amountInUsd">>): string {
+  const total = settledTotal(payments.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null })));
+  return amount(total.toDecimalPlaces(2, Decimal.ROUND_DOWN));
+}
+
 /** What a stranger holding the checkout link may see. Built field by field, never spread. */
 export function toPublicInvoice(
-  invoice: InvoiceWithAddresses,
+  invoice: InvoiceWithAddresses & { payments?: Array<Pick<Payment, "status" | "amountInUsd">> },
   merchant: Pick<Merchant, "name">,
   minimums?: Map<string, string>,
 ): Wire<typeof S.PublicInvoice> {
   return {
+    ...(invoice.payments ? { amount_received: amountReceived(invoice.payments) } : {}),
     token: invoice.token,
     status: effectiveStatus(invoice),
     amount_expected: amount(invoice.amountExpected),
@@ -135,6 +151,7 @@ export function toMerchant(m: Merchant): Wire<typeof S.Merchant> {
     settlement_asset: m.settlementAsset,
     settlement_verified: m.settlementVerified,
     webhook_url: m.webhookUrl,
+    email_pay_in: m.emailPayIn,
     fee_bps: m.feeBps,
     created_at: m.createdAt.toISOString(),
   };

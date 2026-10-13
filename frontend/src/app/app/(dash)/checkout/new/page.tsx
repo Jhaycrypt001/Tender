@@ -15,7 +15,17 @@ export const dynamic = "force-dynamic";
  * because a merchant should see the real minimums when they exist — and when
  * they do not, the form says so instead of inventing numbers.
  */
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ amount?: string; currency?: string }>;
+}) {
+  const { amount, currency } = await searchParams;
+  // From "Invoice the shortfall": a plain amount and a currency we accept, else ignored.
+  const prefill = {
+    amount: amount && /^\d{1,9}(\.\d{1,2})?$/.test(amount) ? amount : undefined,
+    currency: currency === "USD" || currency === "USDC" ? currency : undefined,
+  };
   const result = await getChains();
 
   const chains = result.ok
@@ -56,7 +66,7 @@ export default async function NewInvoicePage() {
           </Link>
         }
       />
-      <CreateInvoiceForm chains={chains} listState={listState} />
+      <CreateInvoiceForm chains={chains} listState={listState} prefill={prefill} />
     </PageShell>
   );
 }

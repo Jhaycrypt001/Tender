@@ -66,8 +66,10 @@ export type ChainId =
  * ⚠️ UNDERPAID and NEEDS_RECOVERY are NOT the same kind of failure, and the UI
  * must never render them alike:
  *
- *   UNDERPAID       — the deposit was below the minimum. Aurora refunds this
- *                     automatically by the quote deadline. Nobody acts.
+ *   UNDERPAID       — the payments together stayed below the amount when the
+ *                     invoice closed. What settled reached the merchant, who
+ *                     decides: invoice the rest, or refund. (A deposit below
+ *                     the chain minimum is refunded by Aurora.)
  *   NEEDS_RECOVERY  — the deposit LANDED and the onward settlement then failed.
  *                     Aurora does NOT auto-refund this. Recovery is explicit:
  *                     a human retries or withdraws.
@@ -149,6 +151,8 @@ export type Invoice = {
   addresses: InvoiceAddress[];
   /** Present on a single-invoice fetch; omitted from list responses. */
   payments?: Payment[];
+  /** USD settled so far, all payments added up. The invoice settles when this reaches `amount_expected`. Present with `payments`. */
+  amount_received?: Amount;
 };
 
 /** Body of POST /v1/invoices. */
@@ -173,9 +177,9 @@ export type PaymentStatus = "DETECTED" | "SETTLED" | "FAILED" | "REFUNDED";
  * One deposit against one invoice.
  *
  * ⚠️ An invoice can have MORE THAN ONE payment. Aurora quotes and processes
- * each deposit independently and cannot batch two partial payments into one
- * settlement, so two half-payments are two rows here — not one combined
- * payment. Never sum these and call the invoice settled.
+ * each deposit independently, so two half-payments are two rows here, not one
+ * combined payment. The invoice itself is judged on what has settled in total
+ * (`Invoice.amount_received`): $2 then $3 settles a $5 invoice.
  */
 export type Payment = {
   id: string;
@@ -255,6 +259,8 @@ export type Merchant = {
    */
   settlement_verified: boolean;
   webhook_url?: string | null;
+  /** Email a receipt for each payment received. Payout emails are always sent. */
+  email_pay_in: boolean;
   /** Tender's fee in basis points (50 = 0.50%). Currently always 0. */
   fee_bps: number;
   created_at: Timestamp;
@@ -264,6 +270,7 @@ export type UpdateMerchantInput = {
   settlement_address?: string;
   settlement_asset?: string;
   webhook_url?: string;
+  email_pay_in?: boolean;
 };
 
 /** Per-asset settled/unsettled totals for the Home screen. */
@@ -401,6 +408,8 @@ export type PublicInvoice = {
   merchant_name: string;
   addresses: InvoiceAddress[];
   redirect_url?: string | null;
+  /** USD settled so far, all payments added up. "0.00" before any has. */
+  amount_received?: Amount;
 };
 
 /**

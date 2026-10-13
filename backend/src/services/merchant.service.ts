@@ -109,6 +109,7 @@ export type MerchantUpdate = {
   settlement_address?: string;
   settlement_asset?: string;
   webhook_url?: string;
+  email_pay_in?: boolean;
 };
 
 /**
@@ -119,7 +120,7 @@ export type MerchantUpdate = {
  * it. That is what stops a stolen session from silently redirecting revenue.
  */
 export async function updateMerchant(db: Db, merchant: Merchant, input: MerchantUpdate): Promise<Merchant> {
-  const data: Partial<Pick<Merchant, "settlementAddress" | "settlementAsset" | "settlementVerified" | "webhookUrl">> = {};
+  const data: Partial<Pick<Merchant, "settlementAddress" | "settlementAsset" | "settlementVerified" | "webhookUrl" | "emailPayIn">> = {};
 
   if (input.settlement_address !== undefined) {
     const changed = input.settlement_address.toLowerCase() !== merchant.settlementAddress?.toLowerCase();
@@ -136,6 +137,7 @@ export async function updateMerchant(db: Db, merchant: Merchant, input: Merchant
   }
   // "" clears it: no URL means no webhooks are sent.
   if (input.webhook_url !== undefined) data.webhookUrl = input.webhook_url || null;
+  if (input.email_pay_in !== undefined) data.emailPayIn = input.email_pay_in;
 
   return db.merchant.update({ where: { id: merchant.id }, data });
 }

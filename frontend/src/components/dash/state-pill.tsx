@@ -9,13 +9,21 @@ import type { InvoiceStatus, PaymentStatus, TransferStatus } from "@/lib/api/typ
  * about it, rather than shipping an unstyled pill to a merchant.
  *
  * On colour: there is no green in this product. Success is `--sand`, the same
- * ochre as everything else Tender treats as good. Failure states are not red
- * either — a merchant reading "UNDERPAID" does not need to be alarmed, they
- * need to know it was refunded automatically. Only the two states that need a
- * human are given real visual weight: NEEDS_RECOVERY and FAILED.
+ * ochre as everything else Tender treats as good. Four weights, by how much the
+ * merchant has to DO:
+ *   good ..... finished, nothing to do (soft ochre)
+ *   pending .. in flight, nothing to do yet (ink outline)
+ *   quiet .... over, nothing to do (grey, skipped by the eye)
+ *   action ... a decision is waiting on the merchant: an overpayment to refund,
+ *              an underpayment to chase or refund (solid ochre, hard to miss)
+ *   attention  something BROKE and needs a person: NEEDS_RECOVERY, FAILED,
+ *              not delivered (solid ink)
+ * An overpaid invoice used to wear the same soft ochre as a settled one, and an
+ * underpaid one was grey, so the two states that ask the merchant to act were
+ * the two that looked like nothing was needed.
  */
 
-type Variant = "good" | "pending" | "quiet" | "attention";
+type Variant = "good" | "pending" | "quiet" | "action" | "attention";
 
 const VARIANT: Record<Variant, string> = {
   // Settled. Ochre fill, the product's one positive colour.
@@ -25,7 +33,9 @@ const VARIANT: Record<Variant, string> = {
   // Over, but nothing to do. Deliberately low-contrast so a merchant's eye
   // skips it when scanning a list.
   quiet: "bg-transparent text-mute border-line",
-  // Needs a person. The only state that is allowed to be loud.
+  // A decision is waiting on the merchant (refund the extra, chase the shortfall).
+  action: "bg-sand text-ink border-sand",
+  // Something broke and needs a person. The loudest state.
   attention: "bg-ink text-paper border-ink",
 };
 
@@ -33,8 +43,8 @@ const INVOICE_VARIANT: Record<InvoiceStatus, Variant> = {
   PENDING: "pending",
   DETECTED: "pending",
   SETTLED: "good",
-  OVERPAID: "good",
-  UNDERPAID: "quiet",
+  OVERPAID: "action",
+  UNDERPAID: "action",
   EXPIRED: "quiet",
   CANCELLED: "quiet",
   NEEDS_RECOVERY: "attention",
@@ -104,6 +114,16 @@ function Pill({ variant, children }: { variant: Variant; children: string }) {
   );
 }
 
+export type DeliveryStatus = "PENDING" | "DELIVERED" | "FAILED";
+
+const DELIVERY_VARIANT: Record<DeliveryStatus, Variant> = { PENDING: "pending", DELIVERED: "good", FAILED: "attention" };
+const DELIVERY_LABEL: Record<DeliveryStatus, string> = { PENDING: "Arriving", DELIVERED: "Delivered", FAILED: "Not delivered" };
+
+/** Where a cross-chain send got to after it left the wallet: on its way, arrived, or did not arrive. */
+export function DeliveryStatePill({ status }: { status: DeliveryStatus }) {
+  return <Pill variant={DELIVERY_VARIANT[status]}>{DELIVERY_LABEL[status]}</Pill>;
+}
+
 export function InvoiceStatePill({ status }: { status: InvoiceStatus }) {
   return <Pill variant={INVOICE_VARIANT[status]}>{INVOICE_LABEL[status]}</Pill>;
 }
@@ -129,9 +149,9 @@ export const INVOICE_STATUS_HELP: Record<InvoiceStatus, string> = {
     "A deposit has been seen on chain and is being routed. No action needed.",
   SETTLED: "Paid in full and settled to your Monad address.",
   OVERPAID:
-    "Settled, and the buyer sent more than the invoice asked for. The excess is recorded against this invoice.",
+    "Settled, and the buyer sent more than the invoice asked for. The excess is yours to send back: use Refund the extra below.",
   UNDERPAID:
-    "Less than the amount arrived before the invoice closed. What arrived reached your address — see the payments below.",
+    "The payments added up to less than the invoice asked for by the time it closed. What arrived reached your address: ask for the rest with a new invoice, or send it back.",
   EXPIRED: "The deadline passed with nothing received.",
   CANCELLED: "You cancelled this invoice before it was paid.",
   NEEDS_RECOVERY:

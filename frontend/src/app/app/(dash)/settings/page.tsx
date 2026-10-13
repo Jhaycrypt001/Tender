@@ -6,6 +6,7 @@ import { ReadOnlyField } from "@/components/dash/field";
 import { Timestamp } from "@/components/dash/money";
 import { getMerchant } from "@/lib/api/merchant";
 import { SettlementPanel } from "./settlement";
+import { EmailPanel } from "./emails";
 
 export const metadata = { title: "Settings · Tender" };
 
@@ -78,6 +79,8 @@ export default async function SettingsPage() {
               </ReadOnlyField>
             </div>
           </Card>
+
+          <EmailPanel payIn={m.email_pay_in} />
 
           <Card tone="quiet">
             <CardHeader

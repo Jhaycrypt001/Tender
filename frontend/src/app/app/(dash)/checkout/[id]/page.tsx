@@ -78,6 +78,16 @@ export default async function InvoicePage({
     if (paid !== null && due !== null && paid > due) difference = fromMicro(paid - due);
   }
 
+  // Payments add up: how much has settled so far, and how much of the invoice is still unpaid. Dollar invoices only,
+  // so the figures share a unit.
+  let shortfall = "";
+  const received = invoice.amount_received ?? "";
+  if (received && ["USD", "USDC"].includes(invoice.currency.toUpperCase())) {
+    const got = toMicro(received);
+    const due = toMicro(invoice.amount_expected);
+    if (got !== null && due !== null && got > BigInt(0) && due > got) shortfall = fromMicro(due - got);
+  }
+
   const rows: Row[] = payments.map((p) => ({
     id: p.id,
     href: `/app/activity/${p.id}`,
@@ -180,6 +190,47 @@ export default async function InvoicePage({
         </Card>
       </div>
 
+      {shortfall && (invoice.status === "DETECTED" || invoice.status === "UNDERPAID") && (
+        <Card tone="quiet" className="mt-4">
+          <CardHeader
+            label={invoice.status === "DETECTED" ? "Partially paid" : "Underpaid"}
+            hint={`${received} of ${invoice.amount_expected} ${invoice.currency} received`}
+          />
+          {invoice.status === "DETECTED" ? (
+            <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
+              {shortfall} {invoice.currency} is still to pay. Payments add up, so the buyer can send the rest to the same
+              address before the invoice closes and it will settle.
+            </p>
+          ) : (
+            <>
+              <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
+                The invoice closed with {shortfall} {invoice.currency} unpaid. What arrived is in your wallet. Ask for the
+                rest with a new invoice, or send what arrived back.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={`/app/checkout/new?amount=${shortfall}&currency=${invoice.currency.toUpperCase()}`}
+                  className="inline-flex rounded-full bg-ink px-4 py-2 text-[0.875rem] text-paper"
+                >
+                  Invoice the shortfall ({shortfall})
+                </Link>
+                {settledPayments.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/app/pay/refund?payment=${p.id}`}
+                    className="inline-flex rounded-full border border-line px-4 py-2 text-[0.875rem]"
+                  >
+                    {settledPayments.length > 1 && p.amount_settled
+                      ? `Refund ${p.amount_settled} received`
+                      : "Refund what was received"}
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
       {invoice.status === "OVERPAID" && extra && (
         <Card tone="quiet" className="mt-4">
           <CardHeader label="Overpaid" hint="The buyer sent more than the amount due." />
@@ -201,10 +252,8 @@ export default async function InvoicePage({
 
       <div className="mt-7">
         <SectionHeader label="Payments against this invoice" />
-        {/* ⚠️ Rendered as a list, never summed. Aurora quotes each deposit
-            independently and cannot batch two partial payments into one
-            settlement, so two half-payments are two rows — adding them up and
-            calling the invoice paid would be wrong. */}
+        {/* One row per deposit: Aurora quotes and pays out each one on its own. The invoice
+            is judged on their total, shown above as received against expected. */}
         <DataTable
           columns={[
             { key: "when", label: "First seen" },

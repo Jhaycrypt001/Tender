@@ -37,6 +37,8 @@ model Merchant {
   feeBps             Int      @default(0)
   /// The last ORD-number handed out to an invoice created without a reference.
   invoiceSeq         Int      @default(0)
+  /// Email a receipt for each payment received. Payout emails are always sent: they are the merchant's alert that money left.
+  emailPayIn         Boolean  @default(true)
   webhookUrl         String?
   webhookSecret      String
   createdAt          DateTime @default(now())
@@ -208,6 +210,8 @@ model EmailDelivery {
   merchantId  String
   merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   kind        String
+  /// What the email is about: a payment, an invoice or a transfer id. Empty for the welcome email.
+  key         String    @default("")
   toEmail     String
   attempts    Int       @default(0)
   nextRetryAt DateTime?
@@ -215,7 +219,7 @@ model EmailDelivery {
   lastError   String?
   createdAt   DateTime  @default(now())
 
-  @@unique([merchantId, kind])
+  @@unique([merchantId, kind, key])
   @@index([sentAt, nextRetryAt])
 }
 

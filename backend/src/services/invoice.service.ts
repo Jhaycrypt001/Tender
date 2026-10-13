@@ -155,7 +155,7 @@ export async function getPublicInvoice(db: Db, token: string) {
   if (!TOKEN_PATTERN.test(token)) throw notFound("Invoice");
   const invoice = await db.invoice.findUnique({
     where: { token },
-    include: { addresses: true, merchant: { select: { name: true } } },
+    include: { addresses: true, merchant: { select: { name: true } }, payments: { select: { status: true, amountInUsd: true } } },
   });
   // A standing deposit address has no checkout page: it is not a bill.
   if (!invoice || invoice.kind === "STANDING") throw notFound("Invoice");

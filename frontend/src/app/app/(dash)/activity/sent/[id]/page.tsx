@@ -6,7 +6,7 @@ import { ErrorState } from "@/components/dash/empty";
 import { CopyValue } from "@/components/dash/copy";
 import { Money, Timestamp } from "@/components/dash/money";
 import { TxLink } from "@/components/dash/tx-link";
-import { TransferStatePill } from "@/components/dash/state-pill";
+import { DeliveryStatePill, TransferStatePill } from "@/components/dash/state-pill";
 import { getTransfer } from "@/lib/api/transfers";
 import type { Transfer } from "@/lib/api/types";
 
@@ -71,7 +71,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                 {l.dest && (
                   <dl className="flex flex-col gap-1.5 text-[0.8125rem]">
                     <Line label="Delivery">
-                      {l.dest.status === "DELIVERED" ? "Delivered" : l.dest.status === "FAILED" ? "Not delivered" : t.status === "CONFIRMED" ? "Arriving…" : "Waiting to send"}
+                      {t.status !== "CONFIRMED" && l.dest.status === "PENDING" ? <span className="text-mute">Waiting to send</span> : <DeliveryStatePill status={l.dest.status} />}
                     </Line>
                     <Line label="Arrives as">
                       {l.dest.expected_out ? `about ${l.dest.expected_out} ${l.dest.asset}` : l.dest.asset}

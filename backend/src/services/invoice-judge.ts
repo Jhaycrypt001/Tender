@@ -120,6 +120,8 @@ export async function publishTransitions(redis: Pick<Redis, "publish">, logger: 
 /** The payment a transition is about, for the webhook and the SSE event. */
 export function pickPayment<P extends { status: string; firstSeenAt: Date }>(payments: P[], status: InvoiceStatus): P | undefined {
   if (status === "NEEDS_RECOVERY") return payments.find((p) => p.status === "FAILED");
-  if (status === "SETTLED" || status === "OVERPAID") return payments.find((p) => p.status === "SETTLED") ?? payments[0];
+  // The payment that brought the total to the amount is the last settled one before any extra; with a single payment it is that one.
+  if (status === "SETTLED") return [...payments].reverse().find((p) => p.status === "SETTLED") ?? payments[0];
+  if (status === "OVERPAID") return payments.find((p) => p.status === "SETTLED") ?? payments[0];
   return payments.at(-1);
 }

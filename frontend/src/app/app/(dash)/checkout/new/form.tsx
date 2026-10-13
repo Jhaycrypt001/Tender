@@ -58,9 +58,12 @@ const LIST_NOTE: Record<Exclude<ChainListState, "live">, string> = {
 export function CreateInvoiceForm({
   chains,
   listState,
+  prefill,
 }: {
   chains: ChainOption[];
   listState: ChainListState;
+  /** An amount and currency to start from, e.g. the shortfall on an underpaid invoice. */
+  prefill?: { amount?: string; currency?: string };
 }) {
   const [state, action] = useActionState(createInvoiceAction, EMPTY);
   const list = chains.length > 0 ? chains : FALLBACK;
@@ -82,7 +85,7 @@ export function CreateInvoiceForm({
               name="amount_expected"
               currency="USD"
               required
-              defaultValue={v.amount_expected}
+              defaultValue={v.amount_expected ?? prefill?.amount}
               error={state.fields?.amount_expected}
               hint="Digits only — 49.00, not $49."
             />
@@ -95,7 +98,7 @@ export function CreateInvoiceForm({
               label="Priced in"
               name="currency"
               required
-              defaultValue={v.currency || "USD"}
+              defaultValue={v.currency || prefill?.currency || "USD"}
               error={state.fields?.currency}
               hint="You are paid in your settlement asset."
               options={[

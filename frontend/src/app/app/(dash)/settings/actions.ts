@@ -61,3 +61,15 @@ export async function saveSettlementAssetAction(
 
   return { ok: `Saved. New payments settle as ${asset}.` };
 }
+
+/** The one email setting: a receipt for each payment received. Payout emails are always sent. */
+export async function saveEmailPrefsAction(
+  _prev: SettlementState,
+  form: FormData,
+): Promise<SettlementState> {
+  const on = form.get("email_pay_in") === "on";
+  const result = await updateMerchant({ email_pay_in: on });
+  if (!result.ok) return { message: result.error.message };
+  revalidatePath("/app/settings");
+  return { ok: on ? "You'll get an email for each payment." : "Payment emails are off." };
+}

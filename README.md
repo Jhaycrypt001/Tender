@@ -388,9 +388,9 @@ stateDiagram-v2
 |---|:---:|---|
 | `PENDING` | — | Created, addresses minted, nothing received. |
 | `DETECTED` | — | A deposit is visible on the source chain but has not settled. |
-| `SETTLED` | ✓ | The full amount landed at the merchant's address in their chosen asset. |
+| `SETTLED` | ✓ | The full amount landed at the merchant's address in their chosen asset, in one payment or several that add up (`amount_received` reaches `amount_expected`). |
 | `OVERPAID` | ✓ | Settled, and more came in than was owed. The excess is recorded. |
-| `UNDERPAID` | ✓ | Less than the amount arrived before the invoice closed. What did arrive reached the merchant, and the invoice's payments show exactly how much. |
+| `UNDERPAID` | ✓ | All the payments together came to less than the amount before the invoice closed. What did arrive reached the merchant, and `amount_received` and the invoice's payments show exactly how much. |
 | `EXPIRED` | ✓ | The deadline passed with nothing received. |
 | `CANCELLED` | ✓ | The merchant cancelled before payment. |
 | `NEEDS_RECOVERY` | ✓ | Deposit succeeded, onward settlement failed. **Not auto-refunded.** |
@@ -403,7 +403,7 @@ stateDiagram-v2
 2. Queries only non-terminal invoices that have at least one address, batched.
 3. For each address, reads `received` / `success` / `failed` from Aurora.
 4. **Dedupes on `aurora_tx_hash`, which is `UNIQUE`.** The poller is safe to run twice.
-5. Compares the amount against `amount_expected` → `SETTLED` / `UNDERPAID` / `OVERPAID`.
+5. Adds up what has settled and compares the total against `amount_expected` → `SETTLED` / `UNDERPAID` / `OVERPAID`.
 6. On a transition: writes the `Payment`, updates the `Invoice`, enqueues the webhook, pushes SSE.
 7. On `failed` after a successful deposit → opens a `RecoveryTask`, sets `NEEDS_RECOVERY`.
 8. Backs off exponentially per address. **One bad address never stalls the loop.**
@@ -658,7 +658,7 @@ Not assumed, not read off a blog post — probed against the real API with a rea
 | 1 | **Aurora has no webhooks** ("coming soon") | We own a poller. It is the heart of the system. |
 | 2 | **Addresses are unique per chain *family*** — all EVM chains share one | One EVM mint covers fourteen chains. |
 | 2a | **Stellar requires a `memo`**, or the deposit is never credited | Stellar is excluded until the contract carries one. |
-| 3 | **Per-deposit quotes, no batching** | Two partial payments are two `Payment` rows, never one. |
+| 3 | **Per-deposit quotes, no batching** | Two partial payments are two `Payment` rows, never one. The invoice is judged on their total. |
 | 5 | **Addresses are permanent** — no TTL | Invoice expiry is *Tender's* invention, layered on top. |
 | 6 | **`sender` is an arbitrary identifier** | **The core UX unlock: the buyer never connects a wallet.** |
 | 7 | **Refund asymmetry** after a successful deposit | `NEEDS_RECOVERY` exists as a first-class state. |

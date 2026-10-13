@@ -15,11 +15,13 @@ import { Decimal } from "../lib/money.js";
  * `toleranceBps` absorbs price-feed lag: a payment within the tolerance of the
  * expected amount counts as exact.
  *
- * Payments are judged ONE AT A TIME, never summed. Aurora settles each deposit
- * independently (constraint #3), and the published contract says never to sum
- * partial payments into a settlement. A second payment after a settling one
- * makes the invoice OVERPAID, as /docs promises ("the first settles the
- * invoice; the second is recorded and reported as an overpayment").
+ * Settled payments ADD UP. Aurora still routes and pays out every deposit on
+ * its own (constraint #3, each is its own Payment row), but whether the invoice
+ * is paid is decided on what has settled in total: a buyer who sends $2 and
+ * then $3 against a $5 invoice has paid it. Payments are taken oldest first,
+ * and the invoice settles at the payment that brings the total to the amount.
+ * Anything that arrives after that point is an extra payment and makes it
+ * OVERPAID, as does a total above the amount plus tolerance.
  */
 
 export type PaymentView = {
@@ -42,42 +44,54 @@ export function judge(input: JudgeInput): InvoiceStatus {
 
   // Terminal states never move — with the one published exception: a later
   // payment turns SETTLED into OVERPAID.
-  if (status === "SETTLED") return hasExtraPayment(input) ? "OVERPAID" : "SETTLED";
+  if (status === "SETTLED") {
+    const settling = coveringPayments(input);
+    const extra = payments.some((p) => p.status !== "FAILED" && !settling?.used.includes(p));
+    return settling && extra ? "OVERPAID" : "SETTLED";
+  }
   if (status !== "PENDING" && status !== "DETECTED") return status;
 
   // A deposit that landed and then failed onward is never refunded
   // automatically. It gets its own terminal state and a recovery task.
   if (payments.some((p) => p.status === "FAILED")) return "NEEDS_RECOVERY";
 
-  const covering = payments.find((p) => p.status === "SETTLED" && covers(p, input));
-  if (covering) {
-    return exceeds(covering, input) || hasExtraPayment(input) ? "OVERPAID" : "SETTLED";
+  const paid = coveringPayments(input);
+  if (paid) {
+    const extra = payments.filter((p) => p.status !== "FAILED" && !paid.used.includes(p)).length > 0;
+    return paid.total.gt(band(input, +1)) || extra ? "OVERPAID" : "SETTLED";
   }
 
   if (payments.length === 0) return input.closed ? "EXPIRED" : "PENDING";
 
-  // Money arrived but no single payment covers the invoice. While payments are
-  // still in flight or the buyer could still top up, wait. Once the window has
-  // closed and everything has resolved, it is UNDERPAID.
-  // ⚠️ Open question for the frontend owner: /docs describes UNDERPAID as
-  // "refunded automatically", which is true of a sub-minimum deposit but NOT
-  // of a partial payment that settled — that money reached the merchant.
+  // Money arrived but together it does not cover the invoice. While payments
+  // are still in flight or the buyer could still top up, wait. Once the window
+  // has closed and everything has resolved, it is UNDERPAID. What settled
+  // reached the merchant: it is not refunded automatically.
   const unresolved = payments.some((p) => p.status === "DETECTED");
   return input.closed && !unresolved ? "UNDERPAID" : "DETECTED";
 }
 
-function covers(p: PaymentView, input: JudgeInput): boolean {
-  if (p.amountInUsd === null) return false;
-  return new Decimal(p.amountInUsd).gte(band(input, -1));
+/**
+ * The settled payments, oldest first, that together reach the amount: the
+ * shortest run that does. Null while they fall short. A payment that cannot be
+ * valued adds nothing until it is.
+ */
+function coveringPayments(input: JudgeInput): { used: PaymentView[]; total: Decimal } | null {
+  const floor = band(input, -1);
+  const used: PaymentView[] = [];
+  let total = new Decimal(0);
+  for (const p of input.payments) {
+    if (p.status !== "SETTLED" || p.amountInUsd === null) continue;
+    used.push(p);
+    total = total.add(p.amountInUsd);
+    if (total.gte(floor)) return { used, total };
+  }
+  return null;
 }
 
-function exceeds(p: PaymentView, input: JudgeInput): boolean {
-  return p.amountInUsd !== null && new Decimal(p.amountInUsd).gt(band(input, +1));
-}
-
-/** Any payment beyond the first that is not a failure. */
-function hasExtraPayment(input: JudgeInput): boolean {
-  return input.payments.filter((p) => p.status !== "FAILED").length > 1;
+/** What has settled so far, in USD: the part of an invoice that has reached the merchant. */
+export function settledTotal(payments: PaymentView[]): Decimal {
+  return payments.reduce((sum, p) => (p.status === "SETTLED" && p.amountInUsd !== null ? sum.add(p.amountInUsd) : sum), new Decimal(0));
 }
 
 /** expected × (1 ± tolerance). */

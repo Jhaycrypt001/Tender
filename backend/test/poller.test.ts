@@ -167,6 +167,29 @@ describe("poller", () => {
     expect(await status(inv.id)).toBe("UNDERPAID");
   });
 
+  it("settles when a top-up brings two partial payments to the amount, and reports what has arrived", async () => {
+    const inv = await invoice("5.00");
+    const { poller, clock } = makePoller(t);
+    t.aurora.push(inv.evm, "received", usdc(inv.evm, 2, { tx: "first" }));
+    t.aurora.push(inv.evm, "success", payout(inv.evm, 1.99, { tx: "out1" }));
+    await poller.tick();
+    expect(await status(inv.id)).toBe("DETECTED");
+
+    // The buyer sees what arrived, with no merchant-private fields.
+    const pub = await t.app.inject({ method: "GET", url: `/public/invoices/${inv.token}` });
+    expect(pub.json()).toMatchObject({ status: "DETECTED", amount_expected: "5.00", amount_received: "2.00" });
+
+    clock.now = new Date(clock.now.getTime() + 60_000);
+    t.aurora.push(inv.evm, "received", usdc(inv.evm, 3, { tx: "second" }));
+    t.aurora.push(inv.evm, "success", payout(inv.evm, 2.98, { tx: "out2" }));
+    await poller.tick();
+    expect(await status(inv.id)).toBe("SETTLED");
+
+    const hooks = await t.db.webhookDelivery.findMany({ where: { invoiceId: inv.id }, orderBy: { createdAt: "asc" } });
+    expect(hooks.map((h) => h.event)).toEqual(["invoice.detected", "invoice.settled"]);
+    expect(await t.db.payment.count({ where: { invoiceId: inv.id } })).toBe(2);
+  });
+
   it("expires an unpaid invoice only after a successful poll past the window", async () => {
     const inv = await invoice();
     const { poller, clock } = makePoller(t);
