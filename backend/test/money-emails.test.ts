@@ -205,6 +205,33 @@ describe("the layout", () => {
 });
 
 describe("what the emails say", () => {
+  it("never says $0.00 short: it uses the page's rounded-down total", async () => {
+    const m = await merchant(t.db);
+    const inv = await t.db.invoice.findUniqueOrThrow({
+      where: {
+        id: (
+          await t.app.inject({ method: "POST", url: "/v1/invoices", headers: m.auth, payload: { amount_expected: "5.00", currency: "USD", reference: "ORD-R", chains: ["base"] } })
+        ).json().id,
+      },
+      include: { addresses: true },
+    });
+    for (const [i, usd] of ["0.997197", "4.00"].entries()) {
+      await t.db.payment.create({
+        data: { invoiceId: inv.id, invoiceAddressId: inv.addresses[0]!.id, auroraTxHash: `r${i}`, fromChain: "base", amountIn: usd, amountInUsd: usd, status: "SETTLED", settledAt: new Date(), raw: {} },
+      });
+    }
+    await t.db.invoice.update({ where: { id: inv.id }, data: { status: "UNDERPAID" } });
+    const send = vi.fn(ok);
+    const now = new Date();
+    await worker(send, now).sweep();
+    await worker(send, now).tick();
+    const subjects = send.mock.calls.map((c) => c[1].subject);
+    expect(subjects).toContain("ORD-R closed $0.01 short");
+    // Its two payments settled before the email went out, but only the one closed-short email is sent.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(subjects.join(" ")).not.toContain("$0.00");
+  });
+
   const appUrl = "https://tenderr.xyz";
   const at = new Date("2026-10-13T14:35:11Z");
 

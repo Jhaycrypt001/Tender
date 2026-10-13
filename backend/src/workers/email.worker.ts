@@ -11,8 +11,8 @@ import {
   type MoneyIn,
   type SendResult,
 } from "../services/email.service.js";
-import { amount } from "../services/serialize.js";
-import { settledTotal } from "../services/settlement.js";
+// The same rounded-down total the invoice page shows, so an email and the page never disagree by a cent.
+import { amount, amountReceived } from "../services/serialize.js";
 
 /**
  * Sends the EmailDelivery outbox, with the same guarantees as the webhook
@@ -215,18 +215,20 @@ export class EmailWorker {
       invoiceId: inv.id,
     };
     if (inv.kind === "STANDING") return { message: renderMoneyIn({ ...base, variant: "deposit" }) };
+    // Closed short before this email went out: the invoice's own closed-short email says it all, once.
+    if (inv.status === "UNDERPAID") return { skip: "the closed-short email covers it" };
 
-    const received = amount(settledTotal(inv.payments.map((x) => ({ status: x.status, amountInUsd: x.amountInUsd?.toString() ?? null }))));
+    const received = amountReceived(inv.payments);
     const expected = amount(inv.amountExpected);
     const variant: MoneyIn["variant"] =
-      inv.status === "OVERPAID" ? "over" : inv.status === "UNDERPAID" ? "short" : inv.status === "SETTLED" ? "received" : Number(received) < Number(expected) ? "partial" : "received";
+      inv.status === "OVERPAID" ? "over" : inv.status === "SETTLED" ? "received" : Number(received) < Number(expected) ? "partial" : "received";
     return { message: renderMoneyIn({ ...base, variant, received, expected }) };
   }
 
   private async buildClosedShort(invoiceId: string, appUrl: string): Promise<Built> {
     const inv = await this.deps.db.invoice.findUnique({ where: { id: invoiceId }, include: { payments: true } });
     if (!inv || inv.status !== "UNDERPAID") return { skip: "invoice is no longer underpaid" };
-    const received = amount(settledTotal(inv.payments.map((x) => ({ status: x.status, amountInUsd: x.amountInUsd?.toString() ?? null }))));
+    const received = amountReceived(inv.payments);
     return {
       message: renderMoneyIn({
         appUrl,
