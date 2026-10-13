@@ -6,6 +6,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { Decimal } from "../lib/money.js";
 import { balance } from "./balance.service.js";
 import { amount, amountReceived } from "./serialize.js";
+import { settledTotal } from "./settlement.js";
 import type { TransferChain } from "./transfer-chain.js";
 
 /**
@@ -368,7 +369,7 @@ export const TOOLS: Record<string, Tool> = {
 
   get_invoice: {
     description:
-      "One invoice by its reference (e.g. ORD-004): status, amount due, amount received across all its payments, how much it is short or over, and each payment with what was refunded.",
+      "One invoice by its reference (e.g. ORD-004): status, amount due, amount received across all its payments (valued in USD when it arrived), what landed in the wallet after route fees, whether it is paid in full or short or over, and each payment with what was refunded.",
     parameters: { type: "object", properties: { reference: { type: "string", description: "The invoice reference, e.g. ORD-004." } }, required: ["reference"] },
     async run({ db, merchant }, args) {
       const { reference } = z.object({ reference: z.string().trim().min(1).max(200) }).parse(args ?? {});
@@ -382,15 +383,27 @@ export const TOOLS: Record<string, Tool> = {
         where: { paymentId: { in: inv.payments.map((p) => p.id) }, status: { in: ["SUBMITTED", "CONFIRMED"] } },
         _sum: { totalAmount: true },
       });
-      const received = amountReceived(inv.payments);
+      const paidInFull = inv.status === "SETTLED" || inv.status === "OVERPAID";
+      // Paid: to the nearest cent (10 USDC valued at $9.9995 is $10.00). Unpaid: rounded down, as the invoice page
+      // shows it, so a real shortfall never rounds away to nothing.
+      const received = paidInFull
+        ? amount(settledTotal(inv.payments.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null }))).toDecimalPlaces(2, Decimal.ROUND_HALF_UP))
+        : amountReceived(inv.payments);
       const gap = new Decimal(received).sub(new Decimal(inv.amountExpected.toString()));
+      const landed = inv.payments.reduce((d, p) => (p.status === "SETTLED" && p.amountSettled ? d.add(p.amountSettled.toString()) : d), new Decimal(0));
+      // The status is the verdict. A SETTLED invoice is paid in full even when "received" is a cent under the
+      // amount: a dollar stablecoin is valued at its market price (about $0.9999) and shown rounded down, and
+      // anything within the 1% tolerance counts as paid. Only an open or underpaid invoice is "short".
       return {
         reference: inv.reference,
         status: inv.status,
         due: amount(inv.amountExpected),
         currency: inv.currency,
         received,
-        ...(gap.isNeg() ? { short_by: amount(gap.abs()) } : gap.isPos() ? { over_by: amount(gap) } : {}),
+        landed_in_wallet: amount(landed),
+        ...(paidInFull ? { paid_in_full: true } : {}),
+        ...(!paidInFull && gap.isNeg() ? { short_by: amount(gap.abs()) } : {}),
+        ...(inv.status === "OVERPAID" && gap.isPos() ? { over_by: amount(gap) } : {}),
         created_at: inv.createdAt.toISOString(),
         expires_at: inv.expiresAt.toISOString(),
         payments: inv.payments.map((p) => ({
@@ -499,6 +512,7 @@ function systemPrompt(now: Date): string {
     "For a broad question (analyse my account, how am I doing, anything to look at), call account_overview once and answer from it. Lead with what needs attention, then money in, money out and balance.",
     "Use count_payments and count_invoices for counts, sum_settled for how much has been paid, money_out for payouts, refunds and splits, and get_invoice for one invoice by its reference. Do not add or count rows yourself.",
     "The wallet balance is what the wallet holds now, after money sent out. Money received is the total that ever arrived. They differ, and that is expected.",
+    "An invoice's status is the verdict. SETTLED means paid in full: never call it short. A received figure a cent or so under the amount is price rounding (a stablecoin is valued at about $0.9999) and anything within 1% counts as paid. What landed in the wallet is a little lower again because Aurora's route fee comes out of it; that never makes an invoice short.",
     "Dashboard places: Home (balance), Checkout (invoices and payment links), Pay (Pay someone, Refund, Split), Activity (every payment in and out), Settings (payout wallet, emails, Developers for API keys and webhooks).",
     "Amounts are exact decimal strings: quote them as given, with their asset. amount_in is in the buyer's own asset, so never add it up or compare it across rows.",
     `Today is ${now.toISOString().slice(0, 10)} (UTC). Work out dates like "this week" or "last month" from that.`,

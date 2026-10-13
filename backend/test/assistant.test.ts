@@ -144,6 +144,20 @@ describe("tools: scoped to the signed-in merchant", () => {
     expect(o.money_in.kept_after_refunds).toBe(p.kept_after_refunds);
   });
 
+  it("calls a settled invoice paid in full, never short, even when USDC was valued a hair under $1", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    const res = await t.app.inject({ method: "POST", url: "/v1/invoices", headers: a.auth, payload: { amount_expected: "10.00", currency: "USDC", reference: "ORD-001", chains: ["base"] } });
+    const inv = await t.db.invoice.findUniqueOrThrow({ where: { id: res.json().id }, include: { addresses: true } });
+    // ORD-001 in production: 10.00 USDC sent, valued at $9.9995, 9.995301 landed after the route fee.
+    await t.db.payment.create({
+      data: { invoiceId: inv.id, invoiceAddressId: inv.addresses[0]!.id, auroraTxHash: "ord1", fromChain: "base", amountIn: "10", amountInUsd: "9.9995", amountSettled: "9.995301", status: "SETTLED", settledAt: new Date(), raw: {} },
+    });
+    await t.db.invoice.update({ where: { id: inv.id }, data: { status: "SETTLED" } });
+    const got = (await runTool(deps(a.merchant, vi.fn() as never), "get_invoice", { reference: "ORD-001" })) as Record<string, any>;
+    expect(got).toMatchObject({ status: "SETTLED", due: "10.00", received: "10.00", landed_in_wallet: "9.995301", paid_in_full: true });
+    expect(got).not.toHaveProperty("short_by");
+  });
+
   it("does not flag an overpaid invoice whose extra has already been refunded", async () => {
     const a = await merchant(t.db, { name: "A" });
     await settled(a.auth, "a-1", { chain: "base", settledAmount: "60000000" }); // $60 landed on a $49 invoice
