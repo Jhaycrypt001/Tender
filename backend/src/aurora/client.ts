@@ -91,13 +91,36 @@ export class AuroraClient {
   }
 
   /** Mint a deposit address. Idempotent on its inputs: same inputs, same address. */
-  mintAddress(input: MintInput): Promise<MintResponse> {
-    return this.request("POST /api/persistent-deposit-address", MintResponse, {
-      method: "POST",
-      path: `/api/persistent-deposit-address/${this.key}`,
-      body: input,
-      timeoutMs: Math.max(this.timeoutMs, MINT_TIMEOUT_MS),
-    });
+  async mintAddress(input: MintInput): Promise<MintResponse> {
+    const started = Date.now();
+    const fields = {
+      depositChain: input.depositChain,
+      destinationChain: input.destinationChain,
+      destinationAsset: input.destinationAsset,
+      sender: input.sender,
+      recipient: input.recipient,
+    };
+    try {
+      const res = await this.request("POST /api/persistent-deposit-address", MintResponse, {
+        method: "POST",
+        path: `/api/persistent-deposit-address/${this.key}`,
+        body: input,
+        timeoutMs: Math.max(this.timeoutMs, MINT_TIMEOUT_MS),
+      });
+      // Every address Aurora will ever watch for us is recorded here: who it was minted for, on what
+      // chain, and where its money is sent. A deposit that shows up later can be traced back to this line.
+      this.opts.logger.info(
+        { ...fields, address: res.depositAddress, alreadyExists: res.alreadyExists, memo: res.memo ? true : false, correlationId: res.correlationId, ms: Date.now() - started },
+        "deposit address minted",
+      );
+      return res;
+    } catch (err) {
+      this.opts.logger.warn(
+        { ...fields, kind: err instanceof AuroraError ? err.kind : "unexpected", err: err instanceof Error ? err.message : String(err), ms: Date.now() - started },
+        "deposit address mint failed",
+      );
+      throw err;
+    }
   }
 
   /**

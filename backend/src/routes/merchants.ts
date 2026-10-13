@@ -33,7 +33,21 @@ export function merchantRoutes(app: FastifyInstance, deps: MerchantRouteDeps) {
         throw err;
       }
     }
-    return toMerchant(await updateMerchant(deps.db, merchantOf(req), input));
+    const before = merchantOf(req);
+    const updated = await updateMerchant(deps.db, before, input);
+    // An audit trail for the changes that redirect money or messages. The webhook URL is reduced to its
+    // host: a path or query string can carry a token.
+    req.log.info(
+      {
+        merchantId: before.id,
+        settlementAddressChanged: input.settlement_address !== undefined && input.settlement_address.toLowerCase() !== before.settlementAddress?.toLowerCase(),
+        settlementAddress: input.settlement_address !== undefined ? updated.settlementAddress : undefined,
+        settlementAsset: input.settlement_asset !== undefined ? { from: before.settlementAsset, to: updated.settlementAsset } : undefined,
+        webhook: input.webhook_url !== undefined ? (updated.webhookUrl ? { set: true, host: new URL(updated.webhookUrl).host } : { set: false }) : undefined,
+      },
+      "merchant settings updated",
+    );
+    return toMerchant(updated);
   });
 
   /** Sends a signed `webhook.test` event right now and reports what happened. */

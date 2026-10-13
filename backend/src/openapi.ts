@@ -189,6 +189,21 @@ export const OPERATIONS: Record<string, Op> = {
     ok: { status: 200, schema: S.Merchant, description: "Existing merchant (201 when newly created)" },
   },
 
+  "POST /internal/payments/:id/resolve": {
+    tag: "Internal (dashboard server)",
+    auth: false,
+    platform: true,
+    params: ["id"],
+    summary: "Close a payment Aurora resolved outside its deposit lists",
+    description:
+      "Operator only, with `Authorization: Bearer <TENDER_PLATFORM_KEY>`. For a deposit Aurora's support team refunded or delivered by hand, " +
+      "which never appears in its success or failed list. Needs the proof transaction and a reason. Only a payment still waiting on Aurora " +
+      "can be resolved (409 otherwise). The invoice is re-judged and the merchant gets the webhook the poller would have sent.",
+    body: S.ResolvePaymentInput,
+    ok: { status: 200, schema: S.ResolvedPayment },
+    errors: [400, 401, 404, 409],
+  },
+
   /* Merchant — invoices -------------------------------------------------- */
   "POST /v1/invoices": {
     tag: "Invoices",

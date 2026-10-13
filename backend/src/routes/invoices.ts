@@ -18,7 +18,12 @@ const IdParams = z.object({ id: z.string().min(1).max(64) });
 export function invoiceRoutes(app: FastifyInstance, deps: InvoiceDeps & { catalogue: ChainCatalogueReader }) {
   app.post("/v1/invoices", async (req, reply) => {
     const input = S.CreateInvoiceInput.parse(req.body);
-    const { invoice, created } = await createInvoice(deps, merchantOf(req), input);
+    const merchant = merchantOf(req);
+    const { invoice, created } = await createInvoice(deps, merchant, input);
+    req.log.info(
+      { invoiceId: invoice.id, merchantId: merchant.id, reference: invoice.reference, amount: String(invoice.amountExpected), currency: invoice.currency, created, status: invoice.status, expiresAt: invoice.expiresAt },
+      created ? "invoice created" : "invoice create replayed (same reference)",
+    );
     return reply.code(created ? 201 : 200).send(toInvoice(invoice, await deps.catalogue.minimums()));
   });
 
@@ -37,6 +42,9 @@ export function invoiceRoutes(app: FastifyInstance, deps: InvoiceDeps & { catalo
 
   app.post("/v1/invoices/:id/cancel", async (req) => {
     const { id } = IdParams.parse(req.params);
-    return toInvoice(await cancelInvoice(deps.db, merchantOf(req).id, id), await deps.catalogue.minimums());
+    const merchantId = merchantOf(req).id;
+    const cancelled = await cancelInvoice(deps.db, merchantId, id);
+    req.log.info({ invoiceId: id, merchantId, status: cancelled.status }, "invoice cancelled");
+    return toInvoice(cancelled, await deps.catalogue.minimums());
   });
 }

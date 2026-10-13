@@ -22,6 +22,20 @@ export function depositRoutes(app: FastifyInstance, deps: StandingDeps & { catal
     const merchant = merchantOf(req);
     const existed = (await findStanding(deps.db, merchant)) !== null;
     const standing = await ensureStanding(deps, merchant);
+    if (!existed) {
+      req.log.info(
+        {
+          merchantId: merchant.id,
+          invoiceId: standing.id,
+          reference: standing.reference,
+          depositAddress: standing.addresses[0]?.address,
+          settlementAddress: merchant.settlementAddress,
+          settlementAsset: merchant.settlementAsset ?? "USDC",
+          chains: standing.chains.length,
+        },
+        "standing deposit address created",
+      );
+    }
     return reply.code(existed ? 200 : 201).send(toDepositAddress(standing, merchant, await deps.catalogue.minimums()));
   });
 }

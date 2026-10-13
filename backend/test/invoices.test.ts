@@ -138,7 +138,6 @@ describe("POST /v1/invoices", () => {
       [{ ...ORDER, currency: "EUR" }, "currency"],
       [{ ...ORDER, chains: ["stellar"] }, "chains"],
       [{ ...ORDER, redirect_url: "javascript:alert(1)" }, "redirect_url"],
-      [{ amount_expected: "1.00", currency: "USD" }, "reference"],
     ];
     for (const [body, field] of cases) {
       const res = await create(m.auth, body);
@@ -146,6 +145,24 @@ describe("POST /v1/invoices", () => {
       expect(Object.keys(res.json().fields)).toContain(field);
     }
     expect(await t.db.invoice.count()).toBe(0);
+  });
+
+  it("numbers an invoice itself when no reference is given, per merchant", async () => {
+    const m = await merchant(t.db);
+    const other = await merchant(t.db);
+    const body = { amount_expected: "1.00", currency: "USD" };
+    const refs = async (auth: { authorization: string }, n: number) => {
+      const out: string[] = [];
+      for (let i = 0; i < n; i++) out.push((await create(auth, body)).json().reference);
+      return out;
+    };
+    expect(await refs(m.auth, 3)).toEqual(["ORD-001", "ORD-002", "ORD-003"]);
+    expect(await refs(other.auth, 1)).toEqual(["ORD-001"]); // another merchant starts at 1
+    // A reference the merchant chose is still idempotent, and does not use up a number.
+    const first = await create(m.auth, { ...body, reference: "mine" });
+    const again = await create(m.auth, { ...body, reference: "mine" });
+    expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
+    expect((await create(m.auth, body)).json().reference).toBe("ORD-004");
   });
 
   it("writes nothing when Aurora fails, so the merchant can retry", async () => {

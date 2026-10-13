@@ -61,6 +61,9 @@ function identity(req: FastifyRequest, group: Group): string {
   return `ip:${req.ip}`;
 }
 
+/** When each caller's last rate-limit line was written. */
+const limitedAt = new Map<string, number>();
+
 export async function registerRateLimits(app: FastifyInstance, redis: Redis) {
   await app.register(rateLimit, {
     global: true,
@@ -72,6 +75,16 @@ export async function registerRateLimits(app: FastifyInstance, redis: Redis) {
     keyGenerator: (req) => {
       const group = groupFor(req);
       return `${group.name}:${identity(req, group)}`;
+    },
+    // A blocked request is the signal. One line per caller per 30s, so a flood is a few lines, not a flood of lines.
+    onExceeded: (req) => {
+      const group = groupFor(req).name;
+      const caller = `${group}:${req.ip}`;
+      const now = Date.now();
+      if (now - (limitedAt.get(caller) ?? 0) < 30_000) return;
+      limitedAt.set(caller, now);
+      if (limitedAt.size > 5_000) for (const [k, t] of limitedAt) if (now - t > 60_000) limitedAt.delete(k);
+      req.log.warn({ group, ip: req.ip, method: req.method, path: req.url.split("?")[0] }, "rate limit exceeded");
     },
     // Same flat error shape as every other error, which the frontend client reads.
     errorResponseBuilder: (_req, ctx) => ({

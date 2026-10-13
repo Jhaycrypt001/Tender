@@ -150,6 +150,25 @@ export const ResolveMerchantInput = z.object({
 });
 
 /**
+ * Operator → API: closes a payment Aurora resolved outside its deposit lists (a refund or a delivery by its
+ * support team). Platform key only; not part of the browser-facing contract.
+ */
+export const ResolvePaymentInput = z
+  .object({
+    outcome: z.enum(["refunded", "settled"]),
+    tx_hash: z.string().trim().min(8).max(200).describe("The transaction that proves it: the refund to the sender, or the delivery"),
+    amount_settled: z.string().regex(/^\d+(\.\d+)?$/, "a plain decimal such as 19.95").optional().describe("Required when settled"),
+    note: z.string().trim().min(5).max(500).describe("Why, in a sentence; kept on the payment for audit"),
+  })
+  .refine((b) => b.outcome !== "settled" || !!b.amount_settled, { path: ["amount_settled"], message: "required when the outcome is settled" });
+
+export const ResolvedPayment = z.object({
+  id: z.string(),
+  status: z.enum(["SETTLED", "REFUNDED"]),
+  invoice_id: z.string(),
+});
+
+/**
  * Merchant API keys (Settings → Developers). The plaintext `key` appears once,
  * in the create response, and can never be read back.
  */

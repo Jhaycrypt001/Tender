@@ -117,6 +117,7 @@ const transferLoop = startLoop(
       db,
       aurora,
       chain: transferChain,
+      logger: transferLog,
       config: { dailyLimit: config.TRANSFER_DAILY_LIMIT, maxLines: config.TRANSFER_MAX_LINES, minRelayerWei: parseEther(config.RELAYER_MIN_MON) },
     });
     if (r.confirmed || r.failed || r.expired) transferLog.info(r, "transfers reconciled");

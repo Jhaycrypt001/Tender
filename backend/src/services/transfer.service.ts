@@ -38,6 +38,10 @@ export type TransferConfig = {
   minRelayerWei: bigint;
 };
 
+type LogFn = (obj: object, msg?: string) => void;
+/** Just the three levels this service writes, so a Fastify request logger and the worker's pino logger both fit. */
+export type TransferLogger = { info: LogFn; warn: LogFn; error: LogFn };
+
 export type TransferDeps = {
   db: Db;
   chain: TransferChain | undefined;
@@ -45,6 +49,8 @@ export type TransferDeps = {
   aurora?: Partial<Pick<AuroraClient, "tokens" | "routeQuote" | "mintAddress" | "deposits">>;
   config: TransferConfig;
   now?: () => Date;
+  /** Every state a transfer passes through is logged here. Optional so tests and scripts can leave it out. */
+  logger?: TransferLogger;
 };
 
 /** How long a signed authorization stays valid. Long enough to review and sign a split, short enough to be harmless if lost. */
@@ -151,8 +157,26 @@ function senderOf(merchant: Merchant): { from: Hex; token: TokenInfo } {
   return { from: getAddress(merchant.settlementAddress), token };
 }
 
+let lastRelayerReport = 0;
+
+/**
+ * The relayer pays every send's gas. Below the minimum every transfer is refused with a polite 503, which nobody
+ * sees unless it is logged. Reported at most once a minute, with the address to top up.
+ */
+async function reportRelayer(deps: TransferDeps, chain: TransferChain, balance: bigint, now = Date.now()) {
+  const min = deps.config.minRelayerWei;
+  if (balance >= min * 2n) return;
+  if (now - lastRelayerReport < 60_000) return;
+  lastRelayerReport = now;
+  const fields = { relayer: chain.relayerAddress(), balanceMon: Number(balance) / 1e18, minimumMon: Number(min) / 1e18 };
+  if (balance < min) deps.logger?.error(fields, "relayer is below its minimum: sends are PAUSED until it is topped up");
+  else deps.logger?.warn(fields, "relayer balance is low: it will pause sends soon");
+}
+
 async function ensureRelayerFunded(deps: TransferDeps, chain: TransferChain) {
-  if ((await chain.relayerBalance()) < deps.config.minRelayerWei) {
+  const balance = await chain.relayerBalance();
+  await reportRelayer(deps, chain, balance);
+  if (balance < deps.config.minRelayerWei) {
     throw new ApiError(503, "transfers_unavailable", "Sending from Tender is paused while we top up our network fees. Try again shortly.");
   }
 }
@@ -203,7 +227,10 @@ export async function quoteTransfer(deps: TransferDeps, merchant: Merchant, inpu
   const { from, token } = senderOf(merchant);
   if (!isAmount(input.amount) || new Decimal(input.amount).lte(0)) return { ok: false, field: "amount", message: "Enter an amount above zero." };
   const route = await checkRoute(aurora, { chainId: input.dest_chain, to: input.to, amount: input.amount, from, token });
-  if (!route.ok) return { ok: false, field: route.field, message: route.message };
+  if (!route.ok) {
+    deps.logger?.info({ merchantId: merchant.id, stage: "quote", destChain: input.dest_chain, to: input.to, amount: input.amount, field: route.field, reason: route.message }, "payout route refused");
+    return { ok: false, field: route.field, message: route.message };
+  }
   return { ok: true, asset: route.destination.symbol, receive: route.expectedOut, seconds: route.seconds };
 }
 
@@ -281,7 +308,10 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
     for (const [i, l] of checked.entries()) {
       if (!l.destChain) continue;
       const route = await checkRoute(aur, { chainId: l.destChain, to: l.to, amount: l.amount, from, token });
-      if (!route.ok) routeFailure(route, i);
+      if (!route.ok) {
+        deps.logger?.warn({ merchantId: merchant.id, stage: "prepare", kind, line: i, destChain: l.destChain, to: l.to, amount: l.amount, field: route.field, reason: route.message }, "payout route refused");
+        routeFailure(route, i);
+      }
       routes.set(i, route);
     }
     for (const [i, route] of routes) {
@@ -319,15 +349,31 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
       include: { lines: true },
     });
 
-  if (kind !== "REFUND") return create(deps.db);
-
   // ── A refund is capped by what the payment actually delivered ───────────
   // Under a row lock, so two refunds started at once cannot both pass the check.
-  return deps.db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.payment_id!} FOR UPDATE`;
-    await assertRefundable(tx, merchant.id, input.payment_id!, total, token.symbol, now);
-    return create(tx);
-  });
+  const created =
+    kind !== "REFUND"
+      ? await create(deps.db)
+      : await deps.db.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.payment_id!} FOR UPDATE`;
+          await assertRefundable(tx, merchant.id, input.payment_id!, total, token.symbol, now);
+          return create(tx);
+        });
+  deps.logger?.info(
+    {
+      transferId: created.id,
+      merchantId: merchant.id,
+      kind: created.kind,
+      asset: created.asset,
+      total: created.totalAmount.toString(),
+      from: created.fromAddress,
+      paymentId: created.paymentId,
+      expiresAt: created.expiresAt,
+      lines: created.lines.map((l) => ({ index: l.index, to: l.toAddress, amount: l.amount.toString(), destChain: l.destChain, destAddress: l.destAddress, destAsset: l.destAsset, destExpectedOut: l.destExpectedOut?.toString() ?? null })),
+    },
+    "transfer prepared",
+  );
+  return created;
 }
 
 /**
@@ -371,6 +417,7 @@ export async function submitTransfer(deps: TransferDeps, merchant: Merchant, id:
   if (transfer.status !== "AWAITING_SIGNATURE") throw conflict(`This transfer is already ${transfer.status.toLowerCase().replace("_", " ")}.`);
   if (transfer.expiresAt <= now) {
     await deps.db.transfer.updateMany({ where: { id, status: "AWAITING_SIGNATURE" }, data: { status: "EXPIRED", failureReason: "The signing window ran out before it was sent." } });
+    deps.logger?.warn({ transferId: id, merchantId: merchant.id }, "transfer signing window ran out");
     throw new ApiError(410, "expired", "The signing window ran out. Nothing was sent; start again.");
   }
   const token = tokenFor(transfer.asset);
@@ -432,13 +479,16 @@ export async function submitTransfer(deps: TransferDeps, merchant: Merchant, id:
     if (err instanceof TransferRejected) {
       // Rejected in simulation: nothing was broadcast, the nonces are unused, no money moved.
       await deps.db.transfer.update({ where: { id }, data: { status: "FAILED", failureReason: `The network refused it, so nothing was sent. ${err.message}` } });
+      deps.logger?.warn({ transferId: id, merchantId: merchant.id, reason: err.message }, "transfer refused in simulation; nothing broadcast");
       throw new ApiError(409, "rejected", "The network refused this transfer, so nothing was sent. Check your balance and try again.");
     }
     // Unknown: it may or may not have been broadcast. Left SUBMITTED with no hash;
     // reconciliation settles it from the nonces on-chain.
+    deps.logger?.error({ err, transferId: id, merchantId: merchant.id }, "transfer send outcome unknown; reconciliation will settle it");
     throw new ApiError(502, "chain_unavailable", "We could not confirm this was sent. Check Activity in a minute before trying again.");
   }
 
+  deps.logger?.info({ transferId: id, merchantId: merchant.id, txHash: hash, lines: lines.length, kind: transfer.kind }, "transfer submitted to Monad");
   return deps.db.transfer.update({ where: { id }, data: { txHash: hash }, include: { lines: true } });
 }
 
@@ -484,9 +534,16 @@ export async function reconcileTransfers(deps: TransferDeps): Promise<{ confirme
     data: { status: "EXPIRED", failureReason: "The signing window ran out before it was sent." },
   });
   out.expired = expired.count;
+  if (expired.count) deps.logger?.warn({ count: expired.count }, "unsigned transfers expired");
 
   const chain = deps.chain;
   if (!chain) return out;
+
+  // Looked at on its own schedule, so a drained relayer is reported even when nobody is trying to send.
+  if (now.getTime() - lastRelayerCheck >= 60_000) {
+    lastRelayerCheck = now.getTime();
+    await chain.relayerBalance().then((b) => reportRelayer(deps, chain, b, now.getTime()), () => undefined);
+  }
 
   const inFlight = await deps.db.transfer.findMany({ where: { status: "SUBMITTED" }, include: { lines: true }, take: 50, orderBy: { submittedAt: "asc" } });
   for (const t of inFlight) {
@@ -504,7 +561,13 @@ export async function reconcileTransfers(deps: TransferDeps): Promise<{ confirme
         where: { id: t.id, status: "SUBMITTED" },
         data: { status, failureReason, ...(status === "CONFIRMED" ? { confirmedAt: now } : {}) },
       });
-      if (res.count === 1) out[status === "CONFIRMED" ? "confirmed" : "failed"] += 1;
+      if (res.count === 1) {
+        out[status === "CONFIRMED" ? "confirmed" : "failed"] += 1;
+        deps.logger?.[status === "FAILED" ? "warn" : "info"](
+          { transferId: t.id, merchantId: t.merchantId, kind: t.kind, txHash: t.txHash, receipt: receipt?.status ?? null, authorizationsUsed: used.filter(Boolean).length, lines: t.lines.length, status, failureReason },
+          status === "CONFIRMED" ? "transfer confirmed on Monad" : "transfer failed",
+        );
+      }
     };
 
     if (receipt?.status === "success" && allUsed) {
@@ -527,7 +590,15 @@ export async function reconcileTransfers(deps: TransferDeps): Promise<{ confirme
   return out;
 }
 
+let lastRelayerCheck = 0;
 const DELIVERY_CHECK_MS = 30_000;
+/** A delivery normally lands in about two minutes; this long without one is reported, then again every 15 minutes. */
+const LATE_DELIVERY_MIN = 10;
+const LATE_DELIVERY_REPORT_MS = 15 * 60_000;
+const lateDeliveryReportedAt = new Map<string, number>();
+const SLOW_DELIVERY_CHECK_MS = 30 * 60_000;
+const SLOW_DELIVERY_DAYS = 14;
+let lastSlowDeliveryCheck = 0;
 let lastDeliveryCheck = 0;
 
 /**
@@ -546,22 +617,54 @@ async function reconcileDeliveries(deps: TransferDeps, now: Date) {
   // A transfer that never confirmed moved nothing, so there is nothing to deliver.
   await deps.db.transferLine.updateMany({ where: { destStatus: "PENDING", transfer: { status: { in: ["FAILED", "EXPIRED"] } } }, data: { destStatus: "FAILED" } });
 
+  const dayAgo = new Date(now.getTime() - 24 * 3_600_000);
   const waiting = await deps.db.transferLine.findMany({
-    // A day is far beyond Aurora's delivery time; past it, stop asking and leave it for support.
-    where: { destStatus: "PENDING", transfer: { status: "CONFIRMED", confirmedAt: { gte: new Date(now.getTime() - 24 * 3_600_000) } } },
+    where: { destStatus: "PENDING", transfer: { status: "CONFIRMED", confirmedAt: { gte: dayAgo } } },
     take: 20,
     orderBy: { transfer: { confirmedAt: "asc" } },
   });
+  // A delivery still pending after a day is far beyond Aurora's normal time, but it can still land. It keeps being
+  // checked, slowly (every 30 minutes, for two weeks), so a late arrival is recorded instead of staying "Arriving".
+  if (now.getTime() - lastSlowDeliveryCheck >= SLOW_DELIVERY_CHECK_MS) {
+    lastSlowDeliveryCheck = now.getTime();
+    waiting.push(
+      ...(await deps.db.transferLine.findMany({
+        where: {
+          destStatus: "PENDING",
+          transfer: { status: "CONFIRMED", confirmedAt: { lt: dayAgo, gte: new Date(now.getTime() - SLOW_DELIVERY_DAYS * 86_400_000) } },
+        },
+        take: 50,
+        orderBy: { transfer: { confirmedAt: "desc" } },
+      })),
+    );
+  }
   for (const line of waiting) {
     try {
       // Each line has its own deposit address, so its own record at Aurora.
+      const lineLog = { transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, destChain: line.destChain, destAddress: line.destAddress, destAsset: line.destAsset, destExpectedOut: line.destExpectedOut?.toString() ?? null };
       if ((await aurora.deposits(line.toAddress, "success")).length > 0) {
-        await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
+        const done = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
+        lateDeliveryReportedAt.delete(line.id);
+        if (done.count === 1) deps.logger?.info(lineLog, "cross-chain delivery completed");
       } else if ((await aurora.deposits(line.toAddress, "failed")).length > 0) {
-        await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
+        const done = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
+        lateDeliveryReportedAt.delete(line.id);
+        if (done.count === 1) deps.logger?.warn(lineLog, "cross-chain delivery failed at Aurora");
+      } else {
+        // Still pending. A normal delivery takes about two minutes, so say so once it is clearly late.
+        const confirmedAt = (await deps.db.transfer.findUnique({ where: { id: line.transferId }, select: { confirmedAt: true } }))?.confirmedAt;
+        const waitingMin = confirmedAt ? Math.round((now.getTime() - confirmedAt.getTime()) / 60_000) : 0;
+        const last = lateDeliveryReportedAt.get(line.id) ?? 0;
+        // Every 15 minutes for the first day, then once a day.
+        const every = waitingMin >= 24 * 60 ? 24 * 3_600_000 : LATE_DELIVERY_REPORT_MS;
+        if (waitingMin >= LATE_DELIVERY_MIN && now.getTime() - last >= every) {
+          lateDeliveryReportedAt.set(line.id, now.getTime());
+          deps.logger?.warn({ ...lineLog, waitingMinutes: waitingMin }, "cross-chain delivery is late");
+        }
       }
-    } catch {
+    } catch (err) {
       // Aurora trouble: look again next tick.
+      deps.logger?.warn({ err: err instanceof Error ? err.message : String(err), transferId: line.transferId, lineId: line.id }, "could not check a cross-chain delivery; will retry");
     }
   }
 }

@@ -2,7 +2,7 @@ import cors from "@fastify/cors";
 import { parseEther } from "viem";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyInstance } from "fastify";
 import type { Redis } from "ioredis";
 import { ZodError } from "zod";
 import type { Config } from "./config.js";
@@ -53,21 +53,29 @@ export type AppDeps = {
   catalogue: ChainCatalogueReader;
   /** Monad RPC reader for smart-contract wallet proofs. Optional: without it, EOAs only. */
   chain?: ChainReader;
+  /** Test-only: where request and route log lines are written, so a test can assert on them. */
+  logStream?: NodeJS.WritableStream;
 };
 
 /**
  * Builds the HTTP app without starting it, so tests can drive it with
  * `app.inject()` and no open port.
  */
+/** A request slower than this is logged. SSE streams are long by design and skipped. */
+const SLOW_REQUEST_MS = 3_000;
+
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config } = deps;
   const app = Fastify({
-    logger: loggerOptions(config.LOG_LEVEL, config.NODE_ENV === "development"),
+    logger: deps.logStream ? { ...loggerOptions(config.LOG_LEVEL, false), stream: deps.logStream } : loggerOptions(config.LOG_LEVEL, config.NODE_ENV === "development"),
     // Behind a proxy in production; trust it for the client IP used in rate limits.
     trustProxy: config.NODE_ENV === "production",
     // SSE connections are long-lived; close them on shutdown instead of
     // waiting for every buyer to navigate away.
     forceCloseConnections: true,
+    // Fastify's default is two info lines for every request, which is most of the log volume and says nothing an
+    // operator acts on. The onResponse hook below logs only failures and slow requests instead.
+    logController: new LogController({ disableRequestLogging: true }),
   });
 
   // Only the checkout page calls this API from a browser, and only /public/*.
@@ -93,10 +101,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await registerRateLimits(app, deps.redis);
 
   app.addHook("onResponse", async (req, reply) => {
-    httpRequests.observe(
-      { method: req.method, route: req.routeOptions.url ?? "unmatched", status: String(reply.statusCode) },
-      reply.elapsedTime / 1000,
-    );
+    const route = req.routeOptions.url ?? "unmatched";
+    httpRequests.observe({ method: req.method, route, status: String(reply.statusCode) }, reply.elapsedTime / 1000);
+    // Everything else is in the metrics. A line only for what someone should look at.
+    if (reply.statusCode >= 500) req.log.error({ method: req.method, route, status: reply.statusCode, ms: Math.round(reply.elapsedTime) }, "request failed");
+    else if (reply.elapsedTime > SLOW_REQUEST_MS && !route.endsWith("/events")) req.log.warn({ method: req.method, route, status: reply.statusCode, ms: Math.round(reply.elapsedTime) }, "slow request");
   });
 
   app.get("/metrics", async (req, reply) => {
@@ -129,7 +138,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   healthRoutes(app, deps);
   publicRoutes(app, { ...deps, fx: deps.fx ?? new FxService(deps.redis, app.log), ttlMinutes: config.INVOICE_TTL_MINUTES });
-  internalRoutes(app, { db: deps.db, platformKey: config.TENDER_PLATFORM_KEY, welcomeEmail: !!config.RESEND_API_KEY });
+  internalRoutes(app, {
+    db: deps.db,
+    platformKey: config.TENDER_PLATFORM_KEY,
+    welcomeEmail: !!config.RESEND_API_KEY,
+    redis: deps.redis,
+    graceMinutes: config.EXPIRY_GRACE_MINUTES,
+    toleranceBps: config.PAYMENT_TOLERANCE_BPS,
+  });
 
   // Everything under /v1 requires a merchant API key (or the dashboard's platform key). The hook is scoped to
   // this plugin, so it can never leak onto /public or /health.
@@ -141,6 +157,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       db: deps.db,
       aurora: deps.aurora,
       chain: deps.transferChain,
+      logger: app.log.child({ component: "transfers" }),
       config: {
         dailyLimit: config.TRANSFER_DAILY_LIMIT,
         maxLines: config.TRANSFER_MAX_LINES,

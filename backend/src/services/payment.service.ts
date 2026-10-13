@@ -134,7 +134,11 @@ export function toPaymentDetail(p: PaymentWithDetail, refunded?: string): z.outp
   const history: { status: string; at: string; note?: string }[] = [
     { status: "DETECTED", at: p.firstSeenAt.toISOString(), note: `${amount(p.amountIn)} received on ${p.fromChain}` },
   ];
-  if (p.status === "SETTLED" && p.settledAt) {
+  const manual = (p.raw as { manual?: { outcome: string; tx_hash: string; note: string; at: string } } | null)?.manual;
+  if (manual) {
+    // Closed by hand after Aurora's support team acted outside its deposit lists.
+    history.push({ status: p.status, at: manual.at, note: `Resolved by Tender support: ${manual.note} (${manual.tx_hash})` });
+  } else if (p.status === "SETTLED" && p.settledAt) {
     history.push({
       status: "SETTLED",
       at: p.settledAt.toISOString(),

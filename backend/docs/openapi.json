@@ -1410,6 +1410,271 @@
         }
       }
     },
+    "/internal/payments/{id}/resolve": {
+      "post": {
+        "tags": [
+          "Internal (dashboard server)"
+        ],
+        "summary": "Close a payment Aurora resolved outside its deposit lists",
+        "description": "Operator only, with `Authorization: Bearer <TENDER_PLATFORM_KEY>`. For a deposit Aurora's support team refunded or delivered by hand, which never appears in its success or failed list. Needs the proof transaction and a reason. Only a payment still waiting on Aurora can be resolved (409 otherwise). The invoice is re-judged and the merchant gets the webhook the poller would have sent.",
+        "security": [
+          {
+            "platformKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "refunded",
+                      "settled"
+                    ]
+                  },
+                  "tx_hash": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 200,
+                    "description": "The transaction that proves it: the refund to the sender, or the delivery"
+                  },
+                  "amount_settled": {
+                    "description": "Required when settled",
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d+)?$"
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 500,
+                    "description": "Why, in a sentence; kept on the payment for audit"
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "tx_hash",
+                  "note"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "SETTLED",
+                        "REFUNDED"
+                      ]
+                    },
+                    "invoice_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "invoice_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `fields` names each bad field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found (or not yours)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/invoices": {
       "post": {
         "tags": [
@@ -1469,8 +1734,7 @@
                 },
                 "required": [
                   "amount_expected",
-                  "currency",
-                  "reference"
+                  "currency"
                 ]
               }
             }
@@ -1585,6 +1849,12 @@
                           "amount_in": {
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          },
+                          "asset_in": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "amount_settled": {
                             "anyOf": [
@@ -2003,6 +2273,12 @@
                                   "type": "string",
                                   "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                                 },
+                                "asset_in": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
                                 "amount_settled": {
                                   "anyOf": [
                                     {
@@ -2340,6 +2616,12 @@
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                           },
+                          "asset_in": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "amount_settled": {
                             "anyOf": [
                               {
@@ -2660,6 +2942,12 @@
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                           },
+                          "asset_in": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "amount_settled": {
                             "anyOf": [
                               {
@@ -2976,6 +3264,12 @@
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
                           },
+                          "asset_in": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "amount_settled": {
                             "anyOf": [
                               {
@@ -3213,6 +3507,12 @@
                     "amount_in": {
                       "type": "string",
                       "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "asset_in": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "amount_settled": {
                       "anyOf": [
@@ -3546,6 +3846,12 @@
                     "amount_in": {
                       "type": "string",
                       "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "asset_in": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "amount_settled": {
                       "anyOf": [
@@ -3929,6 +4235,12 @@
                     "amount_in": {
                       "type": "string",
                       "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                    },
+                    "asset_in": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "amount_settled": {
                       "anyOf": [
@@ -4412,6 +4724,456 @@
         }
       }
     },
+    "/v1/transfers/chains": {
+      "get": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Chains a payout or refund can be sent to",
+        "description": "Everything except Monad. `asset` is what the recipient receives there. `memo_risk` marks chains where exchange deposit addresses need a memo or tag, which cannot be attached.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "asset": {
+                            "type": "string",
+                            "description": "What the recipient receives, e.g. USDC, or the chain's own coin where it has no stablecoin"
+                          },
+                          "memo_risk": {
+                            "type": "boolean",
+                            "description": "True when exchange deposit addresses on this chain need a memo or tag, which cannot be attached"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "asset",
+                          "memo_risk"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready yet (or, on the assistant, the model is unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transfers/quote": {
+      "post": {
+        "tags": [
+          "Transfers"
+        ],
+        "summary": "Dry run of a payout or refund to another chain",
+        "description": "Says whether Aurora will take the route, and about how much the recipient receives. Moves and creates nothing. A refusal comes back as `ok: false` with the field at fault.",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "dest_chain": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "amount": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dest_chain",
+                  "to",
+                  "amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "asset": {
+                          "type": "string",
+                          "description": "What the recipient receives"
+                        },
+                        "receive": {
+                          "description": "About how much of it, in whole units. Null when Aurora did not say.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "seconds": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "asset",
+                        "receive",
+                        "seconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "field": {
+                          "type": "string",
+                          "enum": [
+                            "to",
+                            "amount",
+                            "chain"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "field",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — `fields` names each bad field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready yet (or, on the assistant, the model is unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/transfers": {
       "post": {
         "tags": [
@@ -4455,6 +5217,11 @@
                         },
                         "amount": {
                           "type": "string"
+                        },
+                        "dest_chain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 32
                         }
                       },
                       "required": [
@@ -4556,6 +5323,58 @@
                           "amount": {
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          },
+                          "dest": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "chain": {
+                                    "type": "string"
+                                  },
+                                  "chain_name": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "asset": {
+                                    "type": "string"
+                                  },
+                                  "expected_out": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PENDING",
+                                      "DELIVERED",
+                                      "FAILED"
+                                    ]
+                                  },
+                                  "delivered_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "chain",
+                                  "chain_name",
+                                  "address",
+                                  "asset",
+                                  "status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -4985,6 +5804,58 @@
                                 "amount": {
                                   "type": "string",
                                   "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                                },
+                                "dest": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "chain": {
+                                          "type": "string"
+                                        },
+                                        "chain_name": {
+                                          "type": "string"
+                                        },
+                                        "address": {
+                                          "type": "string"
+                                        },
+                                        "asset": {
+                                          "type": "string"
+                                        },
+                                        "expected_out": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": [
+                                            "PENDING",
+                                            "DELIVERED",
+                                            "FAILED"
+                                          ]
+                                        },
+                                        "delivered_at": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "chain",
+                                        "chain_name",
+                                        "address",
+                                        "asset",
+                                        "status"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -5322,6 +6193,58 @@
                           "amount": {
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          },
+                          "dest": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "chain": {
+                                    "type": "string"
+                                  },
+                                  "chain_name": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "asset": {
+                                    "type": "string"
+                                  },
+                                  "expected_out": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PENDING",
+                                      "DELIVERED",
+                                      "FAILED"
+                                    ]
+                                  },
+                                  "delivered_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "chain",
+                                  "chain_name",
+                                  "address",
+                                  "asset",
+                                  "status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -5824,6 +6747,58 @@
                           "amount": {
                             "type": "string",
                             "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                          },
+                          "dest": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "chain": {
+                                    "type": "string"
+                                  },
+                                  "chain_name": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "asset": {
+                                    "type": "string"
+                                  },
+                                  "expected_out": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PENDING",
+                                      "DELIVERED",
+                                      "FAILED"
+                                    ]
+                                  },
+                                  "delivered_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "chain",
+                                  "chain_name",
+                                  "address",
+                                  "asset",
+                                  "status"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -6366,8 +7341,16 @@
                     "minLength": 1
                   },
                   "webhook_url": {
-                    "type": "string",
-                    "format": "uri"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      {
+                        "type": "string",
+                        "const": ""
+                      }
+                    ]
                   }
                 }
               }

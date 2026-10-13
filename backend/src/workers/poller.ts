@@ -1,24 +1,15 @@
 import type { Redis } from "ioredis";
-import { tenderChainName } from "../aurora/chains.js";
+import { chainById, chainFromAssetId, tenderChainName } from "../aurora/chains.js";
 import { AuroraError, type AuroraClient } from "../aurora/client.js";
 import type { PriceBook } from "../aurora/prices.js";
 import type { Deposit } from "../aurora/types.js";
 import type { Db } from "../db/client.js";
-import { Prisma, type InvoiceKind, type InvoiceStatus } from "../generated/prisma/client.js";
-import { eventId } from "../lib/ids.js";
+import { Prisma, type InvoiceKind } from "../generated/prisma/client.js";
 import type { Logger } from "../lib/logger.js";
-import { depositsSeen, invoiceTransitions, pollerTicks } from "../lib/metrics.js";
+import { depositsSeen, pollerTicks } from "../lib/metrics.js";
 import { Decimal, fromBaseUnits } from "../lib/money.js";
-import {
-  DEPOSIT_EVENTS,
-  depositWebhookPayload,
-  publishInvoiceEvent,
-  webhookEventFor,
-  webhookPayload,
-  type InvoiceEventWire,
-} from "../services/events.js";
-import { amount } from "../services/serialize.js";
 import { judge, matchOutcomes } from "../services/settlement.js";
+import { notifyDepositOutcomes, publishTransitions, settleInvoice, type ResolvedOutcome, type Transition } from "../services/invoice-judge.js";
 
 /**
  * The heart of the system (BACKEND.md §6). Aurora has no webhooks, so this
@@ -63,19 +54,45 @@ export type PollerDeps = {
   now?: () => Date;
 };
 
-type Transition = { token: string; event: InvoiceEventWire };
-type ResolvedOutcome = { paymentId: string; status: "SETTLED" | "FAILED" };
 type Tx = Prisma.TransactionClient;
 
 const MAX_BACKOFF_MS = 5 * 60_000;
 /** A standing address is read in pages of this size, at most this many per poll. */
 const STANDING_PAGE = 100;
 const STANDING_MAX_PAGES = 20;
+/** A deposit Aurora has held this long without a payout or a failure is reported. A normal payout takes about two minutes. */
+const STUCK_AFTER_MS = 10 * 60_000;
+const STUCK_SWEEP_EVERY_MS = 60_000;
+const STUCK_REPORT_EVERY_MS = 15 * 60_000;
+/** After a day a stuck deposit is a support case, not news: it is repeated daily so it is not forgotten, but does not drown new ones. */
+const STUCK_LONG_AFTER_MS = 24 * 3_600_000;
+const STUCK_LONG_REPORT_EVERY_MS = 24 * 3_600_000;
+const STUCK_BATCH = 100;
+/**
+ * A deposit Aurora took but has not paid out keeps its address watched after the invoice's late window, so a
+ * payout that lands days later is still recorded. Slowly, because each poll is up to three Aurora calls: every
+ * 30 minutes for the first week, then every 6 hours, and not at all after 30 days (left to support by then).
+ */
+const STALL_WATCH_DAYS = 30;
+const STALL_FAST_DAYS = 7;
+const STALL_FAST_MS = 30 * 60_000;
+const STALL_SLOW_MS = 6 * 3_600_000;
+/** A quiet tick is logged at most this often, so the worker is visibly alive without a line every few seconds. */
+const HEARTBEAT_MS = 15 * 60_000;
+/** After a day of waiting, an address's payout lists are read every 30 minutes instead of every poll. */
+const STALE_PAYOUT_AFTER_MS = 24 * 3_600_000;
+const STALE_PAYOUT_CHECK_MS = 30 * 60_000;
 
 export class Poller {
   private timer: NodeJS.Timeout | undefined;
   private running: Promise<unknown> | undefined;
   private stopped = false;
+  /** When each stuck payment was last reported, so a long stall is one line per interval, not one per tick. */
+  private readonly stuckReportedAt = new Map<string, number>();
+  private lastStuckSweep = 0;
+  private lastHeartbeat = 0;
+  /** When each address's payout lists were last read, for the 30-minute cadence of a day-old wait. */
+  private readonly payoutCheckedAt = new Map<string, number>();
 
   constructor(private readonly deps: PollerDeps) {}
 
@@ -105,8 +122,16 @@ export class Poller {
     const endTimer = pollerTicks.startTimer();
     const { polled, transitions } = await this.pollDue();
     const expired = await this.expireDue();
+    await this.sweepStuck().catch((err) => this.deps.logger.error({ err }, "stuck-deposit sweep failed"));
     endTimer();
-    this.deps.logger.info({ polled, transitions, expired, ms: Date.now() - started }, "poller tick");
+    // Only a tick that changed something is worth a line; otherwise one heartbeat every 15 minutes.
+    const nowMs = this.now().getTime();
+    if (transitions || expired || nowMs - this.lastHeartbeat >= HEARTBEAT_MS) {
+      this.lastHeartbeat = nowMs;
+      this.deps.logger.info({ polled, transitions, expired, ms: Date.now() - started }, "poller tick");
+    } else {
+      this.deps.logger.debug({ polled, transitions, expired, ms: Date.now() - started }, "poller tick");
+    }
     return { polled, transitions, expired };
   }
 
@@ -115,6 +140,7 @@ export class Poller {
   private async pollDue() {
     const now = this.now();
     const lateCutoff = new Date(now.getTime() - this.deps.config.lateWindowHours * 3_600_000);
+    const stallCutoff = new Date(now.getTime() - STALL_WATCH_DAYS * 86_400_000);
     const due = await this.deps.db.invoiceAddress.findMany({
       where: {
         nextPollAt: { lte: now },
@@ -127,12 +153,15 @@ export class Poller {
             // A failed payout with an open recovery task stays watched: if
             // Aurora completes it later, the payment settles (see recordOutcomes).
             { status: "NEEDS_RECOVERY", payments: { some: { recovery: { state: { in: ["OPEN", "RETRYING"] } } } } },
+            // A deposit Aurora still holds (no payout, no failure yet) keeps its invoice watched past the late
+            // window, so a payout that arrives days later is recorded and not lost. See STALL_WATCH_DAYS.
+            { payments: { some: { status: "DETECTED", outcomeTxHash: null, firstSeenAt: { gt: stallCutoff } } } },
           ],
         },
       },
       orderBy: { nextPollAt: "asc" },
       take: this.deps.config.batchSize,
-      select: { id: true, address: true, invoiceId: true, pollFailures: true, invoice: { select: { status: true, kind: true } } },
+      select: { id: true, address: true, invoiceId: true, pollFailures: true, invoice: { select: { status: true, kind: true, expiresAt: true } } },
     });
 
     let transitions = 0;
@@ -153,7 +182,7 @@ export class Poller {
     address: string;
     invoiceId: string;
     pollFailures: number;
-    invoice: { status: string; kind: InvoiceKind };
+    invoice: { status: string; kind: InvoiceKind; expiresAt: Date };
   }): Promise<number> {
     const { db, aurora, logger } = this.deps;
     let lists: { received: Deposit[]; success: Deposit[]; failed: Deposit[] };
@@ -163,7 +192,14 @@ export class Poller {
       // Payout lists only matter when a deposit here is waiting for its payout:
       // one already recorded, or one seen for the first time just now. An idle
       // address costs one Aurora call per poll instead of three.
-      const [success, failed] = (await this.awaitingPayout(addr.id, received))
+      // A deposit waiting more than a day is checked every 30 minutes, not every poll: a standing address is
+      // polled every minute for new money, and a payout that late is a support case, not a race.
+      const waiting = await this.awaitingPayout(addr.id, received);
+      const nowMs = this.now().getTime();
+      const check = waiting === "fresh" || (waiting === "stale" && nowMs - (this.payoutCheckedAt.get(addr.id) ?? 0) >= STALE_PAYOUT_CHECK_MS);
+      if (check) this.payoutCheckedAt.set(addr.id, nowMs);
+      else if (!waiting) this.payoutCheckedAt.delete(addr.id);
+      const [success, failed] = check
         ? await Promise.all([aurora.deposits(addr.address, "success"), aurora.deposits(addr.address, "failed")])
         : [[], []];
       lists = { received, success, failed };
@@ -179,18 +215,30 @@ export class Poller {
       return 0;
     }
 
+    logger.debug(
+      { addressId: addr.id, address: addr.address, invoiceId: addr.invoiceId, invoiceStatus: addr.invoice.status, kind: addr.invoice.kind, received: lists.received.length, success: lists.success.length, failed: lists.failed.length },
+      "address polled",
+    );
+
     const deposits = await this.valueDeposits(lists.received);
+    // Filled inside the transaction, reported after it commits: a rolled-back poll must not leave a log line claiming a deposit was recorded.
+    let recorded: typeof deposits = [];
+    let outcomes: ResolvedOutcome[] = [];
 
     const transitions = await db.$transaction(async (tx) => {
       await lockInvoice(tx, addr.invoiceId);
 
       if (deposits.length) {
+        const have = new Set(
+          (await tx.payment.findMany({ where: { auroraTxHash: { in: deposits.map((d) => d.raw.tx_hash) } }, select: { auroraTxHash: true } })).map((p) => p.auroraTxHash),
+        );
+        recorded = deposits.filter((d) => !have.has(d.raw.tx_hash));
         const created = await tx.payment.createMany({
           data: deposits.map((d) => ({
             invoiceId: addr.invoiceId,
             invoiceAddressId: addr.id,
             auroraTxHash: d.raw.tx_hash,
-            fromChain: tenderChainName(d.raw.fromChain),
+            fromChain: tenderChainName(d.raw.fromChain ?? chainFromAssetId(d.raw.asset_id)),
             assetIn: d.raw.asset_id,
             amountIn: d.amountIn,
             amountInUsd: d.amountInUsd,
@@ -209,10 +257,11 @@ export class Poller {
         ...(await this.recordOutcomes(tx, addr, lists.success, "SETTLED")),
         ...(await this.recordOutcomes(tx, addr, lists.failed, "FAILED")),
       ];
+      outcomes = resolved;
 
       await tx.invoiceAddress.update({
         where: { id: addr.id },
-        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.pollEveryMs(addr.invoice.status, addr.invoice.kind)) },
+        data: { pollFailures: 0, nextPollAt: new Date(this.now().getTime() + this.pollEveryMs(addr.invoice.status, addr.invoice.kind, addr.invoice.expiresAt)) },
       });
 
       // A standing deposit address is not a bill: nothing is judged, nothing
@@ -227,8 +276,89 @@ export class Poller {
       return this.settle(tx, addr.invoiceId, { mayClose: false });
     });
 
+    this.reportDeposits(addr, recorded, outcomes);
     await this.publish(transitions);
     return transitions.length;
+  }
+
+  /** One structured line per deposit recorded and per payout outcome, so any payment can be traced from the logs alone. */
+  private reportDeposits(
+    addr: { id: string; address: string; invoiceId: string; invoice: { status: string; kind: InvoiceKind; expiresAt: Date } },
+    recorded: Array<{ raw: Deposit; amountIn: string; amountInUsd: string | null }>,
+    outcomes: ResolvedOutcome[],
+  ) {
+    const { logger } = this.deps;
+    for (const d of recorded) {
+      const chain = tenderChainName(d.raw.fromChain ?? chainFromAssetId(d.raw.asset_id));
+      const known = chainById(chain) !== undefined;
+      const fields = {
+        addressId: addr.id,
+        address: addr.address,
+        invoiceId: addr.invoiceId,
+        invoiceStatus: addr.invoice.status,
+        kind: addr.invoice.kind,
+        tx: d.raw.tx_hash,
+        fromChain: chain,
+        auroraChain: d.raw.fromChain ?? null,
+        asset: d.raw.asset_id,
+        amountIn: d.amountIn,
+        amountInUsd: d.amountInUsd,
+        sender: d.raw.from ?? null,
+        recipient: d.raw.recipient,
+        intentsAccount: d.raw.intents_account,
+        depositedAt: d.raw.created_at,
+      };
+      logger.info(fields, "deposit recorded");
+      // Money is real but nothing in the product expects it. Loud, once per deposit. "Unknown" (Aurora named no
+      // chain and the asset id carries none) is a different problem from a chain Tender does not offer.
+      if (chain === "unknown") logger.warn({ ...fields }, "deposit origin chain unknown");
+      else if (!known) logger.warn({ ...fields }, "deposit from a chain Tender does not list");
+      if (d.amountInUsd === null) logger.warn({ tx: d.raw.tx_hash, asset: d.raw.asset_id, address: addr.address }, "deposit recorded without a USD value");
+    }
+    for (const o of outcomes) {
+      logger[o.status === "FAILED" ? "warn" : "info"]({ addressId: addr.id, address: addr.address, invoiceId: addr.invoiceId, paymentId: o.paymentId, outcome: o.status }, "deposit payout outcome recorded");
+    }
+  }
+
+  /**
+   * Reports a payment that has been DETECTED for too long: Aurora took the deposit but has not
+   * paid it out and has not said it failed. Nothing else watches for this, so it is named here.
+   */
+  private async sweepStuck(): Promise<void> {
+    const now = this.now().getTime();
+    if (now - this.lastStuckSweep < STUCK_SWEEP_EVERY_MS) return;
+    this.lastStuckSweep = now;
+    const cutoff = new Date(now - STUCK_AFTER_MS);
+    const stuck = await this.deps.db.payment.findMany({
+      where: { status: "DETECTED", outcomeTxHash: null, firstSeenAt: { lt: cutoff } },
+      // Newest first: a fresh stall must never be crowded out by old ones that are already being handled.
+      orderBy: { firstSeenAt: "desc" },
+      take: STUCK_BATCH,
+      select: { id: true, invoiceId: true, invoiceAddressId: true, auroraTxHash: true, fromChain: true, assetIn: true, amountIn: true, amountInUsd: true, firstSeenAt: true },
+    });
+    for (const p of stuck) {
+      const last = this.stuckReportedAt.get(p.id) ?? 0;
+      const waitingMs = now - p.firstSeenAt.getTime();
+      if (now - last < (waitingMs >= STUCK_LONG_AFTER_MS ? STUCK_LONG_REPORT_EVERY_MS : STUCK_REPORT_EVERY_MS)) continue;
+      this.stuckReportedAt.set(p.id, now);
+      this.deps.logger.warn(
+        {
+          paymentId: p.id,
+          invoiceId: p.invoiceId,
+          addressId: p.invoiceAddressId,
+          tx: p.auroraTxHash,
+          fromChain: p.fromChain,
+          asset: p.assetIn,
+          amountIn: p.amountIn?.toString(),
+          amountInUsd: p.amountInUsd?.toString() ?? null,
+          waitingMinutes: Math.round(waitingMs / 60_000),
+        },
+        "deposit received by Aurora but not paid out yet",
+      );
+    }
+    // Forget payments that resolved so the map does not grow for the life of the process.
+    const live = new Set(stuck.map((p) => p.id));
+    for (const id of this.stuckReportedAt.keys()) if (!live.has(id)) this.stuckReportedAt.delete(id);
   }
 
   /**
@@ -260,9 +390,15 @@ export class Poller {
    * Whether anything on this address still needs its payout recorded: a deposit
    * not yet paid out, a failed payout whose recovery is still open (Aurora may
    * complete it later), or a deposit in `received` that we have not recorded yet.
+   * "fresh" when the newest such deposit is under a day old (checked every poll), "stale" after that.
    */
-  private async awaitingPayout(addressId: string, received: Deposit[]): Promise<boolean> {
-    const waiting = await this.deps.db.payment.count({
+  private async awaitingPayout(addressId: string, received: Deposit[]): Promise<"fresh" | "stale" | false> {
+    // A deposit seen for the first time just now: its payout is checked straight away.
+    if (received.length) {
+      const known = await this.deps.db.payment.count({ where: { auroraTxHash: { in: received.map((d) => d.tx_hash) } } });
+      if (known < new Set(received.map((d) => d.tx_hash)).size) return "fresh";
+    }
+    const waiting = await this.deps.db.payment.findFirst({
       where: {
         invoiceAddressId: addressId,
         OR: [
@@ -270,44 +406,29 @@ export class Poller {
           { status: "FAILED", recovery: { state: { in: ["OPEN", "RETRYING"] } } },
         ],
       },
+      orderBy: { firstSeenAt: "desc" },
+      select: { firstSeenAt: true },
     });
-    if (waiting > 0) return true;
-    if (!received.length) return false;
-    const known = await this.deps.db.payment.count({ where: { auroraTxHash: { in: received.map((d) => d.tx_hash) } } });
-    return known < new Set(received.map((d) => d.tx_hash)).size;
+    if (!waiting) return false;
+    return this.now().getTime() - waiting.firstSeenAt.getTime() < STALE_PAYOUT_AFTER_MS ? "fresh" : "stale";
   }
 
-  /** Open invoices are watched closely; closed ones only for late money. */
-  private pollEveryMs(invoiceStatus: string, kind: InvoiceKind): number {
-    const { intervalMs, closedIntervalMs } = this.deps.config;
+  /** Open invoices are watched closely; closed ones only for late money; past that, only a stalled deposit, slowly. */
+  private pollEveryMs(invoiceStatus: string, kind: InvoiceKind, expiresAt: Date): number {
+    const { intervalMs, closedIntervalMs, lateWindowHours } = this.deps.config;
     // A standing address is open forever, so it is polled at the slow rate: it is
     // never waiting on one buyer's payment, and each poll is three Aurora calls.
     if (kind === "STANDING") return closedIntervalMs;
-    return invoiceStatus === "PENDING" || invoiceStatus === "DETECTED" ? intervalMs : closedIntervalMs;
+    if (invoiceStatus === "PENDING" || invoiceStatus === "DETECTED") return intervalMs;
+    // Past the late window the address is only being watched for a stalled deposit (see pollDue).
+    const sinceClose = this.now().getTime() - expiresAt.getTime();
+    if (sinceClose <= lateWindowHours * 3_600_000) return closedIntervalMs;
+    return sinceClose <= STALL_FAST_DAYS * 86_400_000 ? STALL_FAST_MS : STALL_SLOW_MS;
   }
 
   /** Queues a webhook for each deposit on a standing address that has just settled or failed. */
-  private async notifyDeposits(tx: Tx, invoiceId: string, resolved: ResolvedOutcome[]) {
-    if (!resolved.length) return;
-    const invoice = await tx.invoice.findUniqueOrThrow({
-      where: { id: invoiceId },
-      select: { id: true, merchantId: true, merchant: { select: { webhookUrl: true } } },
-    });
-    if (!invoice.merchant.webhookUrl) return;
-    const now = this.now();
-    for (const { paymentId, status } of resolved) {
-      const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-      const event = status === "SETTLED" ? DEPOSIT_EVENTS.SETTLED : DEPOSIT_EVENTS.FAILED;
-      await tx.webhookDelivery.create({
-        data: {
-          merchantId: invoice.merchantId,
-          invoiceId: invoice.id,
-          event,
-          payload: depositWebhookPayload(event, invoice, payment, now) as Prisma.InputJsonValue,
-          nextRetryAt: now,
-        },
-      });
-    }
+  private notifyDeposits(tx: Tx, invoiceId: string, resolved: ResolvedOutcome[]) {
+    return notifyDepositOutcomes(tx, invoiceId, resolved, { now: this.now() });
   }
 
   /** Converts base units and prices each deposit. Entries we cannot read are skipped loudly, never guessed. */
@@ -417,70 +538,10 @@ export class Poller {
   }
 
 
-  /**
-   * Re-judges an invoice from all of its payments and, if its status changes,
-   * writes the change, its history event and its webhook — in the caller's
-   * transaction. Must be called with the invoice row locked.
-   *
-   * `mayClose` gates EXPIRED and UNDERPAID: only a caller that has confirmed
-   * every address was polled after the window closed may pass true.
-   */
-  private async settle(tx: Tx, invoiceId: string, opts: { mayClose: boolean }): Promise<Transition[]> {
-    const invoice = await tx.invoice.findUniqueOrThrow({
-      where: { id: invoiceId },
-      include: { payments: { orderBy: { firstSeenAt: "asc" } }, merchant: { select: { webhookUrl: true } } },
-    });
-    const now = this.now();
-    const closesAt = new Date(invoice.expiresAt.getTime() + this.deps.config.graceMinutes * 60_000);
-
-    // Money that reached Aurora after the window closed is recorded, but does
-    // not move an open invoice. After SETTLED, any extra payment counts: it is
-    // the published overpayment case.
-    const counted =
-      invoice.status === "SETTLED" ? invoice.payments : invoice.payments.filter((p) => p.firstSeenAt <= closesAt);
-
-    const next = judge({
-      status: invoice.status,
-      amountExpected: invoice.amountExpected.toString(),
-      payments: counted.map((p) => ({ status: p.status, amountInUsd: p.amountInUsd?.toString() ?? null })),
-      closed: opts.mayClose && now > closesAt,
-      toleranceBps: this.deps.config.toleranceBps,
-    });
-    if (next === invoice.status) return [];
-
-    const relevant = pickPayment(counted, next);
-    await tx.invoice.update({ where: { id: invoice.id }, data: { status: next } });
-    await tx.invoiceEvent.create({
-      data: { id: eventId(), invoiceId: invoice.id, status: next, paymentId: relevant?.id ?? null, at: now },
-    });
-
-    const event = webhookEventFor(next);
-    if (event && invoice.merchant.webhookUrl) {
-      await tx.webhookDelivery.create({
-        data: {
-          merchantId: invoice.merchantId,
-          invoiceId: invoice.id,
-          event,
-          payload: webhookPayload(event, invoice, next, relevant ?? null, now) as Prisma.InputJsonValue,
-          nextRetryAt: now,
-        },
-      });
-    }
-
-    invoiceTransitions.inc({ to: next });
-    this.deps.logger.info({ invoiceId: invoice.id, from: invoice.status, to: next }, "invoice transition");
-    return [
-      {
-        token: invoice.token,
-        event: {
-          status: next,
-          at: now.toISOString(),
-          ...(relevant
-            ? { payment: { tx_hash: relevant.auroraTxHash, from_chain: relevant.fromChain, amount_in: amount(relevant.amountIn) } }
-            : {}),
-        },
-      },
-    ];
+  /** See settleInvoice. Must be called with the invoice row locked. */
+  private settle(tx: Tx, invoiceId: string, opts: { mayClose: boolean }): Promise<Transition[]> {
+    const { graceMinutes, toleranceBps } = this.deps.config;
+    return settleInvoice(tx, invoiceId, opts, { now: this.now(), graceMinutes, toleranceBps, logger: this.deps.logger });
   }
 
   /**
@@ -579,25 +640,12 @@ export class Poller {
   }
 
   private async publish(transitions: Transition[]) {
-    for (const t of transitions) {
-      await publishInvoiceEvent(this.deps.redis as Redis, t.token, t.event).catch((err: unknown) =>
-        // SSE is best-effort: the database is the truth, and a reconnecting
-        // client re-reads the status.
-        this.deps.logger.warn({ err }, "failed to publish invoice event"),
-      );
-    }
+    await publishTransitions(this.deps.redis as Redis, this.deps.logger, transitions);
   }
 }
 
 async function lockInvoice(tx: Tx, invoiceId: string) {
   await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
-}
-
-/** The payment a transition is about, for the webhook and the SSE event. */
-function pickPayment<P extends { status: string; firstSeenAt: Date }>(payments: P[], status: InvoiceStatus): P | undefined {
-  if (status === "NEEDS_RECOVERY") return payments.find((p) => p.status === "FAILED");
-  if (status === "SETTLED" || status === "OVERPAID") return payments.find((p) => p.status === "SETTLED") ?? payments[0];
-  return payments.at(-1);
 }
 
 async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {

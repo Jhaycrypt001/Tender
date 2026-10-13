@@ -73,6 +73,18 @@ export function tenderChainName(auroraCode: string | null | undefined): string {
   return byAurora.get(auroraCode)?.id ?? auroraCode;
 }
 
+/**
+ * Aurora leaves `fromChain` empty on some deposits (seen on Robinhood Chain), but the asset id still names
+ * the chain: "hood.omft.near", "base-0x8335....omft.near", "nep141:eth.omft.near". Returns that Aurora code, or
+ * null when the id carries none (NEAR-native tokens and the hot-bridge "v2_1.omni.hot.tg:56_..." form does not).
+ */
+export function chainFromAssetId(assetId: string | null | undefined): string | null {
+  if (!assetId) return null;
+  // Only the bridged form names a chain. NEAR-native tokens ("wrap.near", "token.rhealab.near") must not be misread as one.
+  const m = /^(?:nep141:)?([a-z][a-z0-9]*)(?:-[0-9a-zA-Z]+)?\.omft\.near$/.exec(assetId);
+  return m?.[1] ?? null;
+}
+
 /** The distinct families needed to cover a set of Tender chain ids. */
 export function familiesFor(chainIds: readonly string[]): string[] {
   const families = chainIds.map((id) => byId.get(id)?.family).filter((f): f is string => !!f);

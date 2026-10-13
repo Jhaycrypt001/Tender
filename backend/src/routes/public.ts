@@ -139,6 +139,10 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
     const { token } = TokenParams.parse(req.params);
     const body = z.object({ amount: z.string().optional() }).optional().parse(req.body ?? undefined);
     const invoice = await openLink({ db: deps.db, aurora: deps.aurora, ttlMinutes: deps.ttlMinutes }, token, body?.amount);
+    req.log.info(
+      { invoiceId: invoice.id, merchantId: invoice.merchantId, reference: invoice.reference, amount: String(invoice.amountExpected), currency: invoice.currency, via: "payment link" },
+      "invoice created",
+    );
     return reply.code(201).send({ token: invoice.token });
   });
 
@@ -156,6 +160,7 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
     if (!OPEN_STATUSES.has(effectiveStatus(invoice))) return { accepted: false };
 
     const results = await Promise.allSettled(invoice.addresses.map((a) => deps.aurora.submitDeposit(tx_hash, a.address)));
+    req.log.info({ invoiceId: invoice.id, tx: tx_hash, accepted: results.filter((r) => r.status === "fulfilled").length, addresses: results.length }, "buyer submitted a transaction hash");
     // Poll this invoice on the next tick rather than waiting out the interval.
     await deps.db.invoiceAddress.updateMany({ where: { invoiceId: invoice.id }, data: { nextPollAt: new Date() } });
     return { accepted: results.some((r) => r.status === "fulfilled") };

@@ -34,13 +34,21 @@ export function paymentRoutes(app: FastifyInstance, deps: { db: Db }) {
 
   app.post("/v1/payments/:id/retry", async (req) => {
     const { id } = IdParams.parse(req.params);
-    return toPaymentDetail(await retryPayment(deps.db, merchantOf(req).id, id));
+    const merchantId = merchantOf(req).id;
+    req.log.info({ merchantId, paymentId: id, action: "retry" }, "payment recovery requested");
+    const payment = await retryPayment(deps.db, merchantId, id);
+    req.log.info({ merchantId, paymentId: id, action: "retry", status: payment.status }, "payment recovery retry accepted");
+    return toPaymentDetail(payment);
   });
 
   app.post("/v1/payments/:id/withdraw", async (req) => {
     const { id } = IdParams.parse(req.params);
     const body = WithdrawBody.parse(req.body ?? undefined);
-    return toPaymentDetail(await withdrawPayment(deps.db, merchantOf(req), id, body?.address));
+    const merchant = merchantOf(req);
+    req.log.info({ merchantId: merchant.id, paymentId: id, action: "withdraw", address: body?.address ?? null }, "payment recovery requested");
+    const payment = await withdrawPayment(deps.db, merchant, id, body?.address);
+    req.log.info({ merchantId: merchant.id, paymentId: id, action: "withdraw", status: payment.status, address: body?.address ?? null }, "payment withdrawal case prepared");
+    return toPaymentDetail(payment);
   });
 
   app.post("/v1/payments/:id/refund", async (req) => {

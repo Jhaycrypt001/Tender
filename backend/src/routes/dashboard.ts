@@ -27,7 +27,10 @@ export function dashboardRoutes(app: FastifyInstance, deps: InvoiceDeps & { wall
 
   app.post("/v1/links", async (req, reply) => {
     const input = S.CreateLinkInput.parse(req.body);
-    return reply.code(201).send(toLink(await createLink(deps.db, merchantOf(req).id, input)));
+    const merchantId = merchantOf(req).id;
+    const link = await createLink(deps.db, merchantId, input);
+    req.log.info({ linkId: link.id, merchantId, amount: link.amount ? String(link.amount) : null, currency: link.currency }, "payment link created");
+    return reply.code(201).send(toLink(link));
   });
 
   // No off-ramp partner is integrated, so no corridor is live — and we do not
