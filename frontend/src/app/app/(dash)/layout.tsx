@@ -9,6 +9,9 @@ import { getMerchant } from "@/lib/api/merchant";
 import { getFx } from "@/lib/api/public";
 import { CURRENCY_COOKIE, CurrencyProvider } from "@/components/dash/currency";
 
+// The Ask assistant runs as a server action from every dashboard page and may take up to 26 s.
+export const maxDuration = 30;
+
 /**
  * The signed-in dashboard.
  *

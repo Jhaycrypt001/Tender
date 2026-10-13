@@ -121,7 +121,11 @@ for what it needs:
 | `list_payments` `{status?, from_chain?, since?, limit≤100}` | the same query as `GET /v1/payments` | rows: status, from_chain, amount_in, amount_settled, settled_at |
 | `get_balance` `{}` | `balance(db, merchant)` | the same as `GET /v1/merchant/balance` |
 | `list_invoices` `{status?, since?, limit≤100}` | the invoice service | rows: status, amount_expected, currency, created_at |
-| `sum_settled` `{since?, from_chain?}` | **your code**, not the model | an exact total as a decimal string |
+| `sum_settled` `{since?, from_chain?}` | **your code**, not the model | an exact total as a decimal string, with what was refunded and what was kept |
+| `account_overview` `{}` | one call, parallel queries | the whole account: settings, wallet balance, money in, money out, invoices by status, invoices needing attention, payment links, deposit address, open recovery cases, failing webhooks, recent activity. Broad questions ("analyse my account") use this, so they take two model calls, not five |
+| `get_invoice` `{reference}` | the invoice and its payments | status, due, received across all payments, short or over by, each payment with what was refunded |
+| `money_out` `{kind?, since?, until?, limit}` | transfers | payouts, refunds and splits: confirmed totals by kind, and the latest sends with delivery state |
+| `count_invoices` `{since?, until?}` | a `groupBy` | invoice counts by status |
 
 Rules for every tool:
 

@@ -68,6 +68,8 @@ export type RequestOptions = {
   body?: unknown;
   /** Idempotency-Key header. Set it on every create that a user could retry. */
   idempotencyKey?: string;
+  /** How long to wait for this request, when the default 15 s is too short (the assistant). */
+  timeoutMs?: number;
   /** Query parameters. Undefined and null values are dropped, not serialised. */
   query?: Record<string, string | number | undefined | null>;
   /**
@@ -165,7 +167,7 @@ async function sendOnce<T>(
   // AbortSignal.timeout would be terser, but an explicit controller lets us
   // clear the timer on success so it does not keep the process alive.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_MS);
 
   try {
     const response = await fetch(buildUrl(base, path, options.query), {

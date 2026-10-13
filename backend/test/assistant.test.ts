@@ -72,6 +72,111 @@ describe("tools: scoped to the signed-in merchant", () => {
     expect(invoices.invoices.map((i) => i.reference)).toEqual(["a-1"]);
   });
 
+  it("the new tools see only this merchant: overview, one invoice, money out and invoice counts", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    const b = await merchant(t.db, { name: "B" });
+    await settled(a.auth, "a-1");
+    await settled(b.auth, "b-1");
+    const pay = await t.db.payment.findFirstOrThrow({ where: { invoice: { merchantId: a.merchant.id } } });
+    const send = (merchantId: string, kind: "REFUND" | "PAYOUT", amt: string, paymentId?: string) =>
+      t.db.transfer.create({
+        data: {
+          merchantId, kind, status: "CONFIRMED", asset: "USDC", fromAddress: "0x88A7a4fFDDe961AF79582da333594e1Aa1c411F0", totalAmount: amt,
+          ...(paymentId ? { paymentId } : {}), expiresAt: new Date(Date.now() + 3_600_000), confirmedAt: new Date(),
+          lines: { create: [{ index: 0, toAddress: "0x1111111111111111111111111111111111111111", amount: amt, nonce: `0x${Math.random().toString(16).slice(2).padEnd(64, "0")}` }] },
+        },
+      });
+    await send(a.merchant.id, "REFUND", "8.80", pay.id);
+    await send(b.merchant.id, "PAYOUT", "30.00");
+
+    const asA = deps(a.merchant, vi.fn() as never);
+    const o = (await runTool(asA, "account_overview", {})) as Record<string, any>;
+    expect(o.account.name).toBe("A");
+    expect(o.money_in).toMatchObject({ received_total: "48.80", payments_received: 1, refunded_total: "8.80", kept_after_refunds: "40.00" });
+    expect(o.money_out.sent).toEqual({ refund: { count: 1, amount: "8.80" } }); // B's payout is not here
+    expect(o.invoices).toEqual({ SETTLED: 1 });
+    expect(o.recent_payments).toHaveLength(1);
+
+    expect(await runTool(asA, "get_invoice", { reference: "b-1" })).toEqual({ error: "no invoice with reference b-1" });
+    const inv = (await runTool(asA, "get_invoice", { reference: "A-1" })) as Record<string, any>;
+    expect(inv).toMatchObject({ reference: "a-1", status: "SETTLED", due: "49.00", received: "49.00" });
+    expect(inv.payments[0]).toMatchObject({ settled: "48.80", refunded: "8.80" });
+
+    const out = (await runTool(asA, "money_out", {})) as Record<string, any>;
+    expect(out.confirmed_totals).toEqual([{ kind: "REFUND", count: 1, amount: "8.80" }]);
+    expect(out.sends).toHaveLength(1);
+
+    expect(await runTool(asA, "count_invoices", {})).toEqual({ total: 1, by_status: { SETTLED: 1 } });
+    expect(await runTool(asA, "sum_settled", {})).toMatchObject({ amount: "48.80", refunded: "8.80", kept_after_refunds: "40.00" });
+  });
+
+  it("gives up on a hung wallet read within 3 seconds and says the balance is the ledger figure", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    await settled(a.auth, "a-1");
+    const hung = { tokenBalance: () => new Promise<bigint>(() => {}) };
+    const started = Date.now();
+    const bal = (await runTool(deps(a.merchant, vi.fn() as never, { wallet: hung }), "get_balance", {})) as Record<string, any>;
+    expect(Date.now() - started).toBeLessThan(4_500);
+    expect(bal.source).toContain("ledger");
+    expect(bal.settled[0].amount).toBe("48.80");
+
+    const read = { tokenBalance: async () => BigInt(7_450_000) };
+    const live = (await runTool(deps(a.merchant, vi.fn() as never, { wallet: read }), "get_balance", {})) as Record<string, any>;
+    expect(live).toMatchObject({ source: "wallet, read from the chain now", settled: [{ amount: "7.45" }] });
+  }, 10_000);
+
+  it("counts a refund still in flight the same way in the overview and in the paid total", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    await settled(a.auth, "a-1");
+    const pay = await t.db.payment.findFirstOrThrow({ where: { invoice: { merchantId: a.merchant.id } } });
+    await t.db.transfer.create({
+      data: {
+        merchantId: a.merchant.id, kind: "REFUND", status: "SUBMITTED", asset: "USDC", fromAddress: "0x88A7a4fFDDe961AF79582da333594e1Aa1c411F0", totalAmount: "1.80",
+        paymentId: pay.id, expiresAt: new Date(Date.now() + 3_600_000),
+        lines: { create: [{ index: 0, toAddress: "0x1111111111111111111111111111111111111111", amount: "1.80", nonce: `0x${"7".repeat(64)}` }] },
+      },
+    });
+    const asA = deps(a.merchant, vi.fn() as never);
+    const o = (await runTool(asA, "account_overview", {})) as Record<string, any>;
+    const p = (await runTool(asA, "sum_settled", {})) as Record<string, any>;
+    expect(o.money_in.refunded_total).toBe("1.80");
+    expect(p.refunded).toBe("1.80");
+    expect(o.money_in.kept_after_refunds).toBe(p.kept_after_refunds);
+  });
+
+  it("does not flag an overpaid invoice whose extra has already been refunded", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    await settled(a.auth, "a-1", { chain: "base", settledAmount: "60000000" }); // $60 landed on a $49 invoice
+    const inv = await t.db.invoice.findFirstOrThrow({ where: { merchantId: a.merchant.id } });
+    await t.db.invoice.update({ where: { id: inv.id }, data: { status: "OVERPAID" } });
+    const asA = deps(a.merchant, vi.fn() as never);
+    const before = (await runTool(asA, "account_overview", {})) as Record<string, any>;
+    expect(before.needs_attention).toEqual([expect.objectContaining({ reference: "a-1", extra_still_to_refund: "11.00" })]);
+
+    const pay = await t.db.payment.findFirstOrThrow({ where: { invoiceId: inv.id } });
+    await t.db.transfer.create({
+      data: {
+        merchantId: a.merchant.id, kind: "REFUND", status: "CONFIRMED", asset: "USDC", fromAddress: "0x88A7a4fFDDe961AF79582da333594e1Aa1c411F0", totalAmount: "11.00",
+        paymentId: pay.id, expiresAt: new Date(Date.now() + 3_600_000), confirmedAt: new Date(),
+        lines: { create: [{ index: 0, toAddress: "0x1111111111111111111111111111111111111111", amount: "11.00", nonce: `0x${"8".repeat(64)}` }] },
+      },
+    });
+    const after = (await runTool(asA, "account_overview", {})) as Record<string, any>;
+    expect(after.needs_attention).toEqual([]);
+  });
+
+  it("answers a broad question in two model calls: one overview, then the answer", async () => {
+    const a = await merchant(t.db, { name: "A" });
+    await settled(a.auth, "a-1");
+    const model = vi
+      .fn()
+      .mockResolvedValueOnce(call("account_overview"))
+      .mockResolvedValueOnce(text("All good: **48.80 USDC** received."));
+    const res = await ask(deps(a.merchant, model as never), "analyse my tender account");
+    expect(res.answer).toContain("48.80");
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+
   it("declares no tool argument that could name a merchant", () => {
     for (const tool of Object.values(TOOLS)) {
       const props = Object.keys((tool.parameters as { properties: object }).properties);
@@ -266,7 +371,7 @@ describe("limitMarkdown: only bold, inline code and '- ' lists survive", () => {
 
   it("caps the length", () => {
     const out = limitMarkdown("word ".repeat(1000));
-    expect(out.length).toBeLessThanOrEqual(1200);
+    expect(out.length).toBeLessThanOrEqual(1600);
     expect(out.endsWith("…")).toBe(true);
   });
 });

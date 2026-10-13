@@ -165,7 +165,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       },
     });
     if (config.GEMINI_API_KEY) {
-      assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch });
+      assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch, wallet: deps.transferChain });
     }
     dashboardRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, ttlMinutes: config.INVOICE_TTL_MINUTES, wallet: deps.transferChain });
     invoiceRoutes(merchantScope, {

@@ -2,9 +2,17 @@ import type { FastifyInstance } from "fastify";
 import * as S from "../../contract/schemas.js";
 import type { Db } from "../db/client.js";
 import { ask } from "../services/assistant.service.js";
+import type { TransferChain } from "../services/transfer-chain.js";
 import { merchantOf } from "./auth.js";
 
-export type AssistantRouteDeps = { db: Db; apiKey: string; model: string; fallbackModel?: string; fetchImpl?: typeof fetch };
+export type AssistantRouteDeps = {
+  db: Db;
+  apiKey: string;
+  model: string;
+  fallbackModel?: string;
+  fetchImpl?: typeof fetch;
+  wallet?: Pick<TransferChain, "tokenBalance">;
+};
 
 /**
  * POST /v1/assistant/ask. Registered inside the requireMerchant scope, and only

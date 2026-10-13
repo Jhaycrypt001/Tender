@@ -40,6 +40,9 @@ export async function askTender(input: string): Promise<string> {
   const reply = await request<AssistantReply>("/v1/assistant/ask", {
     method: "POST",
     body: { question },
+    // The API gives the model 22 s (MODEL_BUDGET_MS); wait a little longer than that, so its own
+    // "took too long" answer arrives rather than a bare timeout.
+    timeoutMs: 26_000,
   });
 
   if (reply.ok) {
