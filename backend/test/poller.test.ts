@@ -190,6 +190,61 @@ describe("poller", () => {
     expect(await t.db.payment.count({ where: { invoiceId: inv.id } })).toBe(2);
   });
 
+  it("adds up parts that arrive on different chains: Base, then Solana", async () => {
+    const inv = await invoice("5.00");
+    const { poller, clock } = makePoller(t);
+    t.aurora.push(inv.evm, "received", usdc(inv.evm, 2, { tx: "base-part" }));
+    t.aurora.push(inv.evm, "success", payout(inv.evm, 1.99, { tx: "base-out" }));
+    await poller.tick();
+    expect(await status(inv.id)).toBe("DETECTED");
+
+    // 0.02 SOL at $150 is $3.00: the rest of the invoice, from another chain family and another coin.
+    clock.now = new Date(clock.now.getTime() + 60_000);
+    t.aurora.push(inv.sol, "received", deposit(inv.sol, { asset: ASSETS.SOL, amount: "20000000", fromChain: "sol", tx: "sol-part" }));
+    t.aurora.push(inv.sol, "success", payout(inv.sol, 2.98, { tx: "sol-out" }));
+    await poller.tick();
+
+    expect(await status(inv.id)).toBe("SETTLED");
+    const chains = (await t.db.payment.findMany({ where: { invoiceId: inv.id } })).map((p) => p.fromChain).sort();
+    expect(chains).toEqual(["base", "solana"]);
+    const hooks = await t.db.webhookDelivery.findMany({ where: { invoiceId: inv.id }, orderBy: { createdAt: "asc" } });
+    expect(hooks.map((h) => h.event)).toEqual(["invoice.detected", "invoice.settled"]);
+  });
+
+  it("re-judges an open invoice when a part that had no price is valued later", async () => {
+    const inv = await invoice("5.00");
+    const { poller, clock } = makePoller(t);
+    t.aurora.push(inv.evm, "received", usdc(inv.evm, 2, { tx: "priced-part" }));
+    t.aurora.push(inv.evm, "success", payout(inv.evm, 1.99, { tx: "priced-out" }));
+    await poller.tick();
+    expect(await status(inv.id)).toBe("DETECTED");
+
+    // The second part settled, but the price feed had no price when it was recorded.
+    const sol = await t.db.invoiceAddress.findFirstOrThrow({ where: { invoiceId: inv.id, family: "sol" } });
+    await t.db.payment.create({
+      data: {
+        invoiceId: inv.id,
+        invoiceAddressId: sol.id,
+        auroraTxHash: "unpriced-part",
+        fromChain: "solana",
+        assetIn: ASSETS.SOL.id,
+        amountIn: "0.02",
+        amountInUsd: null,
+        amountSettled: "2.98",
+        status: "SETTLED",
+        settledAt: clock.now,
+        raw: {},
+      },
+    });
+    expect(await status(inv.id)).toBe("DETECTED"); // nothing counts it yet
+
+    // The price is there now: valuing it finishes the invoice, with the usual event and webhook.
+    expect(await poller.repairUnvalued()).toEqual({ valued: 1, reopened: 1 });
+    expect(await status(inv.id)).toBe("SETTLED");
+    const hooks = await t.db.webhookDelivery.findMany({ where: { invoiceId: inv.id }, orderBy: { createdAt: "asc" } });
+    expect(hooks.map((h) => h.event)).toEqual(["invoice.detected", "invoice.settled"]);
+  });
+
   it("expires an unpaid invoice only after a successful poll past the window", async () => {
     const inv = await invoice();
     const { poller, clock } = makePoller(t);

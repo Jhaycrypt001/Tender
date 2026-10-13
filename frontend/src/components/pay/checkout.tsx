@@ -364,6 +364,24 @@ export default function Checkout({
                 </p>
               )}
 
+              {shortBy && address.minimum && Number(address.minimum) > Number(shortBy) && (
+                <p
+                  role="status"
+                  className="mt-4 rounded-xl border border-paper/15 bg-paper/5 px-4 py-3 text-[0.8125rem] leading-relaxed text-paper"
+                >
+                  {chainLabel(address.chain)} needs at least{" "}
+                  <span className="font-mono">
+                    <UsdMinimum amount={address.minimum} />
+                  </span>{" "}
+                  per payment, which is more than the{" "}
+                  <span className="font-mono">
+                    <Money amount={shortBy} />
+                  </span>{" "}
+                  still owed. Send at least that much, or pick a chain with a lower minimum. Anything below it is
+                  returned to you and does not count.
+                </p>
+              )}
+
               {shortBy && (
                 <p
                   role="status"
@@ -380,7 +398,7 @@ export default function Checkout({
                   <span className="font-mono">
                     <Money amount={shortBy} />
                   </span>{" "}
-                  to the same address and the payment completes.
+                  to any address on this page, on any chain, and the payment completes.
                 </p>
               )}
 

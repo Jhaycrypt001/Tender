@@ -553,8 +553,12 @@ export class Poller {
    * Anything else has moved since, and its price at detection was never recorded, so it is
    * valued at what actually SETTLED: a floor, since the buyer sent at least that much.
    *
-   * Then an UNDERPAID invoice is judged again. Only a payment that now covers it moves it (to
-   * SETTLED or OVERPAID), through the normal path: history event, webhook and live update.
+   * Then the invoice is judged again: an UNDERPAID one, and an OPEN one (a part that could not be
+   * priced when it arrived counts for nothing until it is, so the invoice was waiting on it). Only a
+   * payment that now covers the amount moves it (to SETTLED or OVERPAID), through the normal path:
+   * history event, webhook and live update.
+   *
+   * Cheap to run often: with nothing unvalued it is one query that returns no rows.
    */
   async repairUnvalued(): Promise<{ valued: number; reopened: number }> {
     const out = { valued: 0, reopened: 0 };
@@ -564,6 +568,7 @@ export class Poller {
       include: { invoice: { select: { id: true, status: true, kind: true } } },
     });
     const recheck = new Set<string>();
+    const recheckOpen = new Set<string>();
     for (const p of rows) {
       const price = await this.deps.prices.usd(p.assetIn).catch(() => null);
       if (price === null) continue;
@@ -572,6 +577,19 @@ export class Poller {
       await this.deps.db.payment.updateMany({ where: { id: p.id, amountInUsd: null }, data: { amountInUsd: usd.toDecimalPlaces(18).toFixed() } });
       out.valued += 1;
       if (p.invoice.kind === "STANDARD" && p.invoice.status === "UNDERPAID") recheck.add(p.invoice.id);
+      if (p.invoice.kind === "STANDARD" && (p.invoice.status === "PENDING" || p.invoice.status === "DETECTED")) recheckOpen.add(p.invoice.id);
+    }
+
+    // An open invoice: re-judge it now that a part has a value, without closing it.
+    for (const invoiceId of recheckOpen) {
+      const transitions = await this.deps.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${invoiceId} FOR UPDATE`;
+        return this.settle(tx, invoiceId, { mayClose: false });
+      });
+      if (transitions.length) {
+        out.reopened += 1;
+        await this.publish(transitions);
+      }
     }
 
     for (const invoiceId of recheck) {

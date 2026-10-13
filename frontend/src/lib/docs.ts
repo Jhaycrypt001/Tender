@@ -216,6 +216,10 @@ export function verify(rawBody: string, signature: string, timestamp: string, se
         a: "Addresses are permanent. The expiry belongs to the invoice, not the address, which is why an invoice can expire while its address stays live.",
       },
       {
+        q: "Can a buyer pay in parts, from different chains?",
+        a: "Yes. Every payment counts toward the invoice whichever chain or coin it came from, and the invoice settles when the total reaches the amount, within 1%. Two limits: each part has to be at least that chain's minimum, or it is returned and does not count; and a part in a coin other than a dollar stablecoin is valued at its price when it arrived, so a volatile coin paid in parts hours apart can drift.",
+      },
+      {
         q: "What happens if a buyer pays twice?",
         a: "Each deposit is processed on its own, and the invoice is judged on their total: a $2 payment and then a $3 payment settle a $5 invoice. Anything that arrives after the invoice is paid is reported as an overpayment.",
       },

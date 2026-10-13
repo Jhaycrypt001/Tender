@@ -80,6 +80,17 @@ void poller
   .then((r) => logger.info(r, "repaired payments with no USD value"))
   .catch((err: unknown) => logger.error({ err }, "repairing payments with no USD value failed"));
 
+// A part Aurora's price feed could not value when it arrived waits for a price. Look again every few
+// minutes, so an invoice paid in parts is not left short by one missing price. Silent unless it does something.
+const repairTimer = setInterval(() => {
+  poller
+    .repairUnvalued()
+    .then((r) => {
+      if (r.valued || r.reopened) logger.info(r, "valued payments that had no USD value");
+    })
+    .catch((err: unknown) => logger.warn({ err }, "valuing payments with no USD value failed"));
+}, 5 * 60_000);
+
 const webhookLog = logger.child({ component: "webhooks" });
 const webhooks = new WebhookWorker({ db, logger: webhookLog });
 const webhookLoop = startLoop("webhooks", 2_000, () => webhooks.tick(), webhookLog);
@@ -190,6 +201,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     // Let the current tick finish: every write is transactional, but there is
     // no reason to throw away a pass that is nearly done.
     clearTimeout(catalogueTimer);
+    clearInterval(repairTimer);
     await Promise.all([poller.stop(), webhookLoop.stop(), emailLoop?.stop(), transferLoop.stop()]);
     metricsServer.close();
     await Promise.allSettled([db.$disconnect(), redis.quit()]);

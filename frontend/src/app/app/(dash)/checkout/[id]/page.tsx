@@ -198,8 +198,8 @@ export default async function InvoicePage({
           />
           {invoice.status === "DETECTED" ? (
             <p className="max-w-[56ch] text-[0.875rem] leading-relaxed text-mute">
-              {shortfall} {invoice.currency} is still to pay. Payments add up, so the buyer can send the rest to the same
-              address before the invoice closes and it will settle.
+              {shortfall} {invoice.currency} is still to pay. Payments add up, so the buyer can send the rest, on any chain,
+              before the invoice closes and it will settle. Each payment still has to meet that chain&apos;s minimum.
             </p>
           ) : (
             <>
