@@ -91,7 +91,11 @@ export class AuroraClient {
   }
 
   /** Mint a deposit address. Idempotent on its inputs: same inputs, same address. */
-  async mintAddress(input: MintInput): Promise<MintResponse> {
+  /**
+   * `quiet` is for Tender's own probe addresses (the minimum-deposit measurement re-mints the same ones every run):
+   * their success is logged at debug, so only addresses that can receive real money show at info. Failures always warn.
+   */
+  async mintAddress(input: MintInput, opts: { quiet?: boolean } = {}): Promise<MintResponse> {
     const started = Date.now();
     const fields = {
       depositChain: input.depositChain,
@@ -109,7 +113,7 @@ export class AuroraClient {
       });
       // Every address Aurora will ever watch for us is recorded here: who it was minted for, on what
       // chain, and where its money is sent. A deposit that shows up later can be traced back to this line.
-      this.opts.logger.info(
+      this.opts.logger[opts.quiet ? "debug" : "info"](
         { ...fields, address: res.depositAddress, alreadyExists: res.alreadyExists, memo: res.memo ? true : false, correlationId: res.correlationId, ms: Date.now() - started },
         "deposit address minted",
       );

@@ -79,7 +79,7 @@ export async function measureCatalogue(
       depositChain: family,
       destinationChain: SETTLEMENT_CHAIN,
       destinationAsset: destination.assetId,
-    });
+    }, { quiet: true });
     refundTo.set(family, minted.depositAddress);
   }
 

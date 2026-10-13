@@ -80,6 +80,15 @@ describe("address minting", () => {
     expect(JSON.stringify(log.lines)).not.toContain("sk_super_secret_key");
   });
 
+  it("logs Tender's own probe mints at debug, so they never reach the normal log", async () => {
+    const log = capture();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ depositAddress: "0xprobe", alreadyExists: true }), { status: 200 }));
+    const client = new AuroraClient({ baseUrl: "https://aurora.test", apiKey: "sk_super_secret_key", logger: log.logger, fetch: fetchImpl as unknown as typeof fetch });
+    await client.mintAddress({ ...input, sender: "tender-minimum-probe" }, { quiet: true });
+    const [line] = log.find("deposit address minted");
+    expect(line!.level).toBe(20); // debug
+  });
+
   it("logs a failed mint as a warning with its reason", async () => {
     const log = capture();
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ message: "Invalid option" }), { status: 400 }));
