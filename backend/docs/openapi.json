@@ -9915,7 +9915,7 @@
         "tags": [
           "Ramps & Earn"
         ],
-        "summary": "Off-ramp corridors (none are live)",
+        "summary": "Off-ramp corridors: LIVE only where Ramp confirms it buys this merchant's settlement token",
         "security": [
           {
             "merchantKey": []
@@ -9968,6 +9968,573 @@
                     ],
                     "additionalProperties": false
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ramps/widget": {
+      "get": {
+        "tags": [
+          "Ramps & Earn"
+        ],
+        "summary": "What the Cash out button passes to Ramp's widget: the webhook path carrying this merchant's token",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "webhook_path": {
+                      "type": "string",
+                      "description": "e.g. \"/webhooks/ramp?t=rwt_…\". Prefix with the API base URL."
+                    }
+                  },
+                  "required": [
+                    "webhook_path"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ramps/sales": {
+      "get": {
+        "tags": [
+          "Ramps & Earn"
+        ],
+        "summary": "Cash-outs through Ramp Network (money out, not payments received)",
+        "security": [
+          {
+            "merchantKey": []
+          },
+          {
+            "platformKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "rsl_ id"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "CREATED",
+                              "RELEASED",
+                              "EXPIRED"
+                            ],
+                            "description": "CREATED: Ramp opened the sale. RELEASED: the fiat payout was released. EXPIRED: it was not completed."
+                          },
+                          "crypto": {
+                            "type": "object",
+                            "properties": {
+                              "asset": {
+                                "type": "string"
+                              },
+                              "chain": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              }
+                            },
+                            "required": [
+                              "asset",
+                              "chain",
+                              "amount"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "fiat": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9]\\d*)(\\.\\d{1,18})?$"
+                              }
+                            },
+                            "required": [
+                              "currency",
+                              "amount"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "payout_method": {
+                            "description": "How Ramp pays out, e.g. CARD or a bank transfer",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tx_hash": {
+                            "description": "The merchant's transfer of the crypto to Ramp",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "crypto",
+                          "fiat",
+                          "payout_method",
+                          "tx_hash",
+                          "created_at",
+                          "updated_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/ramp": {
+      "post": {
+        "tags": [
+          "Ramps & Earn"
+        ],
+        "summary": "Ramp Network reports a cash-out changed state. Verified by the X-Body-Signature header, not by a key",
+        "security": [],
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "The merchant's webhook token, from GET /v1/ramps/widget. Not signed, so it is only looked up",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "transactionHash": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "crypto": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^\\d+$"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          },
+                          "assetInfo": {
+                            "type": "object",
+                            "properties": {
+                              "symbol": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "chain": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "decimals": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 36
+                              }
+                            },
+                            "required": [
+                              "symbol",
+                              "chain",
+                              "decimals"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "assetInfo"
+                        ]
+                      },
+                      "fiat": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          },
+                          "currencySymbol": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "payoutMethod": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "currencySymbol"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "crypto",
+                      "fiat"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "mode",
+                  "payload"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Recorded (or already recorded, or not an event we record)"
+          },
+          "400": {
+            "description": "Validation failed — `fields` names each bad field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

@@ -276,6 +276,35 @@ export const RampCorridor = z.object({
   daily_cap: Amount.nullish(),
 });
 
+/**
+ * A cash-out through Ramp Network: settled crypto the merchant sold for fiat.
+ *
+ * ⚠️ This is money OUT. Activity must list it beside payouts and refunds, never among payments
+ * received, or a withdrawal reads as revenue. Not yet mirrored in the frontend's types, so it is
+ * deliberately absent from contract.check.ts until the frontend adds the matching type.
+ */
+export const RampSale = z.object({
+  id: z.string().describe("rsl_ id"),
+  status: z.enum(["CREATED", "RELEASED", "EXPIRED"]).describe("CREATED: Ramp opened the sale. RELEASED: the fiat payout was released. EXPIRED: it was not completed."),
+  crypto: z.object({ asset: z.string(), chain: z.string(), amount: Amount }),
+  fiat: z.object({ currency: z.string(), amount: Amount }),
+  payout_method: z.string().nullable().describe("How Ramp pays out, e.g. CARD or a bank transfer"),
+  tx_hash: z.string().nullable().describe("The merchant's transfer of the crypto to Ramp"),
+  created_at: Timestamp,
+  updated_at: Timestamp,
+});
+
+/**
+ * What the Cash out button needs to open Ramp's widget. Not yet mirrored in the frontend's types (see RampSale).
+ *
+ * `webhook_path` goes after the API's base URL as `offrampWebhookV3Url`. It carries the merchant's webhook
+ * token, never the merchant id: whoever opens the widget picks that URL, so it must name a merchant in a
+ * way no one else can copy.
+ */
+export const RampWidget = z.object({
+  webhook_path: z.string().describe('e.g. "/webhooks/ramp?t=rwt_…". Prefix with the API base URL.'),
+});
+
 /* -------------------------------------------------------------------------- */
 /* Public (buyer-facing, unauthenticated)                                      */
 /* -------------------------------------------------------------------------- */

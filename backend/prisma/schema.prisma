@@ -41,6 +41,10 @@ model Merchant {
   emailPayIn         Boolean  @default(true)
   webhookUrl         String?
   webhookSecret      String
+  /// "rwt_" + base62, 160 bits. Goes in the Ramp widget's webhook URL so a cash-out can be matched to this
+  /// merchant. Unguessable, unlike the merchant id, so no one can file their own sale under someone else.
+  /// Made the first time the merchant opens the Cash out widget.
+  rampWebhookToken   String?  @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -49,6 +53,7 @@ model Merchant {
   apiKeys   ApiKey[]
   emails    EmailDelivery[]
   transfers Transfer[]
+  rampSales RampSale[]
 }
 
 /// A merchant API key. The key itself is shown once and never stored: only its
@@ -349,4 +354,44 @@ enum TransferStatus {
   CONFIRMED
   FAILED
   EXPIRED
+}
+
+enum RampSaleStatus {
+  CREATED
+  RELEASED
+  EXPIRED
+}
+
+/// A cash-out through Ramp Network: the merchant sold settled USDC or USDT0 for
+/// fiat. Tender never holds any of it. This row only RECORDS what Ramp's signed
+/// webhook said happened, so Activity can list it as money OUT, never as revenue.
+///
+/// One row per Ramp sale. rampSaleId is the dedupe key: Ramp sends a sale's events
+/// more than once, and the same event can be retried. Status only moves forward
+/// (CREATED to RELEASED or EXPIRED) and never back, so a late retry of an old
+/// event cannot undo a payout.
+model RampSale {
+  /// "rsl_" + base62. Merchant-facing.
+  id              String         @id
+  /// Ramp's sale id (payload.id). Unique: this is what dedupes.
+  rampSaleId      String         @unique
+  /// Null when Ramp signed the event but the URL named no merchant we know. Kept so no sale is lost, never shown to anyone.
+  merchantId      String?
+  status          RampSaleStatus
+  /// "USDC" or "USDT0", and the chain Ramp reports it on ("MONAD").
+  cryptoSymbol    String
+  cryptoChain     String
+  /// In whole tokens, converted from Ramp's base units using the decimals Ramp sent.
+  cryptoAmount    Decimal        @db.Decimal(36, 18)
+  fiatCurrency    String
+  fiatAmount      Decimal        @db.Decimal(36, 18)
+  payoutMethod    String?
+  /// The merchant's transfer of the crypto to Ramp.
+  transactionHash String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  merchant Merchant? @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId, createdAt])
 }

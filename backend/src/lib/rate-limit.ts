@@ -29,6 +29,8 @@ function viaPlatform(req: FastifyRequest): boolean {
 function groupFor(req: FastifyRequest): Group {
   const url = req.routeOptions.url ?? req.url;
   if (url.startsWith("/internal/")) return { name: "internal", max: 120 };
+  // Ramp's servers call this, a few at a time. Verifying a signature costs CPU, so it is bounded per source IP.
+  if (url === "/webhooks/ramp") return { name: "ramp-webhook", max: 120 };
   // Every call costs a model request, so it is far tighter than the rest, and is
   // counted per merchant whichever way they authenticate.
   if (url === "/v1/assistant/ask") return { name: "assistant", max: 10 };

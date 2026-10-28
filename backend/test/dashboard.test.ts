@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as S from "../contract/schemas.js";
+import { RampService } from "../src/services/ramp.service.js";
 import { ASSETS, deposit, makePoller, merchant, resetDb, setupApp, teardown, type TestContext } from "./helpers.js";
 
 let t: TestContext;
@@ -126,9 +127,18 @@ describe("payment links", () => {
 });
 
 describe("ramps and earn say what is true", () => {
-  it("lists no live corridors and no positions, and refuses an Earn deposit plainly", async () => {
+  it("lists corridors as Ramp reports them, with no positions, and refuses an Earn deposit plainly", async () => {
     const m = await merchant(t.db);
-    expect((await t.app.inject({ method: "GET", url: "/v1/ramps/corridors", headers: m.auth })).json()).toEqual([]);
+    // Ramp is down here, so the route must answer with every corridor listed and none LIVE.
+    const down = vi.fn(async () => new Response("{}", { status: 503 }));
+    const withRamp = await setupApp({}, { ramp: new RampService(t.redis, { warn: vi.fn(), error: vi.fn() }, down as unknown as typeof fetch) });
+    try {
+      const corridors = S.RampCorridor.array().parse((await withRamp.app.inject({ method: "GET", url: "/v1/ramps/corridors", headers: m.auth })).json());
+      expect(corridors.map((c) => c.currency)).toEqual(["USD", "EUR", "GBP", "NGN"]);
+      expect(corridors.every((c) => c.status === "NOT_OPEN")).toBe(true);
+    } finally {
+      await teardown(withRamp);
+    }
     expect((await t.app.inject({ method: "GET", url: "/v1/earn/positions", headers: m.auth })).json()).toEqual([]);
     const deposit = await t.app.inject({ method: "POST", url: "/v1/earn/deposit", headers: m.auth, payload: {} });
     expect(deposit.statusCode).toBe(501);

@@ -16,6 +16,7 @@ export function loggerOptions(level: string, pretty: boolean): LoggerOptions {
         "*.TENDER_PLATFORM_KEY",
         "*.api_key",
         "*.webhookSecret",
+        "*.rampWebhookToken",
         "*.secret",
       ],
       censor: "[redacted]",

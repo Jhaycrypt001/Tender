@@ -92,6 +92,11 @@ const schema = z.object({
 
   /** If set, GET /metrics requires `Authorization: Bearer <token>`. */
   METRICS_TOKEN: z.string().min(16).optional(),
+  /**
+   * Which of Ramp Network's published public keys verifies POST /webhooks/ramp. Production signs live
+   * sales; testing signs the sandbox's. Public keys, so there is nothing secret to configure.
+   */
+  RAMP_ENV: z.enum(["production", "testing"]).default("production"),
   /** Port for the worker process's own /metrics endpoint. */
   WORKER_METRICS_PORT: z.coerce.number().int().positive().default(9464),
 

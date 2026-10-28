@@ -1,5 +1,6 @@
 import { z } from "zod";
 import * as S from "../contract/schemas.js";
+import { RampEvent } from "./services/ramp-sale.service.js";
 
 /**
  * The OpenAPI document behind Swagger UI (`/docs`).
@@ -474,8 +475,30 @@ export const OPERATIONS: Record<string, Op> = {
   "GET /v1/ramps/corridors": {
     tag: "Ramps & Earn",
     auth: true,
-    summary: "Off-ramp corridors (none are live)",
+    summary: "Off-ramp corridors: LIVE only where Ramp confirms it buys this merchant's settlement token",
     ok: { status: 200, schema: z.array(S.RampCorridor) },
+  },
+  "GET /v1/ramps/widget": {
+    tag: "Ramps & Earn",
+    auth: true,
+    summary: "What the Cash out button passes to Ramp's widget: the webhook path carrying this merchant's token",
+    ok: { status: 200, schema: S.RampWidget },
+  },
+  "GET /v1/ramps/sales": {
+    tag: "Ramps & Earn",
+    auth: true,
+    summary: "Cash-outs through Ramp Network (money out, not payments received)",
+    query: z.object({ cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(100).optional() }),
+    ok: { status: 200, schema: S.paginated(S.RampSale) },
+  },
+  "POST /webhooks/ramp": {
+    tag: "Ramps & Earn",
+    auth: false,
+    summary: "Ramp Network reports a cash-out changed state. Verified by the X-Body-Signature header, not by a key",
+    query: z.object({ t: z.string().optional().describe("The merchant's webhook token, from GET /v1/ramps/widget. Not signed, so it is only looked up") }),
+    body: RampEvent,
+    ok: { status: 204, description: "Recorded (or already recorded, or not an event we record)" },
+    errors: [400, 401],
   },
   "GET /v1/earn/positions": {
     tag: "Ramps & Earn",

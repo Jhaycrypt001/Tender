@@ -26,6 +26,7 @@ Set these on **both** api and worker unless noted.
 | `RELAYER_PRIVATE_KEY` | `0x` + 64 hex | **api only.** The wallet that submits merchants' signed transfers and pays their gas in MON. Fund it with a few MON and nothing else; the merchant's own wallet authorizes every transfer, so this key cannot move merchant funds. Without it `/v1/transfers` answers 503. |
 | `RELAYER_MIN_MON` | default 0.02 | Transfers pause (503) when the relayer holds less than this. Alert before it gets there. |
 | `MONAD_RPC_URL` | a paid endpoint | Only used to verify smart-contract settlement wallets (ERC-1271). The public default is fine for a demo. |
+| `RAMP_ENV` | `production` (default) or `testing` | **api only.** Which of Ramp Network's published public keys verifies `POST /webhooks/ramp`. Use `testing` only while pointed at Ramp's sandbox. Public keys, so there is nothing secret to set. |
 | `MINIMUMS_REFRESH_MINUTES` | default 30 | See "Minimums" below. worker only. |
 
 The server refuses to boot on a missing or malformed value (`src/config.ts`), so a bad deploy fails at start, not mid-request.

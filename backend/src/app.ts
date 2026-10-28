@@ -14,6 +14,7 @@ import { registerRateLimits } from "./lib/rate-limit.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import type { AuroraClient } from "./aurora/client.js";
 import { FxService } from "./services/fx.service.js";
+import { RampService } from "./services/ramp.service.js";
 import { assistantRoutes } from "./routes/assistant.js";
 import { transferRoutes } from "./routes/transfers.js";
 import type { TransferChain } from "./services/transfer-chain.js";
@@ -26,6 +27,8 @@ import { merchantRoutes } from "./routes/merchants.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { publicRoutes } from "./routes/public.js";
+import { rampWebhookRoutes } from "./routes/ramp-webhook.js";
+import { rampPublicKey } from "./lib/ramp-signature.js";
 import type { ChainCatalogueReader } from "./services/chains.service.js";
 import type { ChainReader } from "./services/settlement-proof.service.js";
 import type { InvoiceStream } from "./services/stream.js";
@@ -42,6 +45,10 @@ export type AppDeps = {
   assistantFetch?: typeof fetch;
   /** Display-currency rates. Defaults to the live source; tests pass one with a fake fetch. */
   fx?: FxService;
+  /** Off-ramp corridor lookup. Defaults to Ramp's live endpoint; tests pass one with a fake fetch. */
+  ramp?: RampService;
+  /** Test-only: the key that verifies Ramp's webhook signatures. Defaults to Ramp's published key for `RAMP_ENV`. */
+  rampWebhookKey?: import("node:crypto").KeyObject;
   /** Sends signed transfers on Monad from the relayer. Without it the transfer routes answer 503. */
   transferChain?: TransferChain;
   config: Config;
@@ -137,6 +144,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: "not_found", message: "Route not found" }));
 
   healthRoutes(app, deps);
+  rampWebhookRoutes(app, { db: deps.db, publicKey: deps.rampWebhookKey ?? rampPublicKey(config.RAMP_ENV) });
   publicRoutes(app, { ...deps, fx: deps.fx ?? new FxService(deps.redis, app.log), ttlMinutes: config.INVOICE_TTL_MINUTES });
   internalRoutes(app, {
     db: deps.db,
@@ -167,7 +175,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (config.GEMINI_API_KEY) {
       assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch, wallet: deps.transferChain });
     }
-    dashboardRoutes(merchantScope, { db: deps.db, aurora: deps.aurora, ttlMinutes: config.INVOICE_TTL_MINUTES, wallet: deps.transferChain });
+    dashboardRoutes(merchantScope, {
+      db: deps.db,
+      aurora: deps.aurora,
+      ttlMinutes: config.INVOICE_TTL_MINUTES,
+      wallet: deps.transferChain,
+      ramp: deps.ramp ?? new RampService(deps.redis, app.log),
+    });
     invoiceRoutes(merchantScope, {
       db: deps.db,
       aurora: deps.aurora,
