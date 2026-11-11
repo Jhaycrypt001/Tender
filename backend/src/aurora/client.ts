@@ -256,6 +256,7 @@ export class AuroraClient {
 
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
       const timer = auroraRequests.startTimer({ route });
+      const startedAt = Date.now();
       try {
         const result = await this.attempt(route, schema, req, attempt);
         timer({ outcome: "ok" });
@@ -274,7 +275,8 @@ export class AuroraClient {
           throw error;
         }
         lastError = error;
-        this.opts.logger.warn({ route, attempt, kind: error.kind, status: error.status }, "aurora request failed");
+        // `ms` and `reason` tell a slow Aurora (hit our timeout) from a dropped connection from a failed lookup.
+        this.opts.logger.warn({ route, attempt, kind: error.kind, status: error.status, ms: Date.now() - startedAt, reason: failureReason(err) }, "aurora request failed");
       }
       if (attempt < this.maxAttempts) await sleep(backoffMs(attempt));
     }
@@ -303,6 +305,17 @@ export class AuroraClient {
     this.opts.logger.debug({ route, attempt, ms: Date.now() - started }, "aurora request ok");
     return parsed.data;
   }
+}
+
+/**
+ * Why a request failed, short enough for a log line: an Aurora answer's own message, or for a request that never
+ * got one the error name and its cause code ("TimeoutError", "TypeError:ECONNRESET", "TypeError:ENOTFOUND").
+ * Never the URL: the API key travels in it.
+ */
+function failureReason(err: unknown): string {
+  if (err instanceof AuroraError) return err.message.slice(0, 120);
+  const e = err as { name?: string; cause?: { code?: string } };
+  return [e?.name, e?.cause?.code].filter(Boolean).join(":") || "unknown";
 }
 
 function kindForStatus(status: number): AuroraErrorKind {

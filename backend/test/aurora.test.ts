@@ -32,6 +32,23 @@ describe("AuroraClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("says WHY a retried request failed: a dropped connection, a timeout, an Aurora 500, and never the API key", async () => {
+    const reset = Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET", message: `https://aurora.test/x?key=${KEY}` } });
+    const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    const { aurora, logs } = client([reset, timeout, json(500, { message: "boom" }), json(200, MINTED)]);
+    // maxAttempts is 3, so the 4th response is never reached; the point is the three failure lines.
+    await expect(aurora.mintAddress(MINT_INPUT)).rejects.toBeInstanceOf(AuroraError);
+
+    // Only the per-attempt lines: the client logs one more summary warning once retries run out.
+    const lines = (logs as Array<{ attempt?: number; kind: string; status?: number; ms: number; reason: string }>).filter((l) => l.attempt !== undefined);
+    expect(lines.map((l) => [l.attempt, l.kind, l.status])).toEqual([[1, "network", undefined], [2, "network", undefined], [3, "upstream", 500]]);
+    expect(lines[0]!.reason).toBe("TypeError:ECONNRESET");
+    expect(lines[1]!.reason).toBe("TimeoutError");
+    expect(lines[2]!.reason).toContain("500");
+    expect(lines.every((l) => typeof l.ms === "number" && l.ms >= 0)).toBe(true);
+    expect(JSON.stringify(logs)).not.toContain(KEY);
+  });
+
   it("logs a 403 loudly, without the API key, and does not retry it", async () => {
     const fetch = vi.fn(async () => json(403, { message: "Persistent deposit address creation is not enabled for this API key" }));
     const errors: Record<string, unknown>[] = [];
