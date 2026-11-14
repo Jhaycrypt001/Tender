@@ -46,5 +46,5 @@ if (!checked.ok) {
 }
 console.log(`dry quote: send ${amount} USDC, ${account} receives about ${checked.expectedOut} ${checked.destination.symbol}, in about ${checked.seconds}s`);
 
-const minted = await mintRoute(route, checked, account, { amount, from: wallet });
+const minted = await mintRoute(route, checked, account, { from: wallet });
 console.log(`deposit address (nothing sent to it): ${minted.address}`);

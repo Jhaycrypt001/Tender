@@ -24,8 +24,8 @@ const schema = z.object({
   AURORA_API_KEY: z.string().min(1, "AURORA_API_KEY is required — create one at https://studio.aurora.dev"),
 
   /** NEAR Intents' 1Click API, used directly for payouts to NEAR accounts. The key is optional: without one its unauthenticated fee applies. */
-  NEAR_INTENTS_API_URL: z.url().default("https://1click.chaindefuser.com"),
-  NEAR_INTENTS_API_KEY: z.string().min(1).optional(),
+  NEAR_INTENTS_API_URL: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.url().default("https://1click.chaindefuser.com")),
+  NEAR_INTENTS_API_KEY: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().min(1).optional()),
 
   /** How often an open invoice's addresses are polled. Aurora throttles our key, so not faster than this. */
   POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(10_000),

@@ -64,15 +64,36 @@ describe("the NEAR Intents client", () => {
     const delivery = nearDelivery(client());
     for (const [state, expected] of [["SUCCESS", "delivered"], ["REFUNDED", "failed"], ["FAILED", "failed"], ["PROCESSING", "pending"], ["SOMETHING_NEW", "pending"]] as const) {
       replies.push({ status: 200, body: { status: state } });
-      expect(await delivery("0xdeposit")).toBe(expected);
+      expect((await delivery("0xdeposit")).state).toBe(expected);
     }
     replies.push({ status: 404, body: { message: "not found" } });
-    expect(await delivery("0xdeposit")).toBe("pending");
+    expect((await delivery("0xdeposit")).state).toBe("pending");
     expect(seen[0]!.path).toBe("/v0/status?depositAddress=0xdeposit");
 
+    // The proof of delivery is kept: the transaction NEAR Intents reported.
+    replies.push({ status: 200, body: { status: "SUCCESS", swapDetails: { destinationChainTxHashes: [{ hash: "near-tx-1" }] } } });
+    expect(await delivery("0xdeposit")).toEqual({ state: "delivered", tx: "near-tx-1" });
+
     // An outage is an error for the tracker to retry later, never a "failed" delivery.
-    replies.push({ status: 500, body: {} }, { status: 500, body: {} }, { status: 500, body: {} });
+    replies.push({ status: 500, body: {} });
     await expect(delivery("0xdeposit")).rejects.toBeInstanceOf(NearIntentsError);
+  });
+
+  it("never repeats a real quote (each one makes a new deposit address) and asks for status once, quietly", async () => {
+    replies.push({ status: 503, body: { message: "busy" } }, { status: 200, body: QUOTE });
+    await expect(client().quote(REQ)).rejects.toMatchObject({ kind: "upstream" });
+    expect(seen).toHaveLength(1);
+
+    seen = [];
+    replies = [];
+    const lines: { level: string; msg: string }[] = [];
+    const logged = new NearIntentsClient({ baseUrl: url, logger: { debug: (_o, m) => lines.push({ level: "debug", msg: m }), info: () => {}, warn: (_o, m) => lines.push({ level: "warn", msg: m }) } });
+    replies.push({ status: 404, body: { message: "Deposit address not found" } });
+    expect(await logged.status("0xnew")).toBeNull();
+    replies.push({ status: 503, body: {} }, { status: 200, body: { status: "SUCCESS" } });
+    await expect(logged.status("0xnew")).rejects.toMatchObject({ kind: "upstream" });
+    expect(seen).toHaveLength(2); // one call each: no retry on status
+    expect(lines.map((l) => l.level)).toEqual(["debug", "warn"]); // an unknown address is quiet; a real failure is not
   });
 });
 

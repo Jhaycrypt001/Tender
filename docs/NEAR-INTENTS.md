@@ -57,3 +57,6 @@ nullable column `TransferLine.route`. A line with no route is an Aurora line and
 - There is no NEAR testnet at NEAR Intents: the smoke script makes real quotes and a real deposit address, but sends no money.
 - The delivery state comes from NEAR Intents' status endpoint, trusted as reported. A state Tender does not know is read as "still going", never as failed.
 - A deposit address that NEAR Intents never reports on stays `PENDING` and is checked every 30 minutes for two weeks, then closed as `UNKNOWN` (the same rule as Aurora deliveries).
+- NEAR Intents being down is cheap: a status check is one short attempt, and the first failure ends the tick, so Monad transfers are never kept waiting on it. A refused key (`502 near_misconfigured`) is told apart from an outage (`503 near_unavailable`, try again).
+- A real quote is never retried (each one makes a new deposit address), and at most 10 payouts may wait for a signature at once.
+- The delivery transaction NEAR Intents reports is logged with `cross-chain delivery completed` (`deliveryTx`); it is not stored on the line.

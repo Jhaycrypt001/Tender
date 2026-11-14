@@ -34,6 +34,7 @@ export class NearIntentsError extends Error {
   }
 }
 
+const STATUS_TIMEOUT_MS = 5_000;
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 export class NearIntentsClient {
@@ -65,6 +66,9 @@ export class NearIntentsClient {
     const res = await this.request("POST /v0/quote", QuoteResponse, {
       method: "POST",
       path: "/v0/quote",
+      // A real quote makes a new live deposit address every time it is asked, so it is never repeated blind: a lost
+      // reply would leave an address nobody stored. A dry quote makes nothing and may be retried.
+      attempts: req.dry ? undefined : 1,
       body: { swapType: "EXACT_INPUT", slippageTolerance: 100, depositType: "ORIGIN_CHAIN", refundType: "ORIGIN_CHAIN", recipientType: "DESTINATION_CHAIN", ...req },
     });
     if (!req.dry) {
@@ -91,7 +95,9 @@ export class NearIntentsClient {
   /** Where a swap is. null when 1Click does not know the deposit address (yet). */
   async status(depositAddress: string): Promise<{ state: string; deliveredTx: string | null } | null> {
     try {
-      const res = await this.request("GET /v0/status", StatusResponse, { method: "GET", path: `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}` });
+      // One short attempt, and an unknown address is expected (not started yet): the tracker asks again in 30 seconds, and
+      // it must never wait long on NEAR Intents while Monad transfers are waiting to be confirmed.
+      const res = await this.request("GET /v0/status", StatusResponse, { method: "GET", path: `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`, attempts: 1, timeoutMs: STATUS_TIMEOUT_MS, expectNotFound: true });
       return { state: res.status, deliveredTx: res.swapDetails?.destinationChainTxHashes?.[0]?.hash ?? null };
     } catch (err) {
       if (err instanceof NearIntentsError && err.kind === "not_found") return null;
@@ -99,16 +105,17 @@ export class NearIntentsClient {
     }
   }
 
-  private async request<T>(route: string, schema: ZodType<T>, spec: { method: "GET" | "POST"; path: string; body?: unknown }): Promise<T> {
+  private async request<T>(route: string, schema: ZodType<T>, spec: { method: "GET" | "POST"; path: string; body?: unknown; attempts?: number; timeoutMs?: number; expectNotFound?: boolean }): Promise<T> {
     let last: NearIntentsError | undefined;
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+    const maxAttempts = spec.attempts ?? this.maxAttempts;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const started = Date.now();
       try {
         const res = await this.fetchImpl(`${this.baseUrl}${spec.path}`, {
           method: spec.method,
           headers: { "content-type": "application/json", ...(this.opts.apiKey ? { "x-api-key": this.opts.apiKey } : {}) },
           body: spec.body === undefined ? undefined : JSON.stringify(spec.body),
-          signal: AbortSignal.timeout(this.timeoutMs),
+          signal: AbortSignal.timeout(spec.timeoutMs ?? this.timeoutMs),
         });
         const text = await res.text();
         if (res.ok) {
@@ -129,8 +136,10 @@ export class NearIntentsClient {
       } catch (err) {
         last = err instanceof NearIntentsError ? err : new NearIntentsError("network", `${route}: ${err instanceof Error ? err.message : String(err)}`);
         const retry = last.kind === "network" || (last.status !== undefined && RETRY_STATUSES.has(last.status));
-        this.logger.warn({ route, attempt, kind: last.kind, status: last.status, err: last.message.slice(0, 200), ms: Date.now() - started }, "near intents request failed");
-        if (!retry || attempt === this.maxAttempts) break;
+        // A 404 the caller expects is not a failure: it is logged quietly, so polling cannot flood the logs.
+        const level = spec.expectNotFound && last.kind === "not_found" ? "debug" : "warn";
+        this.logger[level]({ route, attempt, kind: last.kind, status: last.status, err: last.message.slice(0, 200), ms: Date.now() - started }, "near intents request failed");
+        if (!retry || attempt === maxAttempts) break;
         await new Promise((r) => setTimeout(r, 200 * attempt));
       }
     }

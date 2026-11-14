@@ -48,7 +48,10 @@ export function nearRoutes(client: Pick<NearIntentsClient, "tokens" | "quote">, 
           const atLeast = /at least (\d+)/i.exec(err.message);
           return { ok: false, reason: "below_minimum", minimumBaseUnits: atLeast ? atLeast[1]! : null };
         }
-        if (/recipient|invalid|not valid/i.test(err.message)) return { ok: false, reason: "invalid_recipient" };
+        // Seen live (2026-11-14): "recipient is not valid" for a malformed account, and a bare 400 "Internal server error"
+        // for a well-formed account that does not exist. Both mean the recipient cannot be paid.
+        // Only these two: a looser match ("invalid refundTo", "invalid amount") would blame the account for another fault.
+        if (/recipient is not valid|internal server error/i.test(err.message)) return { ok: false, reason: "invalid_recipient" };
         return { ok: false, reason: "unavailable" };
       }
     },
@@ -61,6 +64,7 @@ export function nearRoutes(client: Pick<NearIntentsClient, "tokens" | "quote">, 
       input: { recipient: string; sender: string; depositChain: string; destinationChain: string; destinationAsset: string },
       hint: NearMintHint = {},
     ): Promise<{ depositAddress: string; alreadyExists: boolean; correlationId?: string }> {
+      // The amount is the one the dry quote vetted (checkRoute's own base units), passed through, never recomputed.
       if (!hint.amountBase || !hint.refundTo || !hint.originAsset) throw new NearIntentsError("bad_request", "a deposit address needs the amount, the origin asset and a refund address");
       const res = await client.quote({
         dry: false,
@@ -76,7 +80,7 @@ export function nearRoutes(client: Pick<NearIntentsClient, "tokens" | "quote">, 
   };
 }
 
-export type Delivery = "delivered" | "failed" | "pending";
+export type Delivery = { state: "delivered" | "failed" | "pending"; /** The delivery transaction on NEAR, when NEAR Intents reported one: the proof it arrived. */ tx?: string | null };
 
 /**
  * Where a payout's delivery stands. Only SUCCESS is delivered; REFUNDED and FAILED will not deliver. Everything else,
@@ -86,9 +90,9 @@ export type Delivery = "delivered" | "failed" | "pending";
 export function nearDelivery(client: Pick<NearIntentsClient, "status">): (depositAddress: string) => Promise<Delivery> {
   return async (depositAddress) => {
     const s = await client.status(depositAddress);
-    if (!s) return "pending";
-    if (s.state === "SUCCESS") return "delivered";
-    if (s.state === "REFUNDED" || s.state === "FAILED") return "failed";
-    return "pending";
+    if (!s) return { state: "pending" };
+    if (s.state === "SUCCESS") return { state: "delivered", tx: s.deliveredTx };
+    if (s.state === "REFUNDED" || s.state === "FAILED") return { state: "failed" };
+    return { state: "pending" };
   };
 }

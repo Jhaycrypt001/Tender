@@ -34,7 +34,7 @@ function groupFor(req: FastifyRequest): Group {
   if (url === "/v1/assistant/ask") return { name: "assistant", max: 10 };
   // A route check is a live Aurora quote on the same key that mints invoice addresses, and the form asks
   // as the merchant types. Its own bucket, so checking never eats the budget for actually sending.
-  if (url === "/v1/transfers/quote") return { name: "transfer-quote", max: 30 };
+  if (url === "/v1/transfers/quote" || url === "/v1/transfers/near-direct/quote") return { name: "transfer-quote", max: 30 };
   // Preparing and submitting a transfer costs Tender network fees, so POSTs here are tight and per merchant.
   if (url.startsWith("/v1/transfers") && req.method === "POST") return { name: "transfers", max: 20 };
   // The dashboard's platform key fronts every signed-in merchant, so it is

@@ -85,7 +85,7 @@ export async function payoutChains(aurora: Pick<AuroraClient, "tokens"> & { prov
 }
 
 export type RouteCheck =
-  | { ok: true; chain: ChainInfo; destination: Token; origin: Token; expectedOut: string | null; seconds: number | null }
+  | { ok: true; chain: ChainInfo; destination: Token; origin: Token; /** The amount in the origin token's base units, as vetted. */ units: string; expectedOut: string | null; seconds: number | null }
   | { ok: false; field: "to" | "amount" | "chain"; message: string };
 
 /** Everything short of minting: is this a route Aurora will take, and what will the recipient get? */
@@ -112,7 +112,7 @@ export async function checkRoute(
     refundTo: input.from,
   });
 
-  if (quote.ok) return { ok: true, chain, destination, origin, expectedOut: quote.amountOut, seconds: quote.seconds };
+  if (quote.ok) return { ok: true, chain, destination, origin, units: units.toFixed(0), expectedOut: quote.amountOut, seconds: quote.seconds };
   switch (quote.reason) {
     case "below_minimum": {
       const min = quote.minimumBaseUnits ? new Decimal(quote.minimumBaseUnits).div(new Decimal(10).pow(origin.decimals)).toFixed() : null;
@@ -128,7 +128,7 @@ export async function checkRoute(
 }
 
 /** Mints the one-off Monad address that delivers to `to`. A fresh sender each time, so no two payouts share an address. */
-export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string, pay?: { amount: string; from: string }): Promise<{ address: string; sender: string }> {
+export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string, pay?: { from: string }): Promise<{ address: string; sender: string }> {
   const sender = `payout:${randomUUID()}`;
   const minted = await aurora.mintAddress(
     {
@@ -140,7 +140,7 @@ export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, 
       destinationAsset: route.destination.assetId,
     },
     // Aurora's client ignores this. NEAR Intents' addresses belong to one quote, so they need it.
-    pay ? { amountBase: new Decimal(pay.amount).mul(new Decimal(10).pow(route.origin.decimals)).toFixed(0), refundTo: pay.from, originAsset: route.origin.assetId } : undefined,
+    pay ? { amountBase: route.units, refundTo: pay.from, originAsset: route.origin.assetId } : undefined,
   );
   if (!isAddress(minted.depositAddress)) {
     throw new ApiError(502, "route_failed", "Could not set up that route. Nothing was sent.");

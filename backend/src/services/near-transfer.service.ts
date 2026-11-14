@@ -28,28 +28,50 @@ function direct(deps: NearTransferDeps): TransferDeps {
   return { ...rest, aurora: nearRoutes(nearClient, deps.now), routeName: NEAR_ROUTE };
 }
 
-/** NEAR Intents being unreachable is a "try again", never a verdict on the payout. Nothing has been sent at this point. */
-async function viaNear<T>(work: () => Promise<T>): Promise<T> {
+/**
+ * NEAR Intents being unreachable is a "try again", never a verdict on the payout. A refused key or request is NOT: retrying
+ * cannot fix it, so it is a different code (and logged at error level), and the merchant is not told to keep trying.
+ * Nothing has been sent at this point either way.
+ */
+async function viaNear<T>(deps: Pick<TransferDeps, "logger">, work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (err) {
-    if (err instanceof NearIntentsError) throw new ApiError(503, "near_unavailable", "NEAR Intents is not reachable right now. Nothing was sent. Try again in a moment.");
-    throw err;
+    if (!(err instanceof NearIntentsError)) throw err;
+    if (err.kind === "auth") {
+      deps.logger?.error({ kind: err.kind, status: err.status, err: err.message }, "NEAR Intents refused our credentials; payouts to NEAR are off until the key is fixed");
+      throw new ApiError(502, "near_misconfigured", "Paying out to NEAR is not working right now. Nothing was sent. Tender has been told.");
+    }
+    if (err.kind === "bad_request") {
+      deps.logger?.warn({ kind: err.kind, status: err.status, err: err.message }, "NEAR Intents refused a payout request");
+      throw new ApiError(502, "route_failed", "NEAR Intents would not take this payout. Nothing was sent.");
+    }
+    deps.logger?.warn({ kind: err.kind, status: err.status, err: err.message }, "NEAR Intents could not be reached for a payout");
+    throw new ApiError(503, "near_unavailable", "NEAR Intents is not reachable right now. Nothing was sent. Try again in a moment.");
   }
 }
+
+/** Payouts prepared but not yet signed, per merchant. Each one holds a live deposit address at NEAR Intents. */
+const MAX_UNSIGNED = 10;
 
 const BAD_ACCOUNT = "That is not a valid NEAR account (for example alice.near, or a 64-character hex address).";
 
 /** A dry run: would NEAR Intents take this, and roughly what would the recipient get? Moves and creates nothing. */
 export async function quoteNearTransfer(deps: NearTransferDeps, merchant: Merchant, input: { to: string; amount: string }): Promise<z.output<typeof S.QuoteTransferResult>> {
   if (!isNearAccountId(input.to)) return { ok: false, field: "to", message: BAD_ACCOUNT };
-  return viaNear(() => quoteTransfer(direct(deps), merchant, { dest_chain: "near", to: input.to, amount: input.amount }));
+  return viaNear(deps, () => quoteTransfer(direct(deps), merchant, { dest_chain: "near", to: input.to, amount: input.amount }));
 }
 
 /** Step 1: validate and return what the wallet must sign. Moves nothing. */
 export async function prepareNearTransfer(deps: NearTransferDeps, merchant: Merchant, input: { to: string; amount: string; note?: string }) {
   if (!isNearAccountId(input.to)) throw validation({ "lines.0.to": BAD_ACCOUNT });
-  return viaNear(() =>
+  // Every prepare makes a live deposit address at NEAR Intents, on Tender's shared key. A merchant who keeps preparing
+  // without ever signing (a script, a double-click) must not be able to spend that allowance or leave a pile behind.
+  const unsigned = await deps.db.transfer.count({
+    where: { merchantId: merchant.id, status: "AWAITING_SIGNATURE", expiresAt: { gt: (deps.now ?? (() => new Date()))() }, lines: { some: { route: NEAR_ROUTE } } },
+  });
+  if (unsigned >= MAX_UNSIGNED) throw new ApiError(429, "too_many_pending", "You have several NEAR payouts waiting for your signature. Sign or let them expire (15 minutes) first.");
+  return viaNear(deps, () =>
     prepareTransfer(direct(deps), merchant, { kind: "PAYOUT", lines: [{ to: input.to, amount: input.amount, dest_chain: "near" }], note: input.note }),
   );
 }

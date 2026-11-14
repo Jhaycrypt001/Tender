@@ -37,6 +37,8 @@ class FakeChain implements TransferChain {
 class FakeNear {
   asked: QuoteRequest[] = [];
   quoteError: NearIntentsError | null = null;
+  /** Fails only the real quote (the one that makes a deposit address). */
+  mintError: NearIntentsError | null = null;
   state = "PENDING_DEPOSIT";
   tokens = async () => [
     { assetId: MONAD_USDC, symbol: "USDC", blockchain: "monad", decimals: 6 },
@@ -45,6 +47,7 @@ class FakeNear {
   quote = async (req: QuoteRequest): Promise<QuoteResponse> => {
     this.asked.push(req);
     if (this.quoteError) throw this.quoteError;
+    if (!req.dry && this.mintError) throw this.mintError;
     return { correlationId: "c-1", quote: { amountIn: req.amount, amountOut: "24900000", amountOutFormatted: "24.9", timeEstimate: 20, ...(req.dry ? {} : { depositAddress: DEPOSIT }) } };
   };
   status = async (_depositAddress?: string) => ({ state: this.state, deliveredTx: null });
@@ -124,6 +127,10 @@ describe("quote", () => {
     expect(bad.json()).toMatchObject({ ok: false, field: "to" });
     expect(near.asked).toHaveLength(0);
 
+    // A well-formed account that does not exist: 1Click answers a bare 400 "Internal server error" (seen live).
+    near.quoteError = new NearIntentsError("bad_request", "Internal server error", 400);
+    expect((await post("/v1/transfers/near-direct/quote", { to: "no-such-account.near", amount: "25" })).json()).toMatchObject({ ok: false, field: "to" });
+
     near.quoteError = new NearIntentsError("bad_request", "Amount is too low for bridge, try at least 1500000", 400);
     const small = await post("/v1/transfers/near-direct/quote", { to: "alice.near", amount: "1" });
     expect(small.json()).toMatchObject({ ok: false, field: "amount", message: expect.stringContaining("1.5 USDC") });
@@ -134,6 +141,58 @@ describe("quote", () => {
     const res = await post("/v1/transfers/near-direct/quote", { to: "alice.near", amount: "25" });
     expect(res.statusCode).toBe(503);
     expect(res.json().error).toBe("near_unavailable");
+  });
+});
+
+describe("when NEAR Intents is not behaving", () => {
+  it("tells a refused key or request apart from an outage: only an outage says try again", async () => {
+    near.quoteError = new NearIntentsError("auth", "invalid api key", 401);
+    const auth401 = await post("/v1/transfers/near-direct/quote", { to: "alice.near", amount: "5" });
+    expect(auth401.statusCode).toBe(502);
+    expect(auth401.json().error).toBe("near_misconfigured");
+
+    near.quoteError = new NearIntentsError("bad_request", "refundTo is something odd", 400);
+    // Not read as a bad account: the refusal is not about the recipient.
+    expect((await post("/v1/transfers/near-direct/quote", { to: "alice.near", amount: "5" })).json()).toMatchObject({ ok: false, field: "chain" });
+    near.quoteError = null;
+    near.mintError = new NearIntentsError("bad_request", "refundTo is something odd", 400);
+    const refused = await post("/v1/transfers/near-direct", { to: "alice.near", amount: "5" });
+    expect(refused.statusCode).toBe(502);
+    expect(refused.json().error).toBe("route_failed");
+    expect(await t.db.transfer.count()).toBe(0);
+  });
+
+  it("stops a merchant piling up unsigned payouts, each of which holds a live deposit address", async () => {
+    for (let i = 0; i < 10; i++) expect((await post("/v1/transfers/near-direct", { to: "alice.near", amount: "1" })).statusCode).toBe(201);
+    const eleventh = await post("/v1/transfers/near-direct", { to: "alice.near", amount: "1" });
+    expect(eleventh.statusCode).toBe(429);
+    expect(eleventh.json().error).toBe("too_many_pending");
+    expect(near.asked.filter((q) => !q.dry)).toHaveLength(10); // the eleventh never reached NEAR Intents
+  });
+
+  it("asks NEAR Intents once per tick when it is down, so Monad transfers are not kept waiting", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const body = (await post("/v1/transfers/near-direct", { to: "alice.near", amount: "1" })).json();
+      const submitted = await post(`/v1/transfers/near-direct/${body.id}/submit`, { signatures: await sign(body.authorizations) });
+      chain.receipts.set(submitted.json().tx_hash, "success");
+      ids.push(body.id);
+    }
+    for (const sent of chain.sent) for (const l of sent.lines) chain.used.add(l.nonce);
+    let calls = 0;
+    const down = { delivery: async () => { calls++; throw new NearIntentsError("network", "timeout"); } };
+    const run = () => reconcileTransfers({ db: t.db, chain, near: down, now: () => new Date((clock += 60_000)), config: { dailyLimit: 100, maxLines: 10, minRelayerWei: parseEther("0.02") } });
+    await run(); // confirms all three
+    calls = 0;
+    await run();
+    expect(calls).toBe(1); // three lines are waiting; one failed call is enough to know
+    // And nothing was decided on the strength of an outage.
+    expect(await t.db.transferLine.count({ where: { destStatus: "PENDING" } })).toBe(3);
+  });
+
+  it("boots when the NEAR variables are declared but blank", async () => {
+    const blank = await setupApp({ NEAR_INTENTS_API_KEY: "", NEAR_INTENTS_API_URL: "" });
+    await teardown(blank);
   });
 });
 

@@ -331,7 +331,7 @@ export const OPERATIONS: Record<string, Op> = {
     description: "Says whether NEAR Intents will take the payout and about how much USDC the recipient receives on NEAR. Separate from the Aurora-backed payouts: Tender calls NEAR Intents itself. Moves and creates nothing.",
     body: S.NearQuoteBody,
     ok: { status: 200, schema: S.QuoteTransferResult },
-    errors: [400, 409, 503],
+    errors: [400, 409, 502, 503],
   },
   "POST /v1/transfers/near-direct": {
     tag: "Transfers",
@@ -339,10 +339,10 @@ export const OPERATIONS: Record<string, Op> = {
     summary: "Step 1: prepare a payout to a NEAR account through NEAR Intents (moves nothing)",
     description:
       "Gets a one-off deposit address from NEAR Intents and returns the EIP-712 typed data the merchant's own wallet must sign, exactly as POST /v1/transfers does. " +
-      "The signed transfer goes to that address; NEAR Intents delivers to the recipient's NEAR account. Submit the signatures with POST /v1/transfers/near-direct/{id}/submit.",
+      "The signed transfer goes to that address; NEAR Intents delivers to the recipient's NEAR account. Submit the signatures with POST /v1/transfers/near-direct/{id}/submit. At most 10 payouts may wait for a signature at once (429 `too_many_pending`). 503 `near_unavailable` is a try-again; 502 `near_misconfigured` or `route_failed` is not.",
     body: S.NearTransferBody,
     ok: { status: 201, schema: S.Transfer },
-    errors: [400, 409, 429, 503],
+    errors: [400, 409, 429, 502, 503],
   },
   "POST /v1/transfers/near-direct/:id/submit": {
     tag: "Transfers",
