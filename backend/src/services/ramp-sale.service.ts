@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Prisma } from "../generated/prisma/client.js";
 import type { RampSale, RampSaleStatus } from "../generated/prisma/client.js";
 import { z } from "zod";
@@ -94,10 +95,54 @@ export async function applyRampEvent(
     if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
   }
 
-  // Already known. Only a CREATED sale can still move, and only to a final state.
+  // Already known. A sale first seen without a usable token is attributed now if this event carries one: it only
+  // ever fills an empty slot, so a sale that has an owner never changes hands.
+  if (merchantId) await db.rampSale.updateMany({ where: { rampSaleId: payload.id, merchantId: null }, data: { merchantId } });
+
+  // Only a CREATED sale can still move, and only to a final state.
   if (status === "CREATED") return "duplicate";
   const moved = await db.rampSale.updateMany({ where: { rampSaleId: payload.id, status: "CREATED" }, data: fields });
   return moved.count > 0 ? "advanced" : "duplicate";
+}
+
+/** Stores a signed event exactly as received. A retry of the same event is stored once. Returns the row's key. */
+export async function storeRampEvent(db: Db, body: unknown, merchantId: string | null): Promise<string> {
+  const id = (body as { id?: unknown } | null)?.id;
+  const eventKey = typeof id === "string" && id ? id : `nobody:${createHash("sha256").update(JSON.stringify(body)).digest("hex")}`;
+  try {
+    await db.rampEventLog.create({ data: { eventKey, merchantId, body: body as Prisma.InputJsonValue } });
+  } catch (err) {
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
+    // A retry. If the first try had no merchant and this one does, keep that, for a later replay.
+    if (merchantId) await db.rampEventLog.updateMany({ where: { eventKey, merchantId: null }, data: { merchantId } });
+  }
+  return eventKey;
+}
+
+export async function markRampEvent(db: Db, eventKey: string, error: string | null) {
+  await db.rampEventLog.update({ where: { eventKey }, data: { processedAt: error ? null : new Date(), error } });
+}
+
+/**
+ * Re-runs every stored event that was never processed (unreadable at the time, or the write failed). Safe to run any number
+ * of times: recording is idempotent. Returns how many were recorded and how many still cannot be read.
+ */
+export async function replayRampEvents(db: Db): Promise<{ recorded: number; stillFailing: number }> {
+  const out = { recorded: 0, stillFailing: 0 };
+  const pending = await db.rampEventLog.findMany({ where: { processedAt: null }, orderBy: { receivedAt: "asc" }, take: 500 });
+  for (const row of pending) {
+    const parsed = RampEvent.safeParse(row.body);
+    if (!parsed.success) {
+      out.stillFailing++;
+      await markRampEvent(db, row.eventKey, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ").slice(0, 500));
+      continue;
+    }
+    const e = parsed.data;
+    if (e.mode === "OFFRAMP" && isKnownStatus(e.type)) await applyRampEvent(db, e, e.type, row.merchantId);
+    await markRampEvent(db, row.eventKey, null);
+    out.recorded++;
+  }
+  return out;
 }
 
 const WEBHOOK_TOKEN = /^rwt_[0-9A-Za-z]{27}$/;

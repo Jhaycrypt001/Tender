@@ -72,7 +72,7 @@ export class RampService {
     const { sellable, definite } = await this.lookup(currency);
     // Only a failure is cached short. Whatever Ramp answered clearly is cached for the full hour.
     const entry: Cached = { sellable, fetchedAt: this.now().toISOString() };
-    await this.redis.set(cacheKey(currency), JSON.stringify(entry), "PX", definite ? FRESH_MS : FAILED_MS).catch(() => {});
+    await this.redis.set(cacheKey(currency), JSON.stringify(entry), "PX", definite ? FRESH_MS : FAILED_MS).catch((err: unknown) => this.cacheTrouble("write", err));
     return sellable;
   }
 
@@ -84,9 +84,19 @@ export class RampService {
       // A malformed entry is treated as no entry, so it is re-fetched rather than trusted.
       if (!Array.isArray(entry.sellable) || !entry.sellable.every((s) => typeof s === "string") || typeof entry.fetchedAt !== "string") return null;
       return entry as Cached;
-    } catch {
+    } catch (err) {
+      this.cacheTrouble("read", err);
       return null;
     }
+  }
+
+  private cacheWarnedAt = 0;
+  /** Redis being down must not break the page, but it must not be invisible either: at most one line a minute. */
+  private cacheTrouble(op: "read" | "write", err: unknown) {
+    const at = this.now().getTime();
+    if (at - this.cacheWarnedAt < 60_000) return;
+    this.cacheWarnedAt = at;
+    this.logger.warn({ op, err: err instanceof Error ? err.message : String(err) }, "ramp corridor cache unavailable: asking Ramp directly");
   }
 
   private async lookup(currency: string): Promise<{ sellable: string[]; definite: boolean }> {

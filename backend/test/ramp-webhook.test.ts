@@ -3,6 +3,7 @@ import { Writable } from "node:stream";
 import stringify from "fast-json-stable-stringify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as S from "../contract/schemas.js";
+import { replayRampEvents } from "../src/services/ramp-sale.service.js";
 import { merchant, resetDb, setupApp, teardown, type TestContext } from "./helpers.js";
 
 const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "secp256k1" });
@@ -25,6 +26,7 @@ afterAll(() => teardown(t));
 beforeEach(async () => {
   await resetDb(t.db);
   await t.db.rampSale.deleteMany();
+  await t.db.rampEventLog.deleteMany();
   await t.redis.flushdb();
   lines.splice(0);
 });
@@ -236,6 +238,50 @@ describe("POST /webhooks/ramp", () => {
     badAmount.payload.crypto.amount = "1.5";
     expect((await post(badAmount, m)).statusCode).toBe(400);
     expect(await t.db.rampSale.count()).toBe(0);
+  });
+});
+
+describe("events that cannot be recorded straight away", () => {
+  it("keeps every signed event as received, including one it could not read, so it is not lost when Ramp stops retrying", async () => {
+    const m = await merchant(t.db);
+    const broken = { id: "evt_broken", type: "CREATED", mode: "OFFRAMP", payload: { id: "sale_broken" } };
+    expect((await post(broken, m)).statusCode).toBe(400);
+    const row = await t.db.rampEventLog.findUniqueOrThrow({ where: { eventKey: "evt_broken" } });
+    expect(row).toMatchObject({ merchantId: m.merchant.id, processedAt: null, body: broken });
+    expect(row.error).toBeTruthy();
+    expect(lines.find((l) => l.msg.includes("could not be read"))).toMatchObject({ eventId: "evt_broken", stored: true });
+
+    // A good event is stored too, and marked processed.
+    await post(event("CREATED", { eventId: "evt_ok" }), m);
+    expect((await t.db.rampEventLog.findUniqueOrThrow({ where: { eventKey: "evt_ok" } })).processedAt).not.toBeNull();
+  });
+
+  it("replays a stored event that was never recorded, once, for the merchant it arrived for", async () => {
+    const m = await merchant(t.db);
+    // Stored, then the write failed (a crash, a deploy): readable, but never recorded.
+    await t.db.rampEventLog.create({ data: { eventKey: "evt_lost", merchantId: m.merchant.id, body: event("RELEASED", { eventId: "evt_lost", saleId: "sale_lost" }) } });
+    await t.db.rampEventLog.create({ data: { eventKey: "evt_junk", merchantId: m.merchant.id, body: { id: "evt_junk" } } });
+
+    expect(await replayRampEvents(t.db)).toEqual({ recorded: 1, stillFailing: 1 });
+    expect(await replayRampEvents(t.db)).toEqual({ recorded: 0, stillFailing: 1 });
+    const sale = await t.db.rampSale.findUniqueOrThrow({ where: { rampSaleId: "sale_lost" } });
+    expect(sale).toMatchObject({ merchantId: m.merchant.id, status: "RELEASED" });
+    expect(await t.db.rampSale.count()).toBe(1);
+  });
+
+  it("files an unattributed sale under the merchant a later event names, and never takes it from one that has it", async () => {
+    const m = await merchant(t.db);
+    await post(event("CREATED"), undefined);
+    expect((await t.db.rampSale.findUniqueOrThrow({ where: { rampSaleId: "sale_1" } })).merchantId).toBeNull();
+    await post(event("RELEASED"), m);
+    expect((await t.db.rampSale.findUniqueOrThrow({ where: { rampSaleId: "sale_1" } })).merchantId).toBe(m.merchant.id);
+  });
+
+  it("does not fail a signed event because the token appears twice in the URL", async () => {
+    const m = await merchant(t.db);
+    const path = await widgetPath(m);
+    expect((await post(event("CREATED"), `${path}&t=another`)).statusCode).toBe(204);
+    expect(await t.db.rampSale.count()).toBe(1);
   });
 });
 

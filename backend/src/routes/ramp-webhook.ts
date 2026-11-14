@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { verifyRampSignature } from "../lib/ramp-signature.js";
-import { applyRampEvent, isKnownStatus, merchantForWebhookToken, RampEvent } from "../services/ramp-sale.service.js";
+import { applyRampEvent, isKnownStatus, markRampEvent, merchantForWebhookToken, RampEvent, storeRampEvent } from "../services/ramp-sale.service.js";
 
 /**
  * POST /webhooks/ramp — Ramp Network tells us a cash-out changed state.
@@ -12,12 +12,14 @@ import { applyRampEvent, isKnownStatus, merchantForWebhookToken, RampEvent } fro
  *
  * Order matters:
  *   1. Verify Ramp's signature over the body. Nothing in an unverified body is read, trusted or logged.
- *   2. Parse it. A signed event we cannot parse is a LOUD 400 (Ramp's retries will not fix it, but the
+ *   2. Store it as received (RampEventLog), before anything reads it: Ramp stops retrying after four tries, so an event
+ *      we cannot read, or hit a bug on, must still exist to be replayed (`replayRampEvents`).
+ *   3. Parse it. A signed event we cannot parse is a LOUD 400 (Ramp's retries will not fix it, but the
  *      error line names the event so someone does).
- *   3. Work out the merchant from `?t=`, the merchant's webhook token (see `merchantForWebhookToken`).
+ *   4. Work out the merchant from `?t=`, the merchant's webhook token (see `merchantForWebhookToken`).
  *      Query parameters are not signed, so the token is only looked up: an unknown one keeps the sale
  *      unattributed instead of dropping it.
- *   4. Record, idempotently.
+ *   5. Record, idempotently.
  *
  * Answers 204 only once the sale is stored. Ramp retries four times, three minutes apart, then stops, so
  * a 2xx we did not earn would lose the sale for good.
@@ -44,10 +46,17 @@ export function rampWebhookRoutes(app: FastifyInstance, deps: { db: Db; publicKe
       return reply.code(401).send({ error: "unauthorized", message: "Invalid signature" });
     }
 
+    // `?t=a&t=b` arrives as an array. It must not throw after the signature passed: it just names no merchant.
+    const query = Query.safeParse(req.query);
+    const t = query.success ? query.data.t : undefined;
+    const merchantId = await merchantForWebhookToken(deps.db, t);
+    const eventKey = await storeRampEvent(deps.db, req.body, merchantId);
+
     const parsed = RampEvent.safeParse(req.body);
     if (!parsed.success) {
-      const id = (req.body as { id?: unknown }).id;
-      req.log.error({ eventId: typeof id === "string" ? id : null, issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, "signed ramp webhook could not be read");
+      const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      await markRampEvent(deps.db, eventKey, issues.join("; ").slice(0, 500));
+      req.log.error({ eventId: eventKey, issues, stored: true }, "signed ramp webhook could not be read: stored, replay it once the reader is fixed");
       return reply.code(400).send({ error: "validation", message: "Unreadable event" });
     }
     const event = parsed.data;
@@ -55,16 +64,16 @@ export function rampWebhookRoutes(app: FastifyInstance, deps: { db: Db; publicKe
     // Signed and readable, but not something we record. Acknowledged so Ramp does not retry it.
     if (event.mode !== "OFFRAMP" || !isKnownStatus(event.type)) {
       req.log.warn({ eventId: event.id, mode: event.mode, type: event.type }, "ramp webhook ignored: not an off-ramp event we record");
+      await markRampEvent(deps.db, eventKey, null);
       return reply.code(204).send();
     }
 
-    const { t } = Query.parse(req.query);
-    const merchantId = await merchantForWebhookToken(deps.db, t);
     if (!merchantId) {
       req.log.error({ eventId: event.id, saleId: event.payload.id }, "ramp sale has no known merchant: stored unattributed, needs a manual look");
     }
 
     const outcome = await applyRampEvent(deps.db, event, event.type, merchantId);
+    await markRampEvent(deps.db, eventKey, null);
     req.log.info({ eventId: event.id, saleId: event.payload.id, type: event.type, outcome, merchantId }, "ramp webhook recorded");
     return reply.code(204).send();
   });

@@ -370,6 +370,23 @@ enum RampSaleStatus {
 /// more than once, and the same event can be retried. Status only moves forward
 /// (CREATED to RELEASED or EXPIRED) and never back, so a late retry of an old
 /// event cannot undo a payout.
+/// Every signed Ramp event, stored as it arrived BEFORE anything reads it. Ramp retries four times and stops, so an event
+/// we could not read (or hit a bug on) would otherwise be gone. processedAt stays null until it was recorded or
+/// deliberately ignored; `replayRampEvents` re-runs the rest. Holds Ramp's payload as sent.
+model RampEventLog {
+  id          String    @id @default(cuid())
+  /// Ramp's event id, or a hash of the body when it had none. Unique: a retry is stored once.
+  eventKey    String    @unique
+  /// Resolved from `?t=` when it arrived. Null when the token was absent or unknown.
+  merchantId  String?
+  body        Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  error       String?
+
+  @@index([processedAt])
+}
+
 model RampSale {
   /// "rsl_" + base62. Merchant-facing.
   id              String         @id
