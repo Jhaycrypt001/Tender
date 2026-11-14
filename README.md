@@ -69,11 +69,11 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
 
 Before this window, NEAR reached Tender only as one of thirty source chains inside a partner's routing. Now `backend/src/near/` calls the NEAR Intents 1Click API itself, to send money out of a merchant's own wallet to a **NEAR account** such as `alice.near`. Aurora is not involved in that path. Track: **Real-World Money** — merchant payments, invoicing and stablecoin rails.
 
-> **This is an existing project, and it says so.** Tender was built for the Metropolis hackathon (Aurora Intents × Monad). Only the NEAR integration below was built in the NEAR window, and that is the part to judge.
+> **This is an existing project, and it says so.** Tender existed before this hackathon. Only the NEAR integration below was built in the NEAR window, and that is the part to judge.
 
 | | Commits | What it is |
 |---|---|---|
-| **Baseline** | everything up to [`2e36d35`](https://github.com/Jhaycrypt001/Tender/commit/2e36d35) (13 Oct 2026) | The whole Metropolis project: checkout, poller, webhooks, dashboard, payouts through Aurora |
+| **Baseline** | everything up to [`2e36d35`](https://github.com/Jhaycrypt001/Tender/commit/2e36d35) (13 Oct 2026) | The whole existing project: checkout, poller, webhooks, dashboard, payouts through Aurora |
 | Hardening in the window | [`948f43d`](https://github.com/Jhaycrypt001/Tender/commit/948f43d), [`ccce1f5`](https://github.com/Jhaycrypt001/Tender/commit/ccce1f5) | Reliability fixes from an audit (late money, outages, idempotency, safer transfers). Not NEAR work |
 | **The NEAR integration** | [`6507bff`](https://github.com/Jhaycrypt001/Tender/commit/6507bff), [`7e7ec71`](https://github.com/Jhaycrypt001/Tender/commit/7e7ec71) | Direct NEAR Intents payouts, the `/app/pay/near` page, tests, and the review fixes |
 
@@ -820,7 +820,7 @@ Easy to break, expensive to debug. Each one cost real time to find.
 
 ## Credits
 
-Built for the **Metropolis hackathon**, Aurora Intents × Monad bounty. The direct NEAR payout path was added for the **NEAR hackathon** (November 2026).
+The direct NEAR payout path was added for the **NEAR hackathon** (November 2026).
 
 - **[Aurora](https://aurora.dev)** — persistent deposit addresses and cross-chain routing via **[NEAR Intents](https://near.org/intents)**
 - **[Monad](https://monad.xyz)** — chain 143, the settlement layer

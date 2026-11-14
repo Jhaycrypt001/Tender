@@ -10,7 +10,7 @@
 
 Tender is an **any-chain crypto checkout**. A buyer pays with whatever asset they already hold on any of 31+ chains (BTC, SOL, USDT on Tron, USDC on Base…). The merchant is settled in **one asset on Monad**. Nobody bridges, nobody switches networks, nobody needs MON.
 
-This is for the **Metropolis hackathon, Aurora Intents × Monad bounty**. It is judged on a **live, non-mocked** integration.
+This builds on Aurora Intents and settles on Monad. It is built against a **live, non-mocked** integration.
 
 ### The one idea that defines the whole backend
 

@@ -1,6 +1,6 @@
 # Tender — Demo Script
 
-The live demo for the Metropolis hackathon (Aurora Intents × Monad bounty). It follows BACKEND.md §13, corrected for what Aurora actually does (verified live, 26 September 2026).
+The live demo of Tender's Aurora Intents and Monad integration. It follows BACKEND.md §13, corrected for what Aurora actually does (verified live, 26 September 2026).
 
 **The bounty judges a live, non-mocked integration.** Every beat below uses real Aurora and real funds. Nothing is staged.
 
