@@ -15,6 +15,7 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
 [![Docs](https://img.shields.io/badge/docs-%2Fdocs-121111?style=for-the-badge&labelColor=121111)](https://tenderr.xyz/docs)
 [![Chains](https://img.shields.io/badge/chains-30-c48535?style=for-the-badge&labelColor=121111)](#the-thirty-chains)
 [![Settles on](https://img.shields.io/badge/settles%20on-Monad%20·%20143-121111?style=for-the-badge&labelColor=121111)](https://monad.xyz)
+[![NEAR](https://img.shields.io/badge/NEAR%20Intents-direct%20payouts-c48535?style=for-the-badge&labelColor=121111)](#built-for-the-near-hackathon)
 
 <br/>
 
@@ -30,6 +31,7 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
 
 ## Table of contents
 
+- [Built for the NEAR hackathon](#built-for-the-near-hackathon)
 - [The problem](#the-problem)
 - [What Tender actually does](#what-tender-actually-does)
 - [The one idea](#the-one-idea)
@@ -43,6 +45,7 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
   - [System overview](#system-overview)
   - [The whole system](#the-whole-system)
   - [Sending money out](#sending-money-out)
+  - [Sending money to NEAR, directly](#sending-money-to-near-directly)
   - [The invoice state machine](#the-invoice-state-machine)
   - [The poller](#the-poller)
   - [Why NEEDS_RECOVERY exists](#why-needs_recovery-exists)
@@ -52,10 +55,56 @@ You receive one asset on Monad. No bridges. No network switching. No MON to hold
 - [Repository layout](#repository-layout)
 - [Running it locally](#running-it-locally)
 - [Verified against Aurora, live](#verified-against-aurora-live)
+- [Verified against NEAR Intents, live](#verified-against-near-intents-live)
 - [Project status](#project-status)
 - [Design system](#design-system)
 - [Conventions that are load-bearing](#conventions-that-are-load-bearing)
 - [Credits](#credits)
+
+---
+
+## Built for the NEAR hackathon
+
+**Tender already settled everything through NEAR Intents, by way of Aurora. For this hackathon it now also pays out through NEAR Intents directly, with a client Tender wrote itself.**
+
+Before this window, NEAR reached Tender only as one of thirty source chains inside a partner's routing. Now `backend/src/near/` calls the NEAR Intents 1Click API itself, to send money out of a merchant's own wallet to a **NEAR account** such as `alice.near`. Aurora is not involved in that path. Track: **Real-World Money** — merchant payments, invoicing and stablecoin rails.
+
+> **This is an existing project, and it says so.** Tender was built for the Metropolis hackathon (Aurora Intents × Monad). Only the NEAR integration below was built in the NEAR window, and that is the part to judge.
+
+| | Commits | What it is |
+|---|---|---|
+| **Baseline** | everything up to [`2e36d35`](https://github.com/Jhaycrypt001/Tender/commit/2e36d35) (13 Oct 2026) | The whole Metropolis project: checkout, poller, webhooks, dashboard, payouts through Aurora |
+| Hardening in the window | [`948f43d`](https://github.com/Jhaycrypt001/Tender/commit/948f43d), [`ccce1f5`](https://github.com/Jhaycrypt001/Tender/commit/ccce1f5) | Reliability fixes from an audit (late money, outages, idempotency, safer transfers). Not NEAR work |
+| **The NEAR integration** | [`6507bff`](https://github.com/Jhaycrypt001/Tender/commit/6507bff), [`7e7ec71`](https://github.com/Jhaycrypt001/Tender/commit/7e7ec71) | Direct NEAR Intents payouts, the `/app/pay/near` page, tests, and the review fixes |
+
+**The diff to read: [`ccce1f5...7e7ec71`](https://github.com/Jhaycrypt001/Tender/compare/ccce1f5...7e7ec71).** The write-up is [`docs/NEAR-INTENTS.md`](docs/NEAR-INTENTS.md).
+
+**What it does**
+
+- **A live quote as you type.** The merchant enters a NEAR account and an amount; Tender asks NEAR Intents and shows what the recipient receives. Send stays disabled until NEAR Intents has accepted the route.
+- **Only the wallet can authorize.** The merchant's own wallet signs a transfer naming the exact amount and a 15-minute deadline. Tender relays it and pays the network fee, and cannot send anything the wallet did not sign.
+- **Tracked to the end.** Tender follows the payout until NEAR Intents reports it delivered, or refunded to the wallet. The transfer page shows **Via NEAR Intents**.
+- **Fails safely.** A NEAR Intents outage cannot hold up other payments, a real quote is never retried blind (each one makes a new deposit address), a refused key is told apart from an outage, and every safety guard has a test that fails when the guard is removed.
+
+The flow is drawn in [Sending money to NEAR, directly](#sending-money-to-near-directly).
+
+**Try it** — the first command needs no API key and moves no money:
+
+```bash
+cd backend && npm install
+npm run near:smoke -- alice.near 0x<a-monad-address> 5   # a real quote and a real one-off deposit address
+docker compose up -d --wait                              # Postgres and Redis, for the tests
+npx vitest run test/near-client.test.ts test/near-transfer.test.ts   # 17 tests
+```
+
+**What is real, what is not**
+
+- **Real:** the NEAR Intents calls. `near:smoke` and the observations in [Verified against NEAR Intents, live](#verified-against-near-intents-live) were made against the live API.
+- **Faked in the tests:** NEAR Intents and Monad, so the tests spend nothing. They cover the client, the route, the signing flow and delivery tracking.
+- **Not new:** the money leg, a signed transfer relayed on Monad, is the same pipeline Aurora payouts already use. It delivered a real payout to Base on mainnet (see [Verified against Aurora, live](#verified-against-aurora-live)).
+- **Limits:** the recipient receives USDC on NEAR only; NEAR Intents has no testnet, so every live check is mainnet; without a NEAR Intents API key its unauthenticated fee applies; the delivery's NEAR transaction hash is logged, not stored. More in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+
+**Built with AI assistance.** Much of the code, tests and documentation in this window were written with Claude Code (Anthropic), then run, reviewed and deployed by the team. Libraries are listed under [Credits](#credits).
 
 ---
 
@@ -359,6 +408,22 @@ flowchart LR
 
 The wallet signs exactly who gets what, so the relayer can submit but never change a send. For another chain, Tender mints a one-off Aurora address that delivers to the recipient there, and follows Aurora until it lands.
 
+### Sending money to NEAR, directly
+
+```
+   Merchant's wallet on Monad (Privy, self-custodial)
+         │  Tender asks NEAR Intents for a quote ─▶ a one-off deposit address on Monad
+         │  signs one EIP-3009 authorization to that address — no gas needed
+         ▼
+   Tender relayer — submits it in one Monad transaction, pays the gas
+         │
+         └──▶ one-off NEAR Intents address on Monad ──▶ NEAR Intents ──▶ alice.near, USDC on NEAR
+                                                              │
+   Tender worker ◀── status: SUCCESS · REFUNDED · FAILED ─────┘   (refunded money returns to the wallet)
+```
+
+This reuses everything that makes a payout safe — the balance and daily-limit checks, the wallet-signed authorization, the relayer and the Monad confirmation. Only the carrier changes: `src/near/` makes the quote and the address and reports the delivery, where Aurora does for the other chains. A transfer line records its carrier (`route`, null for Aurora), and the delivery tracker asks the matching service. A NEAR Intents outage costs the tracker one short call, never a long walk down the list. Details: [`docs/NEAR-INTENTS.md`](docs/NEAR-INTENTS.md).
+
 **The seam is the contract.** `frontend/src/lib/docs.ts` renders a public API reference at [`/docs`](https://tenderr.xyz/docs). The paths, field names, invoice states, ID prefixes and webhook payloads there are the real ones the backend is built to. Because that page is already published, changing one is a breaking change to a public promise — not a refactor.
 
 ### The invoice state machine
@@ -515,6 +580,8 @@ The `token` is **not** the invoice id. It is unguessable, carries nothing mercha
 | | `POST` | `/v1/transfers/quote` | Dry run of a cross-chain send: what arrives, or why it cannot. |
 | | `POST` | `/v1/transfers` · `/v1/transfers/:id/submit` | Payout, refund or split: prepare, then submit the wallet's signatures. |
 | | `GET` | `/v1/transfers` · `/v1/transfers/:id` | Money sent out, with delivery status per recipient. |
+| | `POST` | `/v1/transfers/near-direct/quote` | Dry run of a payout to a NEAR account, through NEAR Intents directly. |
+| | `POST` `GET` | `/v1/transfers/near-direct` · `/:id/submit` · `/:id` | A payout to a NEAR account: prepare, submit the wallet's signatures, follow it. |
 | | `GET` | `/v1/merchant/balance` | What the settlement wallet holds, read on-chain. |
 | | `GET` `PATCH` | `/v1/merchant` | Settings, settlement address, webhook URL. |
 | | `GET` `POST` | `/v1/merchant/api-keys` | List / create. Shown once, max 10 active. |
@@ -581,7 +648,7 @@ tender/
 │   │       ├── page.tsx       sign-in (Privy, Google)
 │   │       └── (dash)/        ⭐ the auth boundary — every merchant screen
 │   │           ├── home/  activity/  checkout/  links/
-│   │           ├── pay/       refund · payout · split
+│   │           ├── pay/       refund · payout · near · split
 │   │           ├── earn/  ramps/  ask/
 │   │           └── settings/  developers (API keys)
 │   ├── src/components/
@@ -601,11 +668,16 @@ tender/
 │       ├── routes/            HTTP only: validate → service → response
 │       ├── services/          all business logic
 │       ├── aurora/            ⭐ the ONLY place that talks to Aurora
+│       ├── near/              ⭐ the ONLY place that talks to NEAR Intents
 │       ├── workers/           poller · webhook · email · loop
 │       └── lib/               crypto, ids, money, rate-limit, metrics
 │
 └── docs/
     ├── INTEGRATION.md         the frontend ↔ backend integration contract
+    ├── NEAR-INTENTS.md        ⭐ the direct NEAR Intents payout path
+    ├── API_NOTES.md           what the live APIs were observed to do
+    ├── LIMITATIONS.md         what Tender does not do, or does with a catch
+    ├── THREAT_MODEL.md        what is protected, from whom, and the known gaps
     ├── ASSISTANT.md           the in-dashboard Ask assistant
     ├── WELCOME-EMAIL.md       merchant onboarding email
     └── OFFRAMP.md             the post-hackathon fiat off-ramp
@@ -641,9 +713,10 @@ npm run dev:worker  # poller + webhook workers, in a second terminal
 
 | Script | What it does |
 |---|---|
-| `npm test` | about 390 tests — unit, plus integration against real Postgres and Redis |
+| `npm test` | about 410 tests — unit, plus integration against real Postgres and Redis |
 | `npm run e2e:local` | the whole merchant flow against the **real** Aurora API, moving no money |
 | `npm run aurora:smoke` | proves the API key and mints a probe address |
+| `npm run near:smoke` | a real NEAR Intents quote and deposit address, no key needed, moving no money |
 | `npm run aurora:tokens` | dumps Aurora's live token list |
 | `npm run aurora:measure` | measures per-chain deposit minimums (7–13 min for all 30) |
 | `npm run merchant:create` | creates a merchant and prints an API key once |
@@ -676,6 +749,22 @@ Not assumed, not read off a blog post — probed against the real API with a rea
 
 ---
 
+## Verified against NEAR Intents, live
+
+Probed against the real 1Click API on **2026-11-14**, moving no money. The full notes are in [`docs/API_NOTES.md`](docs/API_NOTES.md).
+
+| What was observed | What it forced |
+|---|---|
+| A dry quote is synchronous, free, and needs no key | The form can quote as the merchant types |
+| **A real quote is not idempotent**: the same request twice returned two different deposit addresses | A real quote is never retried; only the address Tender stored is ever signed to |
+| **There is no testnet** | Tests use a fake; the smoke script makes real quotes and sends nothing |
+| A quote's 2xx is not a delivery; only `/v0/status` says `SUCCESS`, `REFUNDED` or `FAILED` | Delivery is tracked separately, and an unknown state reads as "still going", never as failed |
+| An unknown deposit address is a 404, also before the first deposit | Read as "not started", logged quietly |
+| Every refusal is HTTP 400 with the cause only in the text; a nonexistent NEAR account answers a bare `Internal server error` | The refusal is read from its text, and only the two known recipient messages blame the account |
+| 5 USDC on Monad quoted about 4.99 USDC on NEAR, about 20 seconds | The quote shown to the merchant is NEAR Intents' own |
+
+---
+
 ## Project status
 
 Honest, because a README that oversells is worse than no README.
@@ -683,7 +772,8 @@ Honest, because a README that oversells is worse than no README.
 | Half | State |
 |---|---|
 | **Web** — landing, `/docs`, blog, dashboard, buyer checkout | **Built and deployed** at [tenderr.xyz](https://tenderr.xyz) |
-| **API** — invoices, poller, webhooks, recovery, keys, transfers | **Built and deployed.** about 390 tests cover the core; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each. Cross-chain sending was verified live on mainnet. |
+| **API** — invoices, poller, webhooks, recovery, keys, transfers | **Built and deployed.** about 410 tests cover the core; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each. Cross-chain sending was verified live on mainnet. |
+| **NEAR payouts** — `/app/pay/near`, `/v1/transfers/near-direct` | **Built and deployed** for the NEAR hackathon. 17 tests; quotes and deposit addresses checked live against NEAR Intents |
 | **The two halves, joined** | **Live.** The dashboard screenshots above are signed in against the deployed API — real merchant, real settlement address, real balance |
 
 **The Monad maintenance is over.** For most of the build, Monad as a destination was under maintenance on Aurora / NEAR Intents: dry quotes to Monad USDC failed from every origin, per-chain minimums could not be measured, and nothing could settle. That has been resolved, and routing to Monad works again — payouts, refunds and splits now go out to any supported chain through Aurora.
@@ -730,11 +820,14 @@ Easy to break, expensive to debug. Each one cost real time to find.
 
 ## Credits
 
-Built for the **Metropolis hackathon**, Aurora Intents × Monad bounty.
+Built for the **Metropolis hackathon**, Aurora Intents × Monad bounty. The direct NEAR payout path was added for the **NEAR hackathon** (November 2026).
 
 - **[Aurora](https://aurora.dev)** — persistent deposit addresses and cross-chain routing via **[NEAR Intents](https://near.org/intents)**
 - **[Monad](https://monad.xyz)** — chain 143, the settlement layer
 - **[Privy](https://privy.io)** — merchant sign-in and embedded wallets
+- **[NEAR Intents](https://docs.near-intents.org)** — the 1Click API Tender now calls directly for payouts to NEAR
+- **Libraries** — [Fastify](https://fastify.dev), [Prisma](https://www.prisma.io), [viem](https://viem.sh), [Zod](https://zod.dev), [Vitest](https://vitest.dev), [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com). No templates or boilerplate beyond their starters
+- **AI assistance** — Claude Code (Anthropic) wrote much of the code, tests and docs for this window; the team ran, reviewed and shipped them
 
 **Team.** Frontend — [@Jhaycrypt001](https://github.com/Jhaycrypt001) · Backend — [@Dami904](https://github.com/Dami904)
 

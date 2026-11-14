@@ -54,3 +54,17 @@ Each item says what happens, so an operator is not surprised.
 - Off-ramp (cash-out) is on the `offramp-ramp` branch, not live: it waits for a production key from Ramp Network, and
   for payout countries to be confirmed.
 - No CI. Backend tests need Postgres and Redis (`docker compose up -d --wait`). The frontend has no tests.
+
+## Payouts to NEAR (NEAR Intents, direct)
+
+- The recipient receives **USDC on NEAR** only. The merchant's settlement asset (USDC or USDT0) is what leaves Monad.
+- NEAR Intents has **no testnet**. Every live check is mainnet; the smoke script makes real quotes and deposit addresses and
+  sends nothing. The automated tests fake NEAR Intents and Monad.
+- A **real quote is not idempotent**: each one makes a new deposit address, so Tender never retries one. A prepare whose
+  reply was lost leaves an unused address behind; Tender only ever signs to the address it stored.
+- At most **10 NEAR payouts may wait for a signature** at once per merchant; each holds a live deposit address.
+- Without a NEAR Intents API key, its unauthenticated fee applies (`NEAR_INTENTS_API_KEY` is optional).
+- Delivery is read from NEAR Intents' status endpoint and trusted as reported. A state Tender does not recognise is read as
+  "still going". A delivery NEAR Intents never reports on is closed as `UNKNOWN` after 14 days, like an Aurora one.
+- The delivery's NEAR transaction hash is **logged** (`deliveryTx` on "cross-chain delivery completed"), not stored on the line.
+- NEAR payouts share the transfer daily limit and the relayer's gas budget with every other transfer.
