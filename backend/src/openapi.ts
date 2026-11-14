@@ -114,7 +114,7 @@ export const OPERATIONS: Record<string, Op> = {
     tag: "Public (checkout)",
     auth: false,
     summary: "An invoice, as the buyer may see it",
-    description: "No merchant email, settlement address, internal id or reference. `minimum` is in USD.",
+    description: "No merchant email, settlement address, internal id or reference. `minimum` is in USD. `addresses` is empty once the invoice is closed (settled, expired, cancelled or failed): deposit addresses are only handed out while it can still be paid.",
     params: ["token"],
     ok: { status: 200, schema: S.PublicInvoice },
     errors: [404],
@@ -209,7 +209,7 @@ export const OPERATIONS: Record<string, Op> = {
     tag: "Invoices",
     auth: true,
     summary: "Create an invoice and mint its deposit addresses",
-    description: "Idempotent on `reference`: a retry returns the original invoice (200). 201 when newly created.",
+    description: "Idempotent on `reference`, and on an `Idempotency-Key` header (1 to 255 printable characters) when you let Tender number the invoice: a retry returns the original invoice (200). 201 when newly created. The same key or reference with a different amount or currency is a 409.",
     body: S.CreateInvoiceInput,
     ok: { status: 201, schema: S.Invoice },
     errors: [400, 409, 502],
@@ -402,6 +402,17 @@ export const OPERATIONS: Record<string, Op> = {
     query: S.ListWebhookDeliveriesQuery,
     ok: { status: 200, schema: S.WebhookDeliveryList },
     errors: [400],
+  },
+  "POST /v1/merchant/webhook/deliveries/:id/redeliver": {
+    tag: "Merchant",
+    auth: true,
+    summary: "Send a webhook again that your server never received",
+    description:
+      "For a delivery whose retries were all used (`failed`), or that was dropped because no `webhook_url` was set. " +
+      "The event id in the payload is unchanged, so deduplicate on it. A delivery that already arrived is refused.",
+    params: ["id"],
+    ok: { status: 200, schema: S.WebhookDelivery },
+    errors: [404, 409],
   },
   "POST /v1/merchant/webhook/secret": {
     tag: "Merchant",

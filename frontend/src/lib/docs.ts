@@ -159,7 +159,7 @@ export const docs = {
 
   webhooks: {
     title: "Webhooks",
-    body: "Every state change posts to your endpoint, signed and timestamped. Delivery is at-least-once, so dedupe on the event id. The deposit events report money sent straight to your deposit address, with no invoice: their data carries payment_id, tx_hash, from_chain, amount_in and amount_settled instead of invoice fields.",
+    body: "Every state change posts to your endpoint, signed and timestamped. Delivery is at-least-once, so dedupe on the event id. invoice.late_payment means money was recorded on an invoice that had already closed; it does not change the invoice status. The deposit events report money sent straight to your deposit address, with no invoice: their data carries payment_id, tx_hash, from_chain, amount_in and amount_settled instead of invoice fields.",
     events: [
       "invoice.detected",
       "invoice.settled",
@@ -167,6 +167,7 @@ export const docs = {
       "invoice.overpaid",
       "invoice.expired",
       "invoice.needs_recovery",
+      "invoice.late_payment",
       "deposit.settled",
       "deposit.failed",
     ],

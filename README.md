@@ -504,7 +504,7 @@ The `token` is **not** the invoice id. It is unguessable, carries nothing mercha
 
 | Scope | Method | Path | |
 |---|---|---|---|
-| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Idempotent on your `reference`: the same one again returns the original. Leave `reference` out and Tender numbers the invoice ORD-001, ORD-002… |
+| **Merchant**<br/><sub>`Bearer tk_live_…`</sub> | `POST` | `/v1/invoices` | Create. Idempotent on your `reference`: the same one again returns the original. Leave `reference` out and Tender numbers the invoice ORD-001, ORD-002… (send an `Idempotency-Key` header too, so a retried create returns that invoice instead of making a second one) |
 | | `GET` | `/v1/invoices/:id` | Fetch one. |
 | | `GET` | `/v1/invoices` | List, filterable, paginated. |
 | | `POST` | `/v1/invoices/:id/cancel` | Cancel before payment. |
@@ -541,6 +541,7 @@ Tender gives merchants exactly what Aurora doesn't give Tender.
 | `invoice.overpaid` | Settled, with the excess recorded. |
 | `invoice.expired` | The deadline passed with nothing received. |
 | `invoice.needs_recovery` | Deposit succeeded, onward settlement failed. |
+| `invoice.late_payment` | Money was recorded on an invoice that had already closed (expired, underpaid or cancelled) and did not change its status. A payment that does change it sends the usual event instead, and an `expired` or `underpaid` invoice can still become `settled` if money that arrived in time is recorded afterwards. |
 
 **Signing.** `X-Tender-Signature-V2: sha256=<hmac of "<timestamp>.<rawBody>">`, sent alongside the unchanged v1 header. Because v2 covers the timestamp, a delivery older than `WEBHOOK_TOLERANCE_SECONDS` (300) can be rejected safely — **v1 signs the body only and cannot detect a replay.** Each retry is re-signed with its own fresh timestamp.
 
@@ -640,7 +641,7 @@ npm run dev:worker  # poller + webhook workers, in a second terminal
 
 | Script | What it does |
 |---|---|
-| `npm test` | 164 tests — unit, plus integration against real Postgres and Redis |
+| `npm test` | about 390 tests — unit, plus integration against real Postgres and Redis |
 | `npm run e2e:local` | the whole merchant flow against the **real** Aurora API, moving no money |
 | `npm run aurora:smoke` | proves the API key and mints a probe address |
 | `npm run aurora:tokens` | dumps Aurora's live token list |
@@ -682,7 +683,7 @@ Honest, because a README that oversells is worse than no README.
 | Half | State |
 |---|---|
 | **Web** — landing, `/docs`, blog, dashboard, buyer checkout | **Built and deployed** at [tenderr.xyz](https://tenderr.xyz) |
-| **API** — invoices, poller, webhooks, recovery, keys, transfers | **Built and deployed.** 164 tests cover the core; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each. Cross-chain sending was verified live on mainnet. |
+| **API** — invoices, poller, webhooks, recovery, keys, transfers | **Built and deployed.** about 390 tests cover the core; `e2e:local` ran the full merchant flow against the real Aurora API three times, 50 of 50 checks each. Cross-chain sending was verified live on mainnet. |
 | **The two halves, joined** | **Live.** The dashboard screenshots above are signed in against the deployed API — real merchant, real settlement address, real balance |
 
 **The Monad maintenance is over.** For most of the build, Monad as a destination was under maintenance on Aurora / NEAR Intents: dry quotes to Monad USDC failed from every origin, per-chain minimums could not be measured, and nothing could settle. That has been resolved, and routing to Monad works again — payouts, refunds and splits now go out to any supported chain through Aurora.

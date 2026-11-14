@@ -116,10 +116,11 @@ export async function checkRoute(
 }
 
 /** Mints the one-off Monad address that delivers to `to`. A fresh sender each time, so no two payouts share an address. */
-export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string): Promise<string> {
+export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string): Promise<{ address: string; sender: string }> {
+  const sender = `payout:${randomUUID()}`;
   const minted = await aurora.mintAddress({
     recipient: to,
-    sender: `payout:${randomUUID()}`,
+    sender,
     // Monad is an EVM chain: Aurora mints per address family, and every EVM chain shares one.
     depositChain: "evm",
     destinationChain: route.chain.aurora,
@@ -128,7 +129,7 @@ export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, 
   if (!isAddress(minted.depositAddress)) {
     throw new ApiError(502, "route_failed", "Could not set up that route. Nothing was sent.");
   }
-  return minted.depositAddress;
+  return { address: minted.depositAddress, sender };
 }
 
 /** The same checks as a form field error: the message goes under the field that caused it. */

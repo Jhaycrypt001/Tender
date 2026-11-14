@@ -162,7 +162,8 @@ export function Receipt({ transfer: first, settled: firstSettled, onAgain, again
   const settled = firstSettled || transfer.status === "CONFIRMED";
   const crossLines = transfer.lines.filter((l) => l.dest);
   const pending = crossLines.filter((l) => l.dest!.status === "PENDING").length;
-  const failed = crossLines.filter((l) => l.dest!.status === "FAILED").length;
+  // An UNKNOWN delivery (never confirmed in two weeks) is counted with the ones that did not arrive, so it is never shown as delivered.
+  const failed = crossLines.filter((l) => l.dest!.status === "FAILED" || l.dest!.status === "UNKNOWN").length;
   const delivered = crossLines.length - pending - failed;
 
   // Another chain: Aurora delivers a minute or two after the Monad leg, so keep asking until it has.
@@ -191,7 +192,7 @@ export function Receipt({ transfer: first, settled: firstSettled, onAgain, again
           ? "Not fully delivered."
           : "Delivered.";
   const stateText = (l: Transfer["lines"][number]) =>
-    !l.dest ? "" : l.dest.status === "DELIVERED" ? "Delivered" : l.dest.status === "FAILED" ? "Not delivered" : "Arriving";
+    !l.dest ? "" : l.dest.status === "DELIVERED" ? "Delivered" : l.dest.status === "FAILED" ? "Not delivered" : l.dest.status === "UNKNOWN" ? "Not confirmed" : "Arriving";
 
   return (
     <Card tone="quiet" marks>

@@ -22,6 +22,11 @@ const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConn
 await redis.connect();
 // A subscribed Redis connection can do nothing else, so SSE gets its own.
 const subscriber = redis.duplicate();
+// The rate limiter runs on EVERY request. The app's connection retries forever (maxRetriesPerRequest: null), so with
+// Redis down each request would hang in the limiter and the whole API with it. This one gives up after 1.5s and queues
+// nothing, and the limiter fails open (see registerRateLimits).
+const limiterRedis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false, commandTimeout: 1_500 });
+limiterRedis.on("error", () => {});
 const stream = new InvoiceStream(subscriber);
 
 const aurora = new AuroraClient({
@@ -39,7 +44,7 @@ const monad = defineChain({
 const chain = createPublicClient({ chain: monad, transport: http(config.MONAD_RPC_URL, { timeout: 10_000 }) });
 
 const transferChain = createTransferChain({ client: chain, rpcUrl: config.MONAD_RPC_URL, relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined });
-const app = await buildApp({ config, db, redis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
+const app = await buildApp({ config, db, redis, limiterRedis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
 // So a payment can name the coin the buyer sent, not just the amount.
 keepAssetSymbolsFresh(aurora, app.log);
 

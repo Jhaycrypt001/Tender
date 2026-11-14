@@ -14,16 +14,20 @@ import type { ChainCatalogueReader } from "../services/chains.service.js";
 import { merchantOf } from "./auth.js";
 
 const IdParams = z.object({ id: z.string().min(1).max(64) });
+/** Printable characters only, so a key can be logged and compared without surprises. */
+const IdempotencyKey = z.string().regex(/^[\x21-\x7e]{1,255}$/, "must be 1 to 255 printable characters, no spaces");
 
 /** Merchant invoice routes. Registered inside a `requireMerchant` scope. */
 export function invoiceRoutes(app: FastifyInstance, deps: InvoiceDeps & { catalogue: ChainCatalogueReader }) {
   app.post("/v1/invoices", async (req, reply) => {
     const input = S.CreateInvoiceInput.parse(req.body);
     const merchant = merchantOf(req);
-    const { invoice, created } = await createInvoice(deps, merchant, input);
+    const rawKey = req.headers["idempotency-key"];
+    const key = rawKey === undefined ? undefined : IdempotencyKey.parse(Array.isArray(rawKey) ? rawKey[0] : rawKey);
+    const { invoice, created } = await createInvoice(deps, merchant, input, key);
     req.log.info(
       { invoiceId: invoice.id, merchantId: merchant.id, reference: invoice.reference, amount: String(invoice.amountExpected), currency: invoice.currency, created, status: invoice.status, expiresAt: invoice.expiresAt },
-      created ? "invoice created" : "invoice create replayed (same reference)",
+      created ? "invoice created" : "invoice create replayed (same reference or Idempotency-Key)",
     );
     return reply.code(created ? 201 : 200).send(toInvoice(invoice, await deps.catalogue.minimums()));
   });

@@ -4,8 +4,12 @@ import type { AuroraClient } from "./client.js";
  * USD prices by Aurora asset id, from `GET /api/tokens`, cached briefly.
  * Used to value what a buyer sent at the moment it is detected.
  */
+const FAILED_TTL_MS = 60_000;
+
 export class PriceBook {
   private cache: { at: number; prices: Map<string, number> } | undefined;
+  /** The last failure, kept for FAILED_TTL_MS: while Aurora is down, every lookup would otherwise re-ask it (3 attempts each). */
+  private failure: { at: number; error: unknown } | undefined;
 
   constructor(
     private readonly aurora: Pick<AuroraClient, "tokens">,
@@ -22,7 +26,15 @@ export class PriceBook {
 
   private async load(): Promise<Map<string, number>> {
     if (this.cache && Date.now() - this.cache.at < this.ttlMs) return this.cache.prices;
-    const tokens = await this.aurora.tokens();
+    if (this.failure && Date.now() - this.failure.at < FAILED_TTL_MS) throw this.failure.error;
+    let tokens;
+    try {
+      tokens = await this.aurora.tokens();
+    } catch (error) {
+      this.failure = { at: Date.now(), error };
+      throw error;
+    }
+    this.failure = undefined;
     const prices = new Map<string, number>();
     for (const t of tokens) if (typeof t.price === "number") prices.set(assetKey(t.assetId), t.price);
     this.cache = { at: Date.now(), prices };

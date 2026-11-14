@@ -3,7 +3,7 @@ import { parseEther, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MULTICALL3, TOKENS, TRANSFER_WITH_AUTHORIZATION_TYPES } from "../src/lib/tokens.js";
-import { TransferRejected, type SignedLine, type TransferChain } from "../src/services/transfer-chain.js";
+import { TransferNotSent, TransferRejected, type SignedLine, type TransferChain } from "../src/services/transfer-chain.js";
 import { reconcileTransfers } from "../src/services/transfer.service.js";
 import { merchant as makeMerchant, resetDb, setupApp, teardown, type TestContext } from "./helpers.js";
 
@@ -24,6 +24,7 @@ class FakeChain implements TransferChain {
   receipts = new Map<string, "success" | "reverted">();
   rejectWith: string | null = null;
   failUnknown = false;
+  failNotSent = false;
   rpcDown = false;
 
   relayerAddress = () => "0x00000000000000000000000000000000000000aa" as Hex;
@@ -38,6 +39,7 @@ class FakeChain implements TransferChain {
   };
   send = async (token: Hex, lines: SignedLine[]) => {
     if (this.rejectWith) throw new TransferRejected(this.rejectWith);
+    if (this.failNotSent) throw new TransferNotSent("rpc timed out");
     if (this.failUnknown) throw new Error("socket hang up");
     this.sent.push({ token, lines });
     return `0x${randomBytes(32).toString("hex")}` as Hex;
@@ -219,6 +221,24 @@ describe("preparing a transfer", () => {
   });
 });
 
+describe("daily limit at submit", () => {
+  it("counts what is sent, not what is prepared: many prepared transfers cannot all be submitted past the limit", async () => {
+    const limited = await setupApp({ TRANSFER_DAILY_LIMIT: "1" }, { transferChain: forward });
+    try {
+      const m = await makeMerchant(limited.db);
+      await limited.db.merchant.update({ where: { id: m.merchant.id }, data: { settlementAddress: owner.address, settlementAsset: "USDC" } });
+      const prepare1 = async () => (await limited.app.inject({ method: "POST", url: "/v1/transfers", headers: m.auth, payload: { kind: "PAYOUT", lines: [{ to: RECIPIENT, amount: "1" }] } })).json();
+      const [a, b] = [await prepare1(), await prepare1()]; // both pass: nothing has been sent yet
+      const submit = async (p: { id: string; authorizations: never }) =>
+        limited.app.inject({ method: "POST", url: `/v1/transfers/${p.id}/submit`, headers: m.auth, payload: { signatures: await sign(p.authorizations) } });
+      const results = await Promise.all([submit(a), submit(b)]);
+      expect(results.map((r) => r.statusCode).sort()).toEqual([200, 429]);
+    } finally {
+      await teardown(limited);
+    }
+  });
+});
+
 describe("submitting signatures", () => {
   it("relays a valid signature, then confirms only when the chain says so", async () => {
     const prepared = (await prepare([{ to: RECIPIENT, amount: "12.5" }])).json();
@@ -333,6 +353,20 @@ describe("reconciling against the chain", () => {
     chain.receipts.set(s.hash, "reverted");
     for (const l of s.lines) chain.used.add(l.nonce);
     expect(await reconcile()).toMatchObject({ confirmed: 1 });
+  });
+
+  it("lets the same signatures be sent again when the network could not be reached and nothing was broadcast", async () => {
+    chain.failNotSent = true;
+    const prepared = (await prepare([{ to: RECIPIENT, amount: "5" }])).json();
+    const signatures = await sign(prepared.authorizations);
+    const res = await post(`/v1/transfers/${prepared.id}/submit`, { signatures });
+    expect(res.statusCode).toBe(503);
+    expect((await get(`/v1/transfers/${prepared.id}`)).json().status).toBe("AWAITING_SIGNATURE");
+
+    chain.failNotSent = false;
+    const again = await post(`/v1/transfers/${prepared.id}/submit`, { signatures });
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toMatchObject({ status: "SUBMITTED", tx_hash: expect.stringMatching(/^0x/) });
   });
 
   it("settles a send that errored unknown from the nonces alone", async () => {

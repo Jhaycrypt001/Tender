@@ -40,6 +40,8 @@ declare module "fastify" {
 export type AppDeps = {
   /** Test-only: replaces the call to the model provider. */
   assistantFetch?: typeof fetch;
+  /** A Redis connection that fails fast, for the rate limiter only. Without it the limiter shares the app's connection. */
+  limiterRedis?: Redis;
   /** Display-currency rates. Defaults to the live source; tests pass one with a fake fetch. */
   fx?: FxService;
   /** Sends signed transfers on Monad from the relayer. Without it the transfer routes answer 503. */
@@ -69,6 +71,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: deps.logStream ? { ...loggerOptions(config.LOG_LEVEL, false), stream: deps.logStream } : loggerOptions(config.LOG_LEVEL, config.NODE_ENV === "development"),
     // Behind a proxy in production; trust it for the client IP used in rate limits.
+    // ⚠️ `true` trusts EVERY hop, so a client could name its own IP in X-Forwarded-For if the edge passed that header
+    // through, and walk around the per-IP limits. Checked on Railway on 2026-11-11: 14 requests, each claiming a
+    // different IP, were still limited after 10, so Railway's edge overwrites the header and the limits hold.
+    // That is a property of the HOST. Repeat the check (see DEPLOY.md) before moving to another one.
     trustProxy: config.NODE_ENV === "production",
     // SSE connections are long-lived; close them on shutdown instead of
     // waiting for every buyer to navigate away.
@@ -98,7 +104,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(swagger, { mode: "static", specification: { document: buildOpenApiDocument() as never } });
   await app.register(swaggerUi, { routePrefix: "/docs", uiConfig: { persistAuthorization: true, displayRequestDuration: true } });
 
-  await registerRateLimits(app, deps.redis);
+  await registerRateLimits(app, deps.limiterRedis ?? deps.redis);
 
   app.addHook("onResponse", async (req, reply) => {
     const route = req.routeOptions.url ?? "unmatched";

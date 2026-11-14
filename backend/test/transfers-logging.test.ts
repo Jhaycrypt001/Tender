@@ -289,6 +289,43 @@ describe("cross-chain payout logging", () => {
     expect(late()).toHaveLength(1);
   });
 
+  it("keeps the Aurora sender of a cross-chain line, and closes a delivery nobody ever reported as UNKNOWN after two weeks, once", async () => {
+    const prepared = (await crossChain()).json();
+    const submitted = (await xpost(`/v1/transfers/${prepared.id}/submit`, { signatures: await sign(prepared.authorizations) })).json();
+    chain.receipts.set(submitted.tx_hash, "success");
+    for (const l of chain.sent[0]!.lines) chain.used.add(l.nonce);
+    let at = (xClock += 86_400_000);
+    const run = () => reconcileTransfers({ db: x.db, chain, aurora: aurora as never, logger, now: () => new Date(at), config: { dailyLimit: 100, maxLines: 10, minRelayerWei: parseEther("0.02") } });
+    await run();
+    expect((await x.db.transferLine.findFirstOrThrow({ where: { transferId: prepared.id } })).auroraSender).toMatch(/^payout:/);
+
+    await x.db.transfer.update({ where: { id: prepared.id }, data: { confirmedAt: new Date(at - 15 * 86_400_000) } });
+    at += 31 * 60_000;
+    await run();
+    await run();
+    const line = await x.db.transferLine.findFirstOrThrow({ where: { transferId: prepared.id } });
+    expect(line.destStatus).toBe("UNKNOWN");
+    const closed = find("cross-chain delivery was never reported by Aurora; marked unknown, needs a look").filter((l) => l.transferId === prepared.id);
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toMatchObject({ depositAddress: DEPOSIT, auroraSender: line.auroraSender, level: ERROR });
+    expect((await x.app.inject({ method: "GET", url: `/v1/transfers/${prepared.id}`, headers: xAuth })).json().lines[0].dest.status).toBe("UNKNOWN");
+  });
+
+  it("records a delivery that landed after two weeks as delivered, not as unknown", async () => {
+    const prepared = (await crossChain()).json();
+    const submitted = (await xpost(`/v1/transfers/${prepared.id}/submit`, { signatures: await sign(prepared.authorizations) })).json();
+    chain.receipts.set(submitted.tx_hash, "success");
+    for (const l of chain.sent[0]!.lines) chain.used.add(l.nonce);
+    let at = (xClock += 86_400_000);
+    const run = () => reconcileTransfers({ db: x.db, chain, aurora: aurora as never, logger, now: () => new Date(at), config: { dailyLimit: 100, maxLines: 10, minRelayerWei: parseEther("0.02") } });
+    await run();
+    await x.db.transfer.update({ where: { id: prepared.id }, data: { confirmedAt: new Date(at - 15 * 86_400_000) } });
+    lists.success.add(DEPOSIT); // landed since the last look
+    at += 31 * 60_000;
+    await run();
+    expect((await x.db.transferLine.findFirstOrThrow({ where: { transferId: prepared.id } })).destStatus).toBe("DELIVERED");
+  });
+
   it("logs a delivery Aurora reports as failed", async () => {
     const prepared = (await crossChain()).json();
     const submitted = (await xpost(`/v1/transfers/${prepared.id}/submit`, { signatures: await sign(prepared.authorizations) })).json();

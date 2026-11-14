@@ -30,8 +30,8 @@ const withAddresses = { addresses: true } as const;
 /**
  * Creates an invoice and mints its deposit addresses.
  *
- * Idempotent on (merchant, reference): a retried create returns the original
- * invoice with `created: false`. The same reference with a different amount
+ * Idempotent on (merchant, reference) and on (merchant, Idempotency-Key): a retried create returns the original
+ * invoice with `created: false`. The same reference or key with a different amount
  * or currency is a conflict, never a silent overwrite.
  *
  * Addresses are minted BEFORE anything is written. If Aurora fails, nothing
@@ -39,7 +39,7 @@ const withAddresses = { addresses: true } as const;
  * race, both mint (harmless — unused addresses cost nothing), one insert wins
  * on the unique index, and the loser returns the winner's invoice.
  */
-export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input: CreateInput) {
+export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input: CreateInput, idempotencyKey?: string) {
   const currency = input.currency.toUpperCase();
   if (!SUPPORTED_CURRENCIES.has(currency)) {
     throw validation({ currency: `must be one of ${[...SUPPORTED_CURRENCIES].join(", ")}` });
@@ -62,7 +62,12 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
     );
   }
 
-  // A reference the caller gave is the idempotency key: the same one again returns the original.
+  // An Idempotency-Key is what makes a retry safe when the merchant lets Tender pick the reference.
+  if (idempotencyKey) {
+    const existing = await findByKey(deps.db, merchant.id, idempotencyKey);
+    if (existing) return { invoice: sameOrConflict(existing, input.amount_expected, currency), created: false };
+  }
+  // A reference the caller gave is an idempotency key too: the same one again returns the original.
   if (input.reference) {
     const existing = await findByReference(deps.db, merchant.id, input.reference);
     if (existing) return { invoice: sameOrConflict(existing, input.amount_expected, currency), created: false };
@@ -87,6 +92,7 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
         token: checkoutToken(),
         merchantId: merchant.id,
         reference,
+        idempotencyKey: idempotencyKey ?? null,
         amountExpected: input.amount_expected,
         currency,
         chains,
@@ -101,7 +107,7 @@ export async function createInvoice(deps: InvoiceDeps, merchant: Merchant, input
     return { invoice, created: true };
   } catch (err) {
     if (isUniqueViolation(err)) {
-      const winner = await findByReference(deps.db, merchant.id, reference);
+      const winner = (idempotencyKey ? await findByKey(deps.db, merchant.id, idempotencyKey) : null) ?? (await findByReference(deps.db, merchant.id, reference));
       if (winner) return { invoice: sameOrConflict(winner, input.amount_expected, currency), created: false };
     }
     throw err;
@@ -209,6 +215,10 @@ async function nextReference(db: Db, merchantId: string): Promise<string> {
     if (!(await findByReference(db, merchantId, reference))) return reference;
   }
   throw new ApiError(500, "internal", "Could not number this invoice. Try again.");
+}
+
+function findByKey(db: Db, merchantId: string, idempotencyKey: string) {
+  return db.invoice.findUnique({ where: { merchantId_idempotencyKey: { merchantId, idempotencyKey } }, include: withAddresses });
 }
 
 function findByReference(db: Db, merchantId: string, reference: string) {

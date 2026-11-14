@@ -1,4 +1,11 @@
 import {
+  BaseError,
+  ContractFunctionRevertedError,
+  ExecutionRevertedError,
+  HttpRequestError,
+  InsufficientFundsError,
+  RpcRequestError,
+  TimeoutError,
   createWalletClient,
   encodeFunctionData,
   http,
@@ -41,7 +48,11 @@ export type TransferChain = {
   tokenBalance(token: Hex, owner: Hex): Promise<bigint>;
   /** Whether this authorization nonce has already been used (or cancelled) on `token`. */
   authorizationUsed(token: Hex, authorizer: Hex, nonce: Hex): Promise<boolean>;
-  /** Simulates, then sends. Resolves to the transaction hash. Throws `TransferRejected` if the chain would revert. */
+  /**
+   * Simulates, then sends. Resolves to the transaction hash. Throws `TransferRejected` if the chain would revert, and
+   * `TransferNotSent` if nothing was broadcast for a reason that says nothing about the transfer (the RPC was down, the
+   * relayer could not be prepared). Any other error means the broadcast itself may or may not have gone out.
+   */
   send(token: Hex, lines: SignedLine[]): Promise<Hex>;
   /** The outcome of a transaction, or null while it is not mined. */
   receipt(hash: Hex): Promise<{ status: "success" | "reverted" } | null>;
@@ -52,6 +63,17 @@ export class TransferRejected extends Error {
   constructor(message: string) {
     super(message);
     this.name = "TransferRejected";
+  }
+}
+
+/**
+ * Nothing was broadcast, and the chain did not judge the transfer either: the RPC timed out, or the relayer's transaction
+ * could not be built. The signatures are untouched and still good until they expire, so trying again is safe.
+ */
+export class TransferNotSent extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransferNotSent";
   }
 }
 
@@ -81,6 +103,16 @@ export function createTransferChain(opts: { client: PublicClient; rpcUrl: string
   const { client } = opts;
   const account = opts.relayerKey ? privateKeyToAccount(opts.relayerKey) : null;
   const wallet = account ? createWalletClient({ account, chain: monad, transport: http(opts.rpcUrl, { timeout: 15_000 }) }) : null;
+
+  // The relayer has ONE account nonce. Two sends building their transactions at the same moment read the same nonce, and
+  // one of them is refused ("nonce too low", "replacement underpriced") after its authorizations were already claimed.
+  // So the part that reads the nonce and broadcasts runs one send at a time. (One API process sends; the worker does not.)
+  let queue: Promise<unknown> = Promise.resolve();
+  const oneAtATime = <T>(job: () => Promise<T>): Promise<T> => {
+    const run = queue.then(job, job);
+    queue = run.catch(() => undefined);
+    return run;
+  };
 
   return {
     relayerAddress: () => account?.address ?? null,
@@ -115,10 +147,25 @@ export function createTransferChain(opts: { client: PublicClient; rpcUrl: string
       try {
         gas = await client.estimateGas({ account: account.address, ...request });
       } catch (err) {
-        throw new TransferRejected(revertReason(err));
+        // A node that could not answer (timeout, 502, rate limit) or a relayer out of gas says nothing about the transfer: fail
+        // it and its signatures are burned for nothing. Any other answer from the node is a verdict, and retrying cannot
+        // change it, so it is a rejection with the node's own reason rather than an endless "try again".
+        if (isRevert(err) || !isTransient(err)) throw new TransferRejected(revertReason(err));
+        throw new TransferNotSent(`could not simulate: ${revertReason(err)}`);
       }
 
-      return wallet.sendTransaction({ ...request, gas: (gas * GAS_MARGIN_PERCENT) / 100n, account, chain: monad });
+      return oneAtATime(async () => {
+        // Built and signed here, on their own, so a failure up to this point is known to have broadcast nothing.
+        let serialized: Hex;
+        try {
+          const prepared = await wallet.prepareTransactionRequest({ ...request, gas: (gas * GAS_MARGIN_PERCENT) / 100n, account, chain: monad });
+          serialized = await account.signTransaction(prepared as Parameters<typeof account.signTransaction>[0]);
+        } catch (err) {
+          throw new TransferNotSent(`could not prepare the relayer transaction: ${revertReason(err)}`);
+        }
+        // From here on an error is unknown: the node may have taken the transaction before the connection broke.
+        return wallet.sendRawTransaction({ serializedTransaction: serialized });
+      });
     },
 
     async receipt(hash) {
@@ -131,6 +178,28 @@ export function createTransferChain(opts: { client: PublicClient; rpcUrl: string
       }
     },
   };
+}
+
+/** Whether a simulation error is the chain refusing the call, rather than the RPC failing to answer. */
+function isRevert(err: unknown): boolean {
+  if (err instanceof BaseError && err.walk((e) => e instanceof ExecutionRevertedError || e instanceof ContractFunctionRevertedError)) return true;
+  const e = err as { shortMessage?: string; message?: string };
+  return /revert/i.test(e.shortMessage ?? e.message ?? "");
+}
+
+/**
+ * The RPC failing to answer, or the relayer being unable to pay, as opposed to the node judging the transfer. Retrying
+ * these can succeed; retrying a judgement cannot.
+ */
+function isTransient(err: unknown): boolean {
+  if (err instanceof BaseError && err.walk((e) => e instanceof HttpRequestError || e instanceof TimeoutError || e instanceof InsufficientFundsError)) return true;
+  if (err instanceof BaseError) {
+    const rpc = err.walk((e) => e instanceof RpcRequestError) as RpcRequestError | null;
+    // -32005 limit exceeded, -32603 internal error, -32000/-32004 node-side trouble reads like the messages below.
+    if (rpc && (rpc.code === -32005 || rpc.code === -32603)) return true;
+  }
+  const e = err as { shortMessage?: string; message?: string };
+  return /timed? ?out|rate.?limit|too many requests|unavailable|connection|network|fetch failed|ECONN|ENOTFOUND|header not found|try again|insufficient funds|exceeds the balance/i.test(e.shortMessage ?? e.message ?? "");
 }
 
 /** A short, readable cause from a viem simulation error. */

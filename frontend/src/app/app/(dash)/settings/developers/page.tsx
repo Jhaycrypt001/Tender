@@ -10,6 +10,7 @@ import { Timestamp } from "@/components/dash/money";
 import { getMerchant, listApiKeys, listWebhookDeliveries } from "@/lib/api/merchant";
 import type { WebhookDelivery, WebhookDeliveryStatus } from "@/lib/api/types";
 import { ApiKeysPanel } from "./keys";
+import { RedeliverButton } from "./redeliver";
 import { SigningSecretPanel } from "./secret";
 import { WebhookPanel } from "./webhook";
 
@@ -206,8 +207,11 @@ function deliveryRow(d: WebhookDelivery): Row {
         </span>
       ),
       status: (
-        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[0.75rem] ${s.className}`}>
-          {s.label}
+        <span className="flex flex-col items-start">
+          <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[0.75rem] ${s.className}`}>
+            {s.label}
+          </span>
+          {d.status === "failed" && <RedeliverButton id={d.id} />}
         </span>
       ),
       attempts: <span className="tabular-nums">{d.attempts}</span>,

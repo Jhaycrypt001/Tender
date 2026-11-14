@@ -76,6 +76,9 @@ model Invoice {
   merchantId     String
   /// The merchant's own order id.
   reference      String
+  /// The Idempotency-Key the create call carried, if any. A retry with the same key returns this invoice instead of
+  /// making a second one, which a retry cannot do through `reference` when the merchant lets Tender number the invoice.
+  idempotencyKey String?
   amountExpected Decimal       @db.Decimal(36, 18)
   currency       String
   /// Tender chain ids the buyer may pay on, e.g. ["solana", "base"]. Each maps
@@ -98,6 +101,7 @@ model Invoice {
   events    InvoiceEvent[]
 
   @@unique([merchantId, reference])
+  @@unique([merchantId, idempotencyKey])
   @@index([status, expiresAt])
 }
 
@@ -133,6 +137,10 @@ model InvoiceAddress {
   /// Per-address poll backoff: one failing address must never stall the loop.
   pollFailures Int      @default(0)
   nextPollAt   DateTime @default(now())
+  /// When Aurora last answered a poll of this address. Null until the first success. An invoice is only closed as
+  /// unpaid once this is after its window closed, and it is what alerting watches: nextPollAt cannot, because
+  /// back-off pushes it forward and hides a failing address.
+  lastPolledOkAt DateTime?
   createdAt    DateTime @default(now())
 
   invoice  Invoice   @relation(fields: [invoiceId], references: [id])
@@ -162,6 +170,9 @@ model Payment {
   outcomeTxHash    String?       @unique
   status           PaymentStatus
   firstSeenAt      DateTime      @default(now())
+  /// When Tender first wrote this row. firstSeenAt and settledAt are Aurora's times, which can be days before a
+  /// payment is found; this is what "recent" means for anything that has to notice a new row (see the email sweep).
+  recordedAt       DateTime      @default(now())
   settledAt        DateTime?
   /// The untouched Aurora payload(s), for audit.
   raw              Json
@@ -308,6 +319,9 @@ enum DestStatus {
   PENDING
   DELIVERED
   FAILED
+  /// Aurora never reported either way in the two weeks it was watched. The money may or may not have arrived; only
+  /// Aurora can say. Not the same as FAILED, which Aurora reported.
+  UNKNOWN
 }
 
 model TransferLine {
@@ -332,6 +346,9 @@ model TransferLine {
   destExpectedOut String?
   destStatus      DestStatus?
   destDeliveredAt DateTime?
+  /// The sender id the Aurora deposit address was minted under (`payout:<uuid>`). With `toAddress` it is what Aurora's
+  /// support needs to find this delivery; it was never kept before.
+  auroraSender    String?
 
   @@unique([transferId, index])
   @@index([destStatus])

@@ -11,7 +11,7 @@ import type { AuroraClient } from "../aurora/client.js";
 import { SETTLEMENT_CHAIN, chainById } from "../aurora/chains.js";
 import { amount } from "./serialize.js";
 import { checkRoute, mintRoute, payoutChains, routeFailure } from "./payout-route.js";
-import { TransferRejected, type SignedLine, type TransferChain } from "./transfer-chain.js";
+import { TransferNotSent, TransferRejected, type SignedLine, type TransferChain } from "./transfer-chain.js";
 
 /**
  * Sending money OUT of a merchant's own wallet: payouts, refunds and splits.
@@ -39,6 +39,16 @@ export type TransferConfig = {
 };
 
 type LogFn = (obj: object, msg?: string) => void;
+const rpcTroubleAt = new Map<string, number>();
+/** Monad could not be read for an in-flight transfer. It is retried every tick, so say so at most once per transfer per 5 minutes. */
+function warnRpcTrouble(logger: TransferLogger | undefined, transferId: string, err: unknown) {
+  const now = Date.now();
+  if (now - (rpcTroubleAt.get(transferId) ?? 0) < 5 * 60_000) return;
+  if (rpcTroubleAt.size > 2_000) rpcTroubleAt.clear();
+  rpcTroubleAt.set(transferId, now);
+  logger?.warn({ transferId, err: String((err as Error)?.message ?? err).slice(0, 200) }, "could not read a transfer's state from Monad: looking again next tick");
+}
+
 /** Just the three levels this service writes, so a Fastify request logger and the worker's pino logger both fit. */
 export type TransferLogger = { info: LogFn; warn: LogFn; error: LogFn };
 
@@ -298,7 +308,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
   // The wallet signs a plain Monad transfer to that one-off address; the recipient's real address
   // is kept in `destAddress` and is what the signing prompt shows. Every line is vetted BEFORE any
   // address is minted, so a split with one bad line is refused up front and nothing is created.
-  type Dest = { chain: string; address: string; asset: string; expectedOut: string | null };
+  type Dest = { chain: string; address: string; asset: string; expectedOut: string | null; sender: string };
   const dests = new Map<number, Dest>();
   if (checked.some((l) => l.destChain)) {
     const aur = requireAurora(deps);
@@ -316,8 +326,9 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
     }
     for (const [i, route] of routes) {
       const l = checked[i]!;
-      dests.set(i, { chain: route.chain.id, address: l.to, asset: route.destination.symbol, expectedOut: route.expectedOut });
-      l.to = getAddress(await mintRoute(aur, route, l.to));
+      const minted = await mintRoute(aur, route, l.to);
+      dests.set(i, { chain: route.chain.id, address: l.to, asset: route.destination.symbol, expectedOut: route.expectedOut, sender: minted.sender });
+      l.to = getAddress(minted.address);
     }
   }
 
@@ -341,7 +352,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
               toAddress: l.to,
               amount: l.amount,
               nonce: `0x${randomBytes(32).toString("hex")}`,
-              ...(d ? { destChain: d.chain, destAddress: d.address, destAsset: d.asset, destExpectedOut: d.expectedOut, destStatus: "PENDING" as const } : {}),
+              ...(d ? { destChain: d.chain, destAddress: d.address, destAsset: d.asset, destExpectedOut: d.expectedOut, destStatus: "PENDING" as const, auroraSender: d.sender } : {}),
             };
           }),
         },
@@ -468,8 +479,18 @@ export async function submitTransfer(deps: TransferDeps, merchant: Merchant, id:
   await ensureRelayerFunded(deps, chain);
 
   // ── Claim it: exactly one submit may proceed ────────────────────────────
-  const claimed = await deps.db.transfer.updateMany({ where: { id, status: "AWAITING_SIGNATURE" }, data: { status: "SUBMITTED", submittedAt: now } });
-  if (claimed.count !== 1) throw conflict("This transfer was just submitted.");
+  // The daily limit is checked here as well as when preparing: preparing counts only what was already sent, so a merchant
+  // could prepare many transfers while none was sent, then submit them all. The lock makes count-and-claim one step per
+  // merchant, so two submits at the same moment cannot both see room for one more.
+  const since = new Date(now.getTime() - 24 * 3_600_000);
+  const claim = await deps.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"transfer-limit:" + merchant.id}))`;
+    const sent = await tx.transfer.count({ where: { merchantId: merchant.id, id: { not: id }, submittedAt: { gte: since }, status: { in: ["SUBMITTED", "CONFIRMED"] } } });
+    if (sent >= deps.config.dailyLimit) return "limit" as const;
+    return (await tx.transfer.updateMany({ where: { id, status: "AWAITING_SIGNATURE" }, data: { status: "SUBMITTED", submittedAt: now } })).count;
+  });
+  if (claim === "limit") throw new ApiError(429, "daily_limit", `You have reached today's limit of ${deps.config.dailyLimit} transfers. It resets within 24 hours.`);
+  if (claim !== 1) throw conflict("This transfer was just submitted.");
   await Promise.all(lines.map((line, i) => deps.db.transferLine.update({ where: { id: line.id }, data: { signature: signatures[i]! } })));
 
   let hash: Hex;
@@ -481,6 +502,13 @@ export async function submitTransfer(deps: TransferDeps, merchant: Merchant, id:
       await deps.db.transfer.update({ where: { id }, data: { status: "FAILED", failureReason: `The network refused it, so nothing was sent. ${err.message}` } });
       deps.logger?.warn({ transferId: id, merchantId: merchant.id, reason: err.message }, "transfer refused in simulation; nothing broadcast");
       throw new ApiError(409, "rejected", "The network refused this transfer, so nothing was sent. Check your balance and try again.");
+    }
+    if (err instanceof TransferNotSent) {
+      // Nothing was broadcast and the chain gave no verdict (RPC trouble). The signatures are still valid until the window
+      // closes, so the transfer goes back to waiting for them and the same ones can be sent again.
+      await deps.db.transfer.updateMany({ where: { id, status: "SUBMITTED", txHash: null }, data: { status: "AWAITING_SIGNATURE", submittedAt: null } });
+      deps.logger?.warn({ transferId: id, merchantId: merchant.id, reason: err.message }, "transfer not sent; the network could not be reached, it can be submitted again");
+      throw new ApiError(503, "chain_unavailable", "We could not reach the network, so nothing was sent. Try again in a moment.");
     }
     // Unknown: it may or may not have been broadcast. Left SUBMITTED with no hash;
     // reconciliation settles it from the nonces on-chain.
@@ -550,7 +578,14 @@ export async function reconcileTransfers(deps: TransferDeps): Promise<{ confirme
     const token = tokenFor(t.asset);
     if (!token) continue;
 
-    const used = await Promise.all(t.lines.map((l) => chain.authorizationUsed(token.address, t.fromAddress as Hex, l.nonce as Hex).catch(() => null)));
+    const used = await Promise.all(
+      t.lines.map((l) =>
+        chain.authorizationUsed(token.address, t.fromAddress as Hex, l.nonce as Hex).catch((err: unknown) => {
+          warnRpcTrouble(deps.logger, t.id, err);
+          return null;
+        }),
+      ),
+    );
     if (used.some((u) => u === null)) continue; // RPC trouble: look again next tick
 
     const receipt = t.txHash ? await chain.receipt(t.txHash as Hex) : null;
@@ -627,6 +662,39 @@ async function reconcileDeliveries(deps: TransferDeps, now: Date) {
   // checked, slowly (every 30 minutes, for two weeks), so a late arrival is recorded instead of staying "Arriving".
   if (now.getTime() - lastSlowDeliveryCheck >= SLOW_DELIVERY_CHECK_MS) {
     lastSlowDeliveryCheck = now.getTime();
+    // Past the two weeks it is watched, a delivery that Aurora never reported either way would show "Arriving" forever.
+    // It is closed as UNKNOWN: not FAILED (Aurora never said so, and the money may have arrived), and named so someone can ask.
+    const abandoned = await deps.db.transferLine.findMany({
+      where: { destStatus: "PENDING", transfer: { status: "CONFIRMED", confirmedAt: { lt: new Date(now.getTime() - SLOW_DELIVERY_DAYS * 86_400_000) } } },
+      select: { id: true, transferId: true, toAddress: true, auroraSender: true, destChain: true, destAddress: true, destAsset: true },
+      take: 50,
+    });
+    for (const line of abandoned) {
+      // Ask once more before giving up: one that landed since the last look must be recorded as what it is, not "not confirmed".
+      try {
+        if ((await aurora.deposits(line.toAddress, "success")).length > 0) {
+          const arrived = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
+          lateDeliveryReportedAt.delete(line.id);
+          if (arrived.count === 1) deps.logger?.info({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress }, "cross-chain delivery completed");
+          continue;
+        }
+        if ((await aurora.deposits(line.toAddress, "failed")).length > 0) {
+          const lost = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
+          lateDeliveryReportedAt.delete(line.id);
+          if (lost.count === 1) deps.logger?.warn({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress }, "cross-chain delivery failed at Aurora");
+          continue;
+        }
+      } catch (err) {
+        // Aurora trouble: not closed on a guess. It stays PENDING and is looked at again at the next slow check.
+        deps.logger?.warn({ err: err instanceof Error ? err.message : String(err), transferId: line.transferId, lineId: line.id }, "could not check a cross-chain delivery before closing it; will retry");
+        continue;
+      }
+      const done = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "UNKNOWN" } });
+      lateDeliveryReportedAt.delete(line.id);
+      if (done.count === 1) {
+        deps.logger?.error({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, auroraSender: line.auroraSender, destChain: line.destChain, destAddress: line.destAddress, destAsset: line.destAsset, days: SLOW_DELIVERY_DAYS }, "cross-chain delivery was never reported by Aurora; marked unknown, needs a look");
+      }
+    }
     waiting.push(
       ...(await deps.db.transferLine.findMany({
         where: {

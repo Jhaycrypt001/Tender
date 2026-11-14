@@ -100,6 +100,39 @@ describe("AuroraClient", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
+  it("keeps the readable deposits when one entry in a list is malformed, and names the bad one once", async () => {
+    const good = { tx_hash: "good", fromChain: "base", asset_id: "a", decimals: 6, amount: "1000000", created_at: "2026-11-01T00:00:00Z", intents_account: "i", deposit_address: "0xabc", recipient: "0x1" };
+    const bad = { tx_hash: "bad_tx", amount: 12.5 };
+    const errors: Array<Record<string, unknown>> = [];
+    const fetch = vi.fn(async () => json(200, { deposits: [good, bad] }));
+    const logger = createLogger("fatal", false);
+    logger.error = ((obj: Record<string, unknown>) => errors.push(obj)) as typeof logger.error;
+    const aurora = new AuroraClient({ baseUrl: "https://aurora.test", apiKey: KEY, logger, fetch, maxAttempts: 3 });
+
+    expect((await aurora.deposits("0xabc", "received")).map((d) => d.tx_hash)).toEqual(["good"]);
+    await aurora.deposits("0xabc", "received");
+    // Polled every 10 seconds, so the same bad entry must not be reported on every poll.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ address: "0xabc", tx: "bad_tx" });
+    expect(JSON.stringify(errors)).not.toContain(KEY);
+  });
+
+  it("sends a buyer's transaction hash to Aurora once, never retrying a POST whose repeat-safety is unknown", async () => {
+    const { aurora, fetch } = client([json(500, {}), json(200, {})]);
+    await expect(aurora.submitDeposit("0xhash", "0xaddr")).rejects.toMatchObject({ kind: "upstream" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a 408, and names a 200 that is not JSON as an upstream fault rather than a network one", async () => {
+    const timeout = client([json(408, {}), json(200, MINTED)]);
+    await expect(timeout.aurora.mintAddress(MINT_INPUT)).resolves.toMatchObject({ depositAddress: "0xabc" });
+    expect(timeout.fetch).toHaveBeenCalledTimes(2);
+
+    const html = () => new Response("<html>bad gateway</html>", { status: 200, headers: { "content-type": "text/html" } });
+    const page = client([html(), html(), html()]);
+    await expect(page.aurora.mintAddress(MINT_INPUT)).rejects.toMatchObject({ kind: "upstream", message: expect.stringContaining("not JSON") });
+  });
+
   it("rejects a response that does not match the expected shape", async () => {
     const { aurora } = client([json(200, { address: "0xabc" })]);
     await expect(aurora.mintAddress(MINT_INPUT)).rejects.toMatchObject({ kind: "invalid_response" });

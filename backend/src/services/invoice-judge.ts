@@ -2,7 +2,7 @@ import type { Redis } from "ioredis";
 import type { InvoiceStatus, Prisma } from "../generated/prisma/client.js";
 import { eventId } from "../lib/ids.js";
 import { invoiceTransitions } from "../lib/metrics.js";
-import { DEPOSIT_EVENTS, depositWebhookPayload, publishInvoiceEvent, webhookEventFor, webhookPayload, type InvoiceEventWire } from "./events.js";
+import { DEPOSIT_EVENTS, LATE_PAYMENT_EVENT, depositWebhookPayload, publishInvoiceEvent, webhookEventFor, webhookPayload, type InvoiceEventWire } from "./events.js";
 import { amount } from "./serialize.js";
 import { judge } from "./settlement.js";
 
@@ -16,7 +16,8 @@ type Tx = Prisma.TransactionClient;
 type LogFn = (obj: object, msg?: string) => void;
 
 export type Transition = { token: string; event: InvoiceEventWire };
-export type ResolvedOutcome = { paymentId: string; status: "SETTLED" | "FAILED" };
+/** `created`: the payment itself was first recorded from this payout (Aurora never listed its deposit). */
+export type ResolvedOutcome = { paymentId: string; status: "SETTLED" | "FAILED"; created?: boolean };
 export type JudgeContext = { now: Date; graceMinutes: number; toleranceBps: number; logger: { info: LogFn; warn: LogFn } };
 
 /**
@@ -84,6 +85,28 @@ export async function settleInvoice(tx: Tx, invoiceId: string, opts: { mayClose:
       },
     },
   ];
+}
+
+/** Queues one invoice.late_payment webhook for each payment just recorded on an invoice that was already closed. */
+export async function notifyLatePayments(tx: Tx, invoiceId: string, paymentIds: string[], ctx: Pick<JudgeContext, "now">) {
+  if (!paymentIds.length) return;
+  const invoice = await tx.invoice.findUniqueOrThrow({
+    where: { id: invoiceId },
+    include: { merchant: { select: { webhookUrl: true } } },
+  });
+  if (!invoice.merchant.webhookUrl) return;
+  for (const paymentId of paymentIds) {
+    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    await tx.webhookDelivery.create({
+      data: {
+        merchantId: invoice.merchantId,
+        invoiceId: invoice.id,
+        event: LATE_PAYMENT_EVENT,
+        payload: webhookPayload(LATE_PAYMENT_EVENT, invoice, invoice.status, payment, ctx.now) as Prisma.InputJsonValue,
+        nextRetryAt: ctx.now,
+      },
+    });
+  }
 }
 
 /** Queues a webhook for each deposit on a standing address that has just settled or failed. */

@@ -540,7 +540,7 @@ export type TransferDestination = {
   address: string;
   asset: string;
   expected_out?: string | null;
-  status: "PENDING" | "DELIVERED" | "FAILED";
+  status: "PENDING" | "DELIVERED" | "FAILED" | "UNKNOWN";
   delivered_at?: Timestamp | null;
 };
 

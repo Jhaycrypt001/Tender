@@ -1,7 +1,8 @@
 import type { Redis } from "ioredis";
 import type { Db } from "../db/client.js";
 import { Prisma } from "../generated/prisma/client.js";
-import { conflict, notFound } from "../lib/errors.js";
+import { Decimal } from "decimal.js";
+import { conflict, notFound, validation } from "../lib/errors.js";
 import { notifyDepositOutcomes, publishTransitions, settleInvoice, type JudgeContext } from "./invoice-judge.js";
 
 /**
@@ -49,6 +50,16 @@ export async function resolvePaymentManually(deps: ResolveDeps, paymentId: strin
     const recoveryOpen = !!p.recovery && OPEN_RECOVERY.includes(p.recovery.state);
     const waiting = (p.status === "DETECTED" && !p.outcomeTxHash) || (p.status === "FAILED" && recoveryOpen);
     if (!waiting) throw conflict(`This payment is already ${p.status.toLowerCase()}. Only a payment still waiting on Aurora can be resolved by hand.`);
+
+    // The operator's word is the only proof of the amount, so it is held to what the payment could have delivered: a
+    // typo (an extra zero) would otherwise credit the merchant far more than the buyer paid, and nothing would object.
+    if (status === "SETTLED") {
+      const settled = new Decimal(input.amount_settled!);
+      if (!settled.gt(0)) throw validation({ amount_settled: "must be more than zero" });
+      if (p.amountInUsd && settled.gt(new Decimal(p.amountInUsd.toString()).mul("1.05"))) {
+        throw validation({ amount_settled: `is more than the ${p.amountInUsd.toString()} this payment was worth when it arrived` });
+      }
+    }
 
     const manual = { outcome: input.outcome, tx_hash: input.tx_hash, note: input.note, amount_settled: input.amount_settled ?? null, at: now.toISOString() };
     const updated = await tx.payment.update({

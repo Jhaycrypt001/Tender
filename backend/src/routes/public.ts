@@ -160,7 +160,10 @@ export function publicRoutes(app: FastifyInstance, deps: PublicDeps) {
     if (!OPEN_STATUSES.has(effectiveStatus(invoice))) return { accepted: false };
 
     const results = await Promise.allSettled(invoice.addresses.map((a) => deps.aurora.submitDeposit(tx_hash, a.address)));
-    req.log.info({ invoiceId: invoice.id, tx: tx_hash, accepted: results.filter((r) => r.status === "fulfilled").length, addresses: results.length }, "buyer submitted a transaction hash");
+    // Aurora ignores the addresses a hash does not belong to, so some refusals are normal. They are kept, because this
+    // log line is the only record that a buyer says they paid transaction X.
+    const refusals = [...new Set(results.flatMap((r) => (r.status === "rejected" ? [String((r.reason as Error)?.message ?? r.reason).slice(0, 120)] : [])))].slice(0, 3);
+    req.log.info({ invoiceId: invoice.id, tx: tx_hash, accepted: results.filter((r) => r.status === "fulfilled").length, addresses: results.length, refusals }, "buyer submitted a transaction hash");
     // Poll this invoice on the next tick rather than waiting out the interval.
     await deps.db.invoiceAddress.updateMany({ where: { invoiceId: invoice.id }, data: { nextPollAt: new Date() } });
     return { accepted: results.some((r) => r.status === "fulfilled") };

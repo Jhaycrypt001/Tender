@@ -4,6 +4,7 @@ import { chainById } from "../aurora/chains.js";
 import {
   renderMoneyIn,
   renderMoneyOut,
+  renderSettlementChanged,
   renderWelcome,
   sendEmail,
   type EmailConfig,
@@ -37,10 +38,34 @@ export const EMAIL_RETRY_MS = [60e3, 300e3, 1800e3, 7200e3];
 const LEASE_MS = 120_000;
 /** How often the database is searched for new money movements. */
 const SWEEP_EVERY_MS = 30_000;
-/** How far back a sweep looks. Anything older than this at the first sweep is history, not news. */
-const RECENT_MS = 60 * 60_000;
+/**
+ * How far back a sweep looks. The queue is once-only per (merchant, kind, key), so looking further back never sends
+ * anything twice: it only finds what was missed. An hour was too short: a worker that was down for two hours (a
+ * deploy, an outage) lost every email for what happened meanwhile, with nothing logged.
+ */
+const RECENT_MS = 24 * 60 * 60_000;
 /** Failures are noticed a little later than successes, so they get a longer look back. */
 const FAILURE_LOOKBACK_MS = 24 * 60 * 60_000;
+
+/** Rows read per query, and how many such pages one sweep reads at most. */
+const SWEEP_PAGE = 200;
+const SWEEP_MAX_PAGES = 10;
+
+/**
+ * Every row a query matches, a page at a time, oldest first. A single `take` read an arbitrary 200 of a day's rows, mostly
+ * ones already queued, so a busy merchant's newer payments could be missed every time. Paging by id covers them all.
+ */
+async function everyRow<T extends { id: string }>(find: (page: { take: number; orderBy: { id: "asc" }; cursor?: { id: string }; skip?: number }) => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  let after: string | undefined;
+  for (let i = 0; i < SWEEP_MAX_PAGES; i++) {
+    const rows = await find({ take: SWEEP_PAGE, orderBy: { id: "asc" }, ...(after ? { cursor: { id: after }, skip: 1 } : {}) });
+    out.push(...rows);
+    if (rows.length < SWEEP_PAGE) return out;
+    after = rows[rows.length - 1]!.id;
+  }
+  return out;
+}
 
 let lastSweep = 0;
 
@@ -51,7 +76,7 @@ export type EmailWorkerDeps = {
   batchSize?: number;
   now?: () => Date;
   /** Test-only: replaces the call to Resend. */
-  send?: (to: string, message: Message) => Promise<SendResult>;
+  send?: (to: string, message: Message, idempotencyKey: string) => Promise<SendResult>;
 };
 
 /** What the sender decided about a claimed row: send this, or leave it unsent for a stated reason. */
@@ -101,42 +126,47 @@ export class EmailWorker {
     const rows: Array<{ merchantId: string; toEmail: string; kind: "payin" | "payout"; key: string }> = [];
 
     // Money in: each payment that has settled into the wallet.
-    const payments = await db.payment.findMany({
-      where: { status: "SETTLED", settledAt: { gte: recent }, invoice: { merchant: { emailPayIn: true } } },
+    const payments = await everyRow((page) => db.payment.findMany({
+      // By when Aurora paid it OR when Tender recorded it. A payment found late (its payout listed days after it
+      // was made) has an old settledAt but a new recordedAt, and the merchant still has to hear about it.
+      where: { status: "SETTLED", OR: [{ settledAt: { gte: recent } }, { recordedAt: { gte: recent } }], invoice: { merchant: { emailPayIn: true } } },
       select: { id: true, invoice: { select: { merchantId: true, merchant: { select: { email: true } } } } },
-      take: 200,
-    });
+      ...page,
+    }));
     for (const p of payments) rows.push({ merchantId: p.invoice.merchantId, toEmail: p.invoice.merchant.email, kind: "payin", key: `pay:${p.id}` });
 
     // Money in: an invoice that closed short.
-    const short = await db.invoice.findMany({
+    const short = await everyRow((page) => db.invoice.findMany({
       where: { kind: "STANDARD", status: "UNDERPAID", updatedAt: { gte: recent }, merchant: { emailPayIn: true } },
       select: { id: true, merchantId: true, merchant: { select: { email: true } } },
-      take: 200,
-    });
+      ...page,
+    }));
     for (const i of short) rows.push({ merchantId: i.merchantId, toEmail: i.merchant.email, kind: "payin", key: `short:${i.id}` });
 
     // Money out: as soon as it leaves the wallet (the Monad transaction confirms), even if a cross-chain leg is
     // still on its way. This email is also the owner's alert that money moved, so it must not wait on delivery.
-    const sent = await db.transfer.findMany({
+    const sent = await everyRow((page) => db.transfer.findMany({
       where: { status: "CONFIRMED", confirmedAt: { gte: recent } },
       select: { id: true, merchantId: true, merchant: { select: { email: true } } },
-      take: 200,
-    });
+      ...page,
+    }));
     for (const t of sent) rows.push({ merchantId: t.merchantId, toEmail: t.merchant.email, kind: "payout", key: `out:${t.id}` });
 
     // Money out that did not arrive: the network refused it after it was submitted, or a cross-chain leg failed.
-    const failed = await db.transfer.findMany({
+    const failed = await everyRow((page) => db.transfer.findMany({
       where: {
         OR: [
           // Only once it was broadcast: a send the network refused outright moved nothing, and the screen already said so.
           { status: "FAILED", txHash: { not: null }, submittedAt: { gte: failureSince } },
           { status: "CONFIRMED", confirmedAt: { gte: failureSince }, lines: { some: { destStatus: "FAILED" } } },
+          // Closed as UNKNOWN after two weeks, so its confirmation is far older than any look-back: no time bound. The
+          // key makes it once-only, and the set is tiny (only deliveries Aurora never reported either way).
+          { status: "CONFIRMED", lines: { some: { destStatus: "UNKNOWN" } } },
         ],
       },
       select: { id: true, merchantId: true, merchant: { select: { email: true } } },
-      take: 200,
-    });
+      ...page,
+    }));
     for (const t of failed) rows.push({ merchantId: t.merchantId, toEmail: t.merchant.email, kind: "payout", key: `outfail:${t.id}` });
 
     if (!rows.length) return 0;
@@ -159,7 +189,8 @@ export class EmailWorker {
       return true;
     }
 
-    const result = await (this.deps.send ?? ((to, m) => sendEmail(config, to, m)))(row.toEmail, built.message);
+    // One key per queued email, the same for every retry of it.
+    const result = await (this.deps.send ?? ((to, m, key) => sendEmail(config, to, m, undefined, key)))(row.toEmail, built.message, `tender-email-${row.id}`);
     const attempts = row.attempts + 1;
 
     if (result.ok) {
@@ -185,6 +216,11 @@ export class EmailWorker {
     appUrl: string,
   ): Promise<Built> {
     if (kind === "welcome") return { message: renderWelcome({ ...merchant, appUrl }) };
+    if (kind === "security") {
+      // key: "addr:<old>|<new>:<time>". Always sent, whatever the merchant's email settings say.
+      const m = /^addr:(0x[0-9a-fA-F]{40})\|(0x[0-9a-fA-F]{40}):\d+$/.exec(key);
+      return m ? { message: renderSettlementChanged({ appUrl, from: m[1]!, to: m[2]! }) } : { skip: "unreadable security key" };
+    }
     const [what, ref = ""] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
 
     if (kind === "payin") {
@@ -259,10 +295,15 @@ export class EmailWorker {
       return { message: renderMoneyOut({ ...base, variant: "sent", arrivingOn }) };
     }
     const lost = t.lines.find((l) => l.destStatus === "FAILED");
+    const unconfirmed = t.lines.find((l) => l.destStatus === "UNKNOWN");
     if (t.status === "FAILED") return { message: renderMoneyOut({ ...base, variant: "failed", reason: t.failureReason }) };
     if (lost) {
       const where = lost.destChain ? (chainById(lost.destChain)?.name ?? lost.destChain) : "the other chain";
       return { message: renderMoneyOut({ ...base, variant: "failed", reason: `It left your wallet but did not reach ${where}. Open it to see what to do.` }) };
+    }
+    if (unconfirmed) {
+      const where = unconfirmed.destChain ? (chainById(unconfirmed.destChain)?.name ?? unconfirmed.destChain) : "the other chain";
+      return { message: renderMoneyOut({ ...base, variant: "failed", reason: `It left your wallet, but the network never confirmed that it reached ${where}. It may still have arrived. Open it to see what to do.` }) };
     }
     return { skip: "nothing failed" };
   }

@@ -49,6 +49,15 @@ export function judge(input: JudgeInput): InvoiceStatus {
     const extra = payments.some((p) => p.status !== "FAILED" && !settling?.used.includes(p));
     return settling && extra ? "OVERPAID" : "SETTLED";
   }
+  // An invoice that closed unpaid or short is corrected when money that arrived IN TIME is recorded afterwards
+  // (Aurora can list a deposit long after it landed). Money that arrived after the window is never counted here
+  // (the caller filters it), so late money alone never reopens an invoice.
+  if (status === "EXPIRED" || status === "UNDERPAID") {
+    const paid = coveringPayments(input);
+    if (!paid) return status;
+    const extra = payments.filter((p) => p.status !== "FAILED" && !paid.used.includes(p)).length > 0;
+    return paid.total.gt(band(input, +1)) || extra ? "OVERPAID" : "SETTLED";
+  }
   if (status !== "PENDING" && status !== "DETECTED") return status;
 
   // A deposit that landed and then failed onward is never refunded
@@ -142,6 +151,8 @@ export function matchOutcomes(open: OpenPayment[], outcomes: Outcome[]) {
   const remaining = [...open].sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime());
   const pairs: Array<{ paymentId: string; outcome: Outcome }> = [];
   const orphans: Outcome[] = [];
+  /** tx hashes of outcomes paired only by the last resort below: the oldest of SEVERAL waiting deposits, nothing to choose by. */
+  const weak: string[] = [];
 
   const take = (index: number, outcome: Outcome) => {
     const [payment] = remaining.splice(index, 1);
@@ -161,9 +172,34 @@ export function matchOutcomes(open: OpenPayment[], outcomes: Outcome[]) {
       continue;
     }
     const byValue = bestByValue(remaining, outcome);
+    if (byValue === null && remaining.length > 1) weak.push(outcome.tx_hash);
     take(byValue ?? 0, outcome);
   }
-  return { pairs, orphans };
+  return { pairs, orphans, weak };
+}
+
+/**
+ * Which payment recorded from a payout alone (see the poller) a deposit that Aurora lists late belongs to.
+ * It fits when the deposit came before that payout was made and the payout is not worth more than the deposit
+ * (beyond `PAYOUT_ABOVE_DEPOSIT`, the same allowance as `matchOutcomes`: route costs only ever come OFF a payout).
+ * The smallest gap wins; with no value on either side it is the oldest payout. Null when none fits.
+ */
+export function matchPayoutToDeposit(
+  candidates: Array<{ id: string; paidUsd: Decimal | null; paidAt: Date }>,
+  deposit: { usd: Decimal | null; at: Date },
+): string | null {
+  let best: { id: string; gap: Decimal | null; paidAt: number } | null = null;
+  for (const c of candidates) {
+    if (c.paidAt.getTime() < deposit.at.getTime()) continue;
+    let gap: Decimal | null = null;
+    if (c.paidUsd !== null && deposit.usd !== null) {
+      if (c.paidUsd.gt(deposit.usd.mul(PAYOUT_ABOVE_DEPOSIT))) continue;
+      gap = deposit.usd.sub(c.paidUsd).abs();
+    }
+    const better = !best || (gap !== null && best.gap !== null ? gap.lt(best.gap) : c.paidAt.getTime() < best.paidAt);
+    if (better) best = { id: c.id, gap, paidAt: c.paidAt.getTime() };
+  }
+  return best?.id ?? null;
 }
 
 /**

@@ -139,7 +139,20 @@ export async function updateMerchant(db: Db, merchant: Merchant, input: Merchant
   if (input.webhook_url !== undefined) data.webhookUrl = input.webhook_url || null;
   if (input.email_pay_in !== undefined) data.emailPayIn = input.email_pay_in;
 
-  return db.merchant.update({ where: { id: merchant.id }, data });
+  // A settlement address that CHANGED (not one set for the first time) is the one thing a stolen session or key would do,
+  // so the account's email is told, with both addresses. The notice is queued (a mail outage never blocks the change) and
+  // written in the SAME transaction as the change: the address must never be live without its alert being queued.
+  const was = merchant.settlementAddress;
+  const notify = was && data.settlementAddress && data.settlementAddress.toLowerCase() !== was.toLowerCase();
+  if (!notify) return db.merchant.update({ where: { id: merchant.id }, data });
+
+  const [updated] = await db.$transaction([
+    db.merchant.update({ where: { id: merchant.id }, data }),
+    db.emailDelivery.create({
+      data: { merchantId: merchant.id, kind: "security", key: `addr:${was}|${data.settlementAddress}:${Date.now()}`, toEmail: merchant.email, nextRetryAt: new Date() },
+    }),
+  ]);
+  return updated;
 }
 
 const WELCOME_DELAY_MS = 60_000;
@@ -212,6 +225,20 @@ export function deliveryStatus(d: Pick<WebhookDelivery, "deliveredAt" | "nextRet
 }
 
 /** This merchant's recent webhook deliveries, newest first, so they can see which ones never arrived. */
+/**
+ * Sends a webhook again that the merchant's server never received (every retry used, or dropped because no URL was set).
+ * Only the merchant's own, and never one that already arrived. The event id inside the payload is unchanged, so a
+ * receiver that deduplicates on it handles the repeat safely.
+ */
+export async function redeliverWebhook(db: Db, merchant: Merchant, id: string): Promise<WebhookDelivery> {
+  const row = await db.webhookDelivery.findFirst({ where: { id, merchantId: merchant.id } });
+  if (!row) throw notFound("Webhook delivery");
+  if (row.deliveredAt) throw conflict("This webhook was already delivered");
+  if (!merchant.webhookUrl) throw conflict("Set a webhook_url before sending a webhook again");
+  if (row.nextRetryAt) return row; // already queued
+  return db.webhookDelivery.update({ where: { id }, data: { attempts: 0, nextRetryAt: new Date(), lastError: null } });
+}
+
 export async function listWebhookDeliveries(db: Db, merchant: Merchant, opts: { status?: DeliveryStatus; limit: number }) {
   const where =
     opts.status === "delivered"

@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Logger } from "../lib/logger.js";
 import { auroraRequests } from "../lib/metrics.js";
 import {
-  DepositStatusResponse,
+  Deposit as DepositSchema,
+  DepositListResponse,
   MintResponse,
   QuoteResponse,
   TokensResponse,
@@ -70,7 +71,7 @@ export type MintInput = {
   destinationAsset: string;
 };
 
-type RequestSpec = { method: "GET" | "POST"; path: string; body?: unknown; timeoutMs?: number };
+type RequestSpec = { method: "GET" | "POST"; path: string; body?: unknown; timeoutMs?: number; /** Overrides the client's retry count. 1 for a write whose repeat-safety is unknown. */ attempts?: number };
 
 /**
  * Minting a NEW address makes Aurora fetch an upstream quote first, and during
@@ -138,12 +139,36 @@ export class AuroraClient {
       qs.set("limit", String(page.limit));
       qs.set("offset", String(page.offset));
     }
-    const res = await this.request("GET /api/persistent-deposit-status", DepositStatusResponse, {
+    const res = await this.request("GET /api/persistent-deposit-status", DepositListResponse, {
       method: "GET",
       path: `/api/persistent-deposit-status/${this.key}?${qs}`,
     });
-    return res.deposits;
+    // Entry by entry: one malformed entry used to reject the whole list, which hid every other deposit on the
+    // address. Readable ones are returned; each unreadable one is reported (with what Aurora sent, so the money
+    // it stands for can be traced by hand), once, because an address is polled every few seconds.
+    const readable: Deposit[] = [];
+    for (const raw of res.deposits) {
+      const parsed = DepositSchema.safeParse(raw);
+      if (parsed.success) {
+        readable.push(parsed.data);
+        continue;
+      }
+      const tx = typeof (raw as { tx_hash?: unknown } | null)?.tx_hash === "string" ? (raw as { tx_hash: string }).tx_hash : null;
+      const sent = JSON.stringify(raw)?.slice(0, 600) ?? "";
+      const key = `${address}:${tx ?? sent.slice(0, 120)}`;
+      if (this.unreadableReported.has(key)) continue;
+      if (this.unreadableReported.size >= 2_000) this.unreadableReported.clear();
+      this.unreadableReported.add(key);
+      this.opts.logger.error(
+        { address, list: type, tx, problems: parsed.error.issues.map((i) => `${i.path.join(".") || "entry"}: ${i.message}`), sent },
+        "aurora deposit entry could not be read: skipped, trace it by hand",
+      );
+    }
+    return readable;
   }
+
+  /** Entries already reported as unreadable, so the same one is named once, not on every poll. */
+  private readonly unreadableReported = new Set<string>();
 
   async tokens(): Promise<Token[]> {
     const res = await this.request("GET /api/tokens", TokensResponse, {
@@ -244,6 +269,9 @@ export class AuroraClient {
       method: "POST",
       path: `/api/deposit/submit/${this.key}`,
       body: { txHash, depositAddress },
+      // Aurora does not document whether submitting the same hash twice is safe, so it is never repeated by us.
+      // It is only an accelerator: the poller finds the payment either way.
+      attempts: 1,
     });
   }
 
@@ -254,7 +282,8 @@ export class AuroraClient {
   private async request<T>(route: string, schema: z.ZodType<T>, req: RequestSpec): Promise<T> {
     let lastError: AuroraError | undefined;
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+    const maxAttempts = req.attempts ?? this.maxAttempts;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const timer = auroraRequests.startTimer({ route });
       const startedAt = Date.now();
       try {
@@ -278,7 +307,7 @@ export class AuroraClient {
         // `ms` and `reason` tell a slow Aurora (hit our timeout) from a dropped connection from a failed lookup.
         this.opts.logger.warn({ route, attempt, kind: error.kind, status: error.status, ms: Date.now() - startedAt, reason: failureReason(err) }, "aurora request failed");
       }
-      if (attempt < this.maxAttempts) await sleep(backoffMs(attempt));
+      if (attempt < maxAttempts) await sleep(backoffMs(attempt));
     }
 
     throw lastError ?? new AuroraError("network", `${route}: failed`);
@@ -298,7 +327,15 @@ export class AuroraClient {
       throw new AuroraError(kindForStatus(res.status), `${route} → ${res.status}: ${message}`, res.status);
     }
 
-    const parsed = schema.safeParse(await res.json());
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      // A 200 that is not JSON (an HTML page from a proxy, a cut-off body) is Aurora's side failing, and is not a dropped
+      // connection: calling it "network" sent whoever read the log looking at the wrong thing. Retried like any 5xx.
+      throw new AuroraError("upstream", `${route} → ${res.status}: the answer was not JSON`, res.status);
+    }
+    const parsed = schema.safeParse(body);
     if (!parsed.success) {
       throw new AuroraError("invalid_response", `${route}: unexpected response shape: ${parsed.error.message}`);
     }
@@ -321,7 +358,8 @@ function failureReason(err: unknown): string {
 function kindForStatus(status: number): AuroraErrorKind {
   if (status === 429) return "rate_limited";
   if (status === 404) return "not_found";
-  if (status >= 500) return "upstream";
+  // A request timeout is Aurora (or a proxy in front of it) being slow, not a mistake in what we sent: it is retried.
+  if (status >= 500 || status === 408) return "upstream";
   return "bad_request";
 }
 

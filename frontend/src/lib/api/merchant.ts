@@ -8,6 +8,7 @@ import type {
   RotatedWebhookSecret,
   SettlementChallenge,
   UpdateMerchantInput,
+  WebhookDelivery,
   WebhookDeliveryList,
   WebhookDeliveryStatus,
 } from "./types";
@@ -116,6 +117,13 @@ export function revokeApiKey(id: string): Promise<ApiResult<void>> {
 /** Replace the webhook signing secret. The old one stops verifying immediately. */
 export function rotateWebhookSecret(): Promise<ApiResult<RotatedWebhookSecret>> {
   return request<RotatedWebhookSecret>("/v1/merchant/webhook/secret", {
+    method: "POST",
+  });
+}
+
+/** Send a webhook again that never arrived. 409 if it already did, or no webhook URL is set. */
+export function redeliverWebhook(id: string): Promise<ApiResult<WebhookDelivery>> {
+  return request<WebhookDelivery>(`/v1/merchant/webhook/deliveries/${encodeURIComponent(id)}/redeliver`, {
     method: "POST",
   });
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   createApiKey,
+  redeliverWebhook,
   revokeApiKey,
   rotateWebhookSecret,
   testWebhook,
@@ -131,6 +132,33 @@ export async function testWebhookAction(
   return {
     error: `Your endpoint did not answer${error ? ` (${error})` : ""}. Check it is reachable from the internet over https.`,
   };
+}
+
+export type RedeliverState = { error?: string; ok?: string };
+
+/** Delivery ids are opaque, but never anything other than letters and digits. */
+const DELIVERY_ID = /^[0-9A-Za-z_-]{1,64}$/;
+
+/** Queue a webhook that never arrived to be sent again. The event id inside it is unchanged, so a receiver that dedupes is safe. */
+export async function redeliverAction(
+  _prev: RedeliverState,
+  form: FormData,
+): Promise<RedeliverState> {
+  const id = String(form.get("id") ?? "");
+  if (!DELIVERY_ID.test(id)) return { error: "That delivery could not be identified. Reload the page and try again." };
+
+  const result = await redeliverWebhook(id);
+
+  if (!result.ok) {
+    const { error } = result;
+    if (error.kind === "not_configured") return { error: NOT_CONNECTED };
+    if (error.kind === "not_found") return { error: "That delivery no longer exists." };
+    revalidatePath("/app/settings/developers");
+    return { error: error.message };
+  }
+
+  revalidatePath("/app/settings/developers");
+  return { ok: "Queued. It will be sent again shortly." };
 }
 
 /* -------------------------------------------------------------------------- */

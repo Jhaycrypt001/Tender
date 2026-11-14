@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { PLATFORM_KEY, resetDb, setupApp, teardown, type TestContext } from "./helpers.js";
 import { EMAIL_RETRY_MS, EmailWorker } from "../src/workers/email.worker.js";
 import { escapeHtml, renderWelcome, sendEmail } from "../src/services/email.service.js";
-import { resolveGoogleMerchant } from "../src/services/merchant.service.js";
+import { resolveGoogleMerchant, updateMerchant } from "../src/services/merchant.service.js";
 import { createLogger } from "../src/lib/logger.js";
 import { CHAINS } from "../src/aurora/chains.js";
 
@@ -73,6 +73,15 @@ describe("sendEmail", () => {
     expect(url).toBe("https://api.resend.com/emails");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer re_test");
     expect(JSON.parse(init.body as string)).toMatchObject({ to: "a@b.co", reply_to: "reply@example.com", from: cfg.from, text: "t" });
+  });
+
+  it("sends Resend an idempotency key when given one, so a retried send cannot make a second email", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "em_3" }), { status: 200 }));
+    await sendEmail(cfg, "a@b.co", message, fetchMock as unknown as typeof fetch, "tender-email-abc123");
+    await sendEmail(cfg, "a@b.co", message, fetchMock as unknown as typeof fetch);
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
+    expect((calls[0]![1].headers as Record<string, string>)["idempotency-key"]).toBe("tender-email-abc123");
+    expect(calls[1]![1].headers as Record<string, string>).not.toHaveProperty("idempotency-key");
   });
 
   it("sends no reply_to at all when none is configured", async () => {
@@ -236,5 +245,31 @@ describe("EmailWorker", () => {
     const send = vi.fn(ok);
     expect(await worker(send, new Date(T0.getTime() + 30_000)).tick()).toEqual({ sent: 0, failed: 0 });
     expect(await worker(send, new Date(T0.getTime() + 121_000)).tick()).toEqual({ sent: 1, failed: 0 });
+  });
+});
+
+describe("settlement address change notice", () => {
+  const NEW = "0x1111111111111111111111111111111111111111";
+  it("tells the account email, with both addresses in full, when an address is changed, and stays quiet the first time one is set", async () => {
+    const { merchant } = await resolveGoogleMerchant(t.db, { googleSub: "g-sec", email: "owner@example.com", name: "Owner" });
+    const rows = () => t.db.emailDelivery.findMany({ where: { merchantId: merchant.id, kind: "security" } });
+
+    const first = await updateMerchant(t.db, merchant, { settlement_address: "0x4CAD8fac813f7436Bac414D2C9426363567EFE7f" });
+    expect(await rows()).toHaveLength(0); // first time: nobody to warn
+
+    await updateMerchant(t.db, first, { settlement_address: first.settlementAddress! }); // same address again
+    expect(await rows()).toHaveLength(0);
+
+    await updateMerchant(t.db, first, { settlement_address: NEW });
+    expect(await rows()).toHaveLength(1);
+
+    const send = vi.fn(async (_to: string, _m: { subject: string; text: string }) => ({ ok: true as const }));
+    await new EmailWorker({ db: t.db, logger, config: cfg, send: send as never, now: () => new Date(Date.now() + 60_000) }).tick();
+    expect(send).toHaveBeenCalledTimes(1);
+    const [to, message] = send.mock.calls[0]!;
+    expect(to).toBe("owner@example.com");
+    expect(message.subject).toContain("payout address was changed");
+    expect(message.text).toContain("0x4CAD8fac813f7436Bac414D2C9426363567EFE7f");
+    expect(message.text).toContain(NEW);
   });
 });

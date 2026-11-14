@@ -64,6 +64,10 @@ describe("crash and restart", () => {
     // Rolled back: no payment, no event beyond creation, no webhook — and the address is still due.
     expect(await counts(inv.id)).toEqual({ payments: 0, events: 1, webhooks: 0, status: "PENDING" });
 
+    // A real kill ends the process before the poller's guard can record anything, so the address keeps its schedule.
+    // (The exception used above DOES reach the guard, which backs the address off: see poison-address.test.ts.)
+    await t.db.invoiceAddress.updateMany({ where: { invoiceId: inv.id }, data: { pollFailures: 0, nextPollAt: new Date(0) } });
+
     await makePoller(t).poller.tick(); // the restart
     expect(await counts(inv.id)).toEqual({ payments: 1, events: 2, webhooks: 1, status: "SETTLED" });
   });

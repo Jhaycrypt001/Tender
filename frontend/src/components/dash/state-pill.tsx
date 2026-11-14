@@ -114,10 +114,10 @@ function Pill({ variant, children }: { variant: Variant; children: string }) {
   );
 }
 
-export type DeliveryStatus = "PENDING" | "DELIVERED" | "FAILED";
+export type DeliveryStatus = "PENDING" | "DELIVERED" | "FAILED" | "UNKNOWN";
 
-const DELIVERY_VARIANT: Record<DeliveryStatus, Variant> = { PENDING: "pending", DELIVERED: "good", FAILED: "attention" };
-const DELIVERY_LABEL: Record<DeliveryStatus, string> = { PENDING: "Arriving", DELIVERED: "Delivered", FAILED: "Not delivered" };
+const DELIVERY_VARIANT: Record<DeliveryStatus, Variant> = { PENDING: "pending", DELIVERED: "good", FAILED: "attention", UNKNOWN: "attention" };
+const DELIVERY_LABEL: Record<DeliveryStatus, string> = { PENDING: "Arriving", DELIVERED: "Delivered", FAILED: "Not delivered", UNKNOWN: "Not confirmed" };
 
 /** Where a cross-chain send got to after it left the wallet: on its way, arrived, or did not arrive. */
 export function DeliveryStatePill({ status }: { status: DeliveryStatus }) {

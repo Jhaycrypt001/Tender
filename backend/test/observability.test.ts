@@ -106,6 +106,18 @@ describe("worker alert gauges", () => {
     expect(await gauge("tender_poll_lag_seconds")).toBe(0);
   });
 
+  it("shows an address that has not been polled successfully for a long time, even when back-off hides it from the lag", async () => {
+    const { auth } = await merchant(t.db);
+    await t.app.inject({ method: "POST", url: "/v1/invoices", headers: auth, payload: { amount_expected: "5.00", currency: "USD", reference: "stale-1" } });
+    // Backed off an hour into the future, so poll lag reads 0, yet the last good poll was 10 minutes ago and it keeps failing.
+    await t.db.invoiceAddress.updateMany({
+      data: { nextPollAt: new Date(clock.now.getTime() + 3_600_000), lastPolledOkAt: new Date(clock.now.getTime() - 600_000), pollFailures: 6 },
+    });
+    expect(await gauge("tender_poll_lag_seconds")).toBe(0);
+    expect(await gauge("tender_poll_stale_seconds")).toBe(600);
+    expect(await gauge("tender_poll_failing_addresses")).toBe(await t.db.invoiceAddress.count());
+  });
+
   it("poll lag ignores a settled invoice's addresses: only open invoices can be stuck", async () => {
     const { auth } = await merchant(t.db);
     await t.app.inject({ method: "POST", url: "/v1/invoices", headers: auth, payload: { amount_expected: "5.00", currency: "USD", reference: "lag-2" } });

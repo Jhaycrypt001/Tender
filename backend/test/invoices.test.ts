@@ -114,6 +114,38 @@ describe("POST /v1/invoices", () => {
     expect(await t.db.invoice.count()).toBe(1);
   });
 
+  it("makes a retried create safe with an Idempotency-Key, even when Tender picks the reference", async () => {
+    const m = await merchant(t.db);
+    const body = { amount_expected: "49.00", currency: "USD" };
+    const headers = { ...m.auth, "idempotency-key": "order-8842-attempt" };
+    const post = (payload: object, h: Record<string, string> = headers) => t.app.inject({ method: "POST", url: "/v1/invoices", headers: h, payload });
+
+    const first = await post(body);
+    const retry = await post(body);
+    expect(first.statusCode).toBe(201);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json().id).toBe(first.json().id);
+    expect(await t.db.invoice.count()).toBe(1);
+
+    // The same key for a different amount is a mistake, not a retry. Without a key, two creates are two invoices.
+    expect((await post({ ...body, amount_expected: "50.00" })).statusCode).toBe(409);
+    expect((await post(body, m.auth)).statusCode).toBe(201);
+    // Each merchant's keys are their own.
+    const other = await merchant(t.db, { name: "Other" });
+    expect((await post(body, { ...other.auth, "idempotency-key": "order-8842-attempt" })).statusCode).toBe(201);
+    // A key that cannot be compared safely is refused.
+    expect((await post(body, { ...m.auth, "idempotency-key": "has a space" })).statusCode).toBe(400);
+  });
+
+  it("returns one invoice when the same keyed create races itself", async () => {
+    const m = await merchant(t.db);
+    const send = () => t.app.inject({ method: "POST", url: "/v1/invoices", headers: { ...m.auth, "idempotency-key": "race-1" }, payload: { amount_expected: "5.00", currency: "USD" } });
+    const [a, b] = await Promise.all([send(), send()]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 201]);
+    expect(a.json().id).toBe(b.json().id);
+    expect(await t.db.invoice.count()).toBe(1);
+  });
+
   it("refuses to reuse a reference for a different amount", async () => {
     const m = await merchant(t.db);
     await create(m.auth);
@@ -262,6 +294,16 @@ describe("GET /public/invoices/:token", () => {
     const inv = (await create(m.auth)).json();
     const res = await t.app.inject({ method: "GET", url: `/public/invoices/${inv.token}` });
     expect(res.statusCode).toBe(200);
+  });
+
+  it("hands out deposit addresses only while the invoice can still be paid", async () => {
+    const m = await merchant(t.db);
+    const inv = (await create(m.auth)).json();
+    const url = `/public/invoices/${inv.token}`;
+    expect((await t.app.inject({ method: "GET", url })).json().addresses.length).toBeGreaterThan(0);
+
+    await t.db.invoice.update({ where: { id: inv.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    expect((await t.app.inject({ method: "GET", url })).json()).toMatchObject({ status: "EXPIRED", addresses: [] });
   });
 
   it("404s on unknown and malformed tokens, and never accepts an invoice id", async () => {

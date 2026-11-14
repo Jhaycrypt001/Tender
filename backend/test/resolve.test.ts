@@ -95,6 +95,15 @@ describe("POST /internal/payments/:id/resolve", () => {
     }
   });
 
+  it("refuses a settled amount that is zero or more than the payment could have delivered", async () => {
+    const { payment } = await stuckStanding({ now: new Date() });
+    const settle = (amount: string) => resolve(payment.id, { outcome: "settled", tx_hash: "0xdelivered00000000", amount_settled: amount, note: "Aurora delivered USDC by hand" });
+    expect((await settle("0")).statusCode).toBe(400);
+    expect((await settle("199.60")).statusCode).toBe(400); // an extra zero
+    expect((await t.db.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe("DETECTED");
+    expect((await settle("19.90")).statusCode).toBe(200);
+  });
+
   it("refunds a stuck standing deposit: status, audit trail, no webhook, once only, and the warning stops", async () => {
     const clock = { now: new Date() };
     const { m, payment, advance, find } = await stuckStanding(clock);

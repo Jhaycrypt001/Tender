@@ -39,6 +39,12 @@ export function webhookEventFor(status: InvoiceStatus): string | undefined {
  * A direct deposit has no invoice status to report, so it gets its own two
  * events: the money reached the merchant's wallet, or the payout failed.
  */
+/**
+ * Money recorded on an invoice that had already closed (EXPIRED, UNDERPAID or CANCELLED) and did not change its
+ * status. Without it the merchant's server would only ever have been told "expired".
+ */
+export const LATE_PAYMENT_EVENT = "invoice.late_payment";
+
 export const DEPOSIT_EVENTS = { SETTLED: "deposit.settled", FAILED: "deposit.failed" } as const;
 
 export function depositWebhookPayload(

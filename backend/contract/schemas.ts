@@ -335,7 +335,8 @@ export const TransferDestination = z.object({
   address: z.string(),
   asset: z.string(),
   expected_out: z.string().nullish(),
-  status: z.enum(["PENDING", "DELIVERED", "FAILED"]),
+  /** UNKNOWN: Aurora never reported either way in two weeks. The money may or may not have arrived. */
+  status: z.enum(["PENDING", "DELIVERED", "FAILED", "UNKNOWN"]),
   delivered_at: Timestamp.nullish(),
 });
 

@@ -27,6 +27,17 @@ Set these on **both** api and worker unless noted.
 | `RELAYER_MIN_MON` | default 0.02 | Transfers pause (503) when the relayer holds less than this. Alert before it gets there. |
 | `MONAD_RPC_URL` | a paid endpoint | Only used to verify smart-contract settlement wallets (ERC-1271). The public default is fine for a demo. |
 | `MINIMUMS_REFRESH_MINUTES` | default 30 | See "Minimums" below. worker only. |
+| `MINIMUM_MARGIN_BPS` | default 2000 | Safety margin added to measured per-chain minimums. worker only. |
+| `POLL_INTERVAL_MS` | default 10000 | How often an open invoice's addresses are polled. Aurora throttles the key; do not go lower. worker only. |
+| `POLL_CLOSED_INTERVAL_MS` | default 60000 | Late-payment watch on closed invoices. worker only. |
+| `POLL_CONCURRENCY` / `POLL_BATCH_SIZE` | defaults 4 / 200 | Parallel polls, and addresses taken per tick. worker only. |
+| `INVOICE_TTL_MINUTES` | default 30 | How long a new invoice stays payable. api. |
+| `EXPIRY_GRACE_MINUTES` | default 15 | How long after the deadline an in-flight deposit still counts. worker. |
+| `LATE_WINDOW_HOURS` | default 24 | How long closed invoices are still watched for late or extra money. worker. |
+| `PAYMENT_TOLERANCE_BPS` | default 100 | A payment within this many basis points of the amount counts as exact. worker. |
+| `TRANSFER_DAILY_LIMIT` / `TRANSFER_MAX_LINES` | defaults 100 / 10 | Per-merchant transfers per 24 hours (enforced at submit), and lines per transfer. api. |
+| `RESEND_API_KEY` / `EMAIL_FROM` / `EMAIL_REPLY_TO` | optional | Transactional email. Without the key nothing is sent. worker. |
+| `GEMINI_API_KEY` / `ASSISTANT_MODEL` / `ASSISTANT_FALLBACK_MODEL` | optional | The assistant. Without the key it is off. Model defaults: `gemini-3.1-flash-lite`, then `gemini-3.5-flash-lite`. api. |
 
 The server refuses to boot on a missing or malformed value (`src/config.ts`), so a bad deploy fails at start, not mid-request.
 
@@ -62,6 +73,10 @@ npm run aurora:smoke -- <monad-address> <a-sender-string-you-have-never-used>
 
 If it 403s, the key needs persistent-address access enabled in studio.aurora.dev (or from Aurora), and nothing in this repo can work around it.
 
+## Rate limits and the client IP
+
+The per-IP limits use `X-Forwarded-For` (`trustProxy` is on in production). That is only safe if the host's edge overwrites a client-supplied header. **Verified on Railway, 2026-11-11:** 14 POSTs to `/public/links/:token`, each with a different spoofed `X-Forwarded-For`, were limited after 10 exactly like unspoofed ones. **Repeat this check before moving to another host or putting a CDN in front:** send 14 POSTs to `/public/links/pl_AAAAAAAAAAAAAAAAAAAAAAAAAAA` with a different `X-Forwarded-For` each; the last four must answer 429.
+
 ## Invoice creation latency
 
 Each invoice mints its deposit addresses **one chain family at a time**. Aurora answers `429 A concurrent request is creating this deposit address` to concurrent mints for the same sender, and minting in parallel made some invoices fail with a 502 (seen live on 2026-10-02). Measured against real Aurora: about 3 seconds for the default 17 chains (4 families), and more for opt-in chains, since each non-EVM chain is its own family at roughly 0.7s. Keep the host's request timeout above 30 seconds.
@@ -93,6 +108,8 @@ As of 2026-09-30, **Solana cannot be measured**: Aurora answers `Quoting for thi
 api `/metrics` and worker `/metrics` are separate processes. Watch:
 
 - **`tender_poll_lag_seconds`** (worker): how overdue the most overdue open address is. Alert if above about 60 for a few minutes.
+- **`tender_poll_stale_seconds`** (worker): longest time since an open address was last polled SUCCESSFULLY. Poll lag cannot see an Aurora outage, because back-off pushes the next poll into the future and the lag reads 0; this one grows. Alert above about 300.
+- **`tender_poll_failing_addresses`** (worker): open addresses whose last 5 or more polls failed. Each keeps its invoice pending (an invoice is never closed as unpaid while it cannot be checked). Alert above 0 for a while.
 - **`tender_webhook_dead_letters`** (worker): deliveries given up on. Alert above 0.
 - **`tender_chain_minimums_age_seconds`** (worker): age of the cached minimums, -1 if none. Alert above 2x `MINIMUMS_REFRESH_MINUTES` (in seconds).
 - **`tender_aurora_request_seconds{outcome}`**: Aurora error rate. Also watch the log line `aurora rejected the API key: check its permissions`, which means a 401/403 that no retry will fix.

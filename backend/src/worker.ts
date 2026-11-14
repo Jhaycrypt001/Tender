@@ -82,13 +82,21 @@ void poller
 
 // A part Aurora's price feed could not value when it arrived waits for a price. Look again every few
 // minutes, so an invoice paid in parts is not left short by one missing price. Silent unless it does something.
+// A pass can take longer than the interval while Aurora is slow (up to 500 payments, each a price lookup), so one
+// never starts while the last is still running.
+let repairing = false;
 const repairTimer = setInterval(() => {
+  if (repairing) return;
+  repairing = true;
   poller
     .repairUnvalued()
     .then((r) => {
       if (r.valued || r.reopened) logger.info(r, "valued payments that had no USD value");
     })
-    .catch((err: unknown) => logger.warn({ err }, "valuing payments with no USD value failed"));
+    .catch((err: unknown) => logger.warn({ err }, "valuing payments with no USD value failed"))
+    .finally(() => {
+      repairing = false;
+    });
 }, 5 * 60_000);
 
 const webhookLog = logger.child({ component: "webhooks" });

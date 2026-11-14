@@ -37,6 +37,41 @@ async function invoice(opts: { payIn?: boolean } = {}) {
   return { m: m.merchant, inv, evm: inv.addresses[0]!.address };
 }
 
+describe("what makes an email safe to retry, and to find", () => {
+  it("retries with the same idempotency key, so a send that timed out cannot become two emails", async () => {
+    const { inv, evm } = await invoice();
+    const clock = { now: new Date() };
+    t.aurora.push(evm, "received", usdc(evm, 5, "d1", clock.now));
+    t.aurora.push(evm, "success", payout(evm, 4.98, "o1", clock.now));
+    await makePoller(t, clock).poller.tick();
+    expect(await worker(vi.fn(ok), clock.now).sweep()).toBe(1);
+
+    const send = vi.fn<Send>().mockResolvedValueOnce({ ok: false, error: "timeout" }).mockResolvedValueOnce({ ok: true });
+    await worker(send, clock.now).tick();
+    await worker(send, new Date(clock.now.getTime() + 2 * 60_000)).tick();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[0]![2]).toMatch(/^tender-email-/);
+    expect(send.mock.calls[1]![2]).toBe(send.mock.calls[0]![2]);
+    expect(inv.id).toBeTruthy();
+  });
+
+  it("emails a payment that settled hours ago (worker was down) or that was only recorded just now (found late)", async () => {
+    const down = await invoice();
+    const late = await invoice();
+    const clock = { now: new Date() };
+    const HOUR = 3_600_000;
+    // Settled 3 hours ago: the old 1-hour lookback had already forgotten it.
+    t.aurora.push(down.evm, "received", usdc(down.evm, 5, "d_down", new Date(clock.now.getTime() - 3 * HOUR)));
+    t.aurora.push(down.evm, "success", payout(down.evm, 4.98, "o_down", new Date(clock.now.getTime() - 3 * HOUR)));
+    // Paid out 12 days ago but only recorded now.
+    t.aurora.push(late.evm, "received", usdc(late.evm, 5, "d_late", new Date(clock.now.getTime() - 12 * 24 * HOUR)));
+    t.aurora.push(late.evm, "success", payout(late.evm, 4.98, "o_late", new Date(clock.now.getTime() - 12 * 24 * HOUR)));
+    await makePoller(t, clock).poller.tick();
+
+    expect(await worker(vi.fn(ok), clock.now).sweep()).toBe(2);
+  });
+});
+
 describe("money in", () => {
   it("emails each settled payment once: part payment, then paid in full after the top-up", async () => {
     const { m, inv, evm } = await invoice();
@@ -161,6 +196,31 @@ describe("money out", () => {
     await worker(send, now).tick();
     expect(send.mock.calls[1]![1].subject).toBe("Refund not delivered · $4.99");
     expect(send.mock.calls[1]![1].html).toContain("did not reach Base");
+  });
+
+  it("emails a delivery nobody ever confirmed, once, however long after the send it is closed", async () => {
+    const { m } = await invoice();
+    await transfer(m.id, { confirmedAt: new Date(Date.now() - 20 * 86_400_000) }, { destChain: "base", destAddress: "0x2222222222222222222222222222222222222222", destAsset: "USDC", destStatus: "UNKNOWN" });
+    const send = vi.fn(ok);
+    const now = new Date();
+    // The send is 20 days old, outside the look-back, so only the "did not arrive" email is queued.
+    expect(await worker(send, now).sweep()).toBe(1);
+    expect(await worker(send, now).sweep()).toBe(0);
+    await worker(send, now).tick();
+    expect(send.mock.calls[0]![1].subject).toBe("Refund not delivered · $4.99");
+    expect(send.mock.calls[0]![1].html).toContain("never confirmed that it reached Base");
+  });
+
+  it("queues every payout of a busy day, not just the first 200 it happens to read", async () => {
+    const { m } = await invoice({ payIn: false });
+    const base = {
+      merchantId: m.id, kind: "REFUND" as const, status: "CONFIRMED" as const, asset: "USDC", fromAddress: "0x88A7a4fFDDe961AF79582da333594e1Aa1c411F0",
+      totalAmount: "1.00", expiresAt: new Date(Date.now() + 3_600_000), confirmedAt: new Date(), submittedAt: new Date(),
+    };
+    await t.db.transfer.createMany({ data: Array.from({ length: 230 }, () => base) });
+    const w = worker(ok, new Date());
+    expect(await w.sweep()).toBe(230);
+    expect(await w.sweep()).toBe(0);
   });
 
   it("emails a transfer the network refused after it was submitted, not one that merely expired unsigned", async () => {

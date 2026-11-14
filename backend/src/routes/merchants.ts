@@ -6,7 +6,7 @@ import type { Db } from "../db/client.js";
 import { conflict, validation } from "../lib/errors.js";
 import { eventId } from "../lib/ids.js";
 import { assertSafeWebhookUrl, UnsafeDestinationError } from "../lib/safe-http.js";
-import { createApiKey, listApiKeys, listWebhookDeliveries, revokeApiKey, rotateWebhookSecret, SETTLEMENT_ASSETS, updateMerchant } from "../services/merchant.service.js";
+import { createApiKey, listApiKeys, listWebhookDeliveries, redeliverWebhook, revokeApiKey, rotateWebhookSecret, SETTLEMENT_ASSETS, updateMerchant } from "../services/merchant.service.js";
 import { toApiKeySummary, toMerchant, toWebhookDelivery } from "../services/serialize.js";
 import { issueChallenge, verifyChallenge, type ChainReader } from "../services/settlement-proof.service.js";
 import { sendWebhook } from "../services/webhook.service.js";
@@ -86,6 +86,14 @@ export function merchantRoutes(app: FastifyInstance, deps: MerchantRouteDeps) {
   app.get("/v1/merchant/webhook/deliveries", async (req) => {
     const q = S.ListWebhookDeliveriesQuery.parse(req.query);
     return { data: (await listWebhookDeliveries(deps.db, merchantOf(req), q)).map(toWebhookDelivery) };
+  });
+
+  /** Send a webhook again that your server never received. Only a delivery that has not arrived. */
+  app.post("/v1/merchant/webhook/deliveries/:id/redeliver", async (req) => {
+    const { id } = z.object({ id: z.string().min(1).max(64) }).parse(req.params);
+    const delivery = await redeliverWebhook(deps.db, merchantOf(req), id);
+    req.log.info({ merchantId: merchantOf(req).id, deliveryId: id, event: delivery.event }, "webhook queued to be sent again");
+    return toWebhookDelivery(delivery);
   });
 
   app.post("/v1/merchant/webhook/secret", async (req, reply) => {

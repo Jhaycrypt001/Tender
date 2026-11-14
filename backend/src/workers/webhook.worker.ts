@@ -69,6 +69,7 @@ export class WebhookWorker {
     // The merchant removed their endpoint after the event was queued.
     if (!merchant.webhookUrl) {
       await db.webhookDelivery.update({ where: { id }, data: { nextRetryAt: null, lastError: "no webhook_url configured" } });
+      logger.warn({ deliveryId: id, event: row.event, merchantId: row.merchantId }, "webhook not delivered: the merchant has no webhook_url (it can be sent again once one is set)");
       return false;
     }
 

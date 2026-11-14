@@ -77,8 +77,16 @@ describe("judge", () => {
   });
 
   it("never moves other terminal states", () => {
-    for (const status of ["OVERPAID", "UNDERPAID", "EXPIRED", "CANCELLED", "NEEDS_RECOVERY"] as const) {
+    for (const status of ["OVERPAID", "CANCELLED", "NEEDS_RECOVERY"] as const) {
       expect(j({ status, payments: [p("SETTLED", "49"), p("FAILED", "1")], closed: true })).toBe(status);
+    }
+  });
+
+  it("lets EXPIRED and UNDERPAID be corrected only by payments that cover the amount", () => {
+    for (const status of ["EXPIRED", "UNDERPAID"] as const) {
+      expect(j({ status, payments: [p("SETTLED", "49")], closed: true })).toBe("SETTLED");
+      expect(j({ status, payments: [p("SETTLED", "20")], closed: true })).toBe(status);
+      expect(j({ status, payments: [], closed: true })).toBe(status);
     }
   });
 });
@@ -93,6 +101,15 @@ describe("matchOutcomes", () => {
   it("matches on a shared tx hash first", () => {
     const { pairs } = matchOutcomes(open, [out("in2", 3)]);
     expect(pairs).toEqual([{ paymentId: "p2", outcome: out("in2", 3) }]);
+  });
+
+  it("says which pairings are only a guess: the oldest deposit, picked from several, with nothing to tell them apart", () => {
+    const priced = open.map((p) => ({ ...p, amountInUsd: "49" }));
+    const paid = { ...out("payout", 4), amount: "48000000", decimals: 6 };
+    expect(matchOutcomes(open, [out("in2", 3)]).weak).toEqual([]); // same hash
+    expect(matchOutcomes(priced, [paid]).weak).toEqual([]); // fits a deposit by value
+    expect(matchOutcomes([open[0]!], [out("payout", 4)]).weak).toEqual([]); // the only one waiting
+    expect(matchOutcomes(open, [out("payout", 4)]).weak).toEqual(["payout"]); // two waiting, nothing to choose by
   });
 
   it("otherwise pairs outcomes with deposits in chronological order", () => {

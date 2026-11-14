@@ -68,6 +68,9 @@ export async function registerRateLimits(app: FastifyInstance, redis: Redis) {
   await app.register(rateLimit, {
     global: true,
     redis,
+    // If the limiter's store is down, let requests through: losing rate limits for a while is far better than
+    // every request waiting on a dead Redis (see server.ts, which gives the limiter a connection that fails fast).
+    skipOnError: true,
     nameSpace: "tender:rl:",
     timeWindow: 60_000,
     allowList: (req) => req.url === "/health" || req.url === "/metrics",

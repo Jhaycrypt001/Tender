@@ -90,10 +90,15 @@ export function toPublicInvoice(
     currency: invoice.currency,
     expires_at: invoice.expiresAt.toISOString(),
     merchant_name: merchant.name,
-    addresses: addressesFor(invoice, minimums),
+    // An invoice that is finished (settled, expired, cancelled, failed) takes no more payments from a buyer, so its deposit
+    // addresses are not handed out any more: a stale checkout link must not read as an invitation to send. UNDERPAID is
+    // not finished: the buyer is told they can top it up, so they still need the address.
+    addresses: ADDRESSES_SHOWN.has(effectiveStatus(invoice)) ? addressesFor(invoice, minimums) : [],
     redirect_url: invoice.redirectUrl,
   };
 }
+
+const ADDRESSES_SHOWN = new Set<string>(["PENDING", "DETECTED", "UNDERPAID"]);
 
 /** The buyer's address on their own chain, when Aurora reported it. Aurora's own field, passed through untouched. */
 function senderOf(p: Payment): string | null {

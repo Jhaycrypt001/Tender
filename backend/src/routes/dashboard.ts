@@ -17,7 +17,7 @@ const Page = z.object({ cursor: z.string().optional(), limit: z.coerce.number().
  * is live, and no Earn position exists (see BACKEND.md §9 for Earn's status).
  */
 export function dashboardRoutes(app: FastifyInstance, deps: InvoiceDeps & { wallet?: Pick<TransferChain, "tokenBalance"> }) {
-  app.get("/v1/merchant/balance", async (req) => balance(deps.db, merchantOf(req), deps.wallet));
+  app.get("/v1/merchant/balance", async (req) => balance(deps.db, merchantOf(req), deps.wallet, req.log));
 
   app.get("/v1/links", async (req) => {
     const { cursor, limit } = Page.parse(req.query);

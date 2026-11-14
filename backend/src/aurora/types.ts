@@ -31,6 +31,8 @@ export const Deposit = z.object({
 export type Deposit = z.infer<typeof Deposit>;
 
 export const DepositStatusResponse = z.object({ deposits: z.array(Deposit) });
+/** The list as Aurora sent it. Each entry is checked on its own (see AuroraClient.deposits): one odd entry must not hide the rest. */
+export const DepositListResponse = z.object({ deposits: z.array(z.unknown()) });
 
 /** Which list to read: reached Aurora / paid out / payout failed. */
 export type DepositListType = "received" | "success" | "failed";

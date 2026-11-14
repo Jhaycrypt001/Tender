@@ -172,6 +172,33 @@ export function renderWelcome(m: WelcomeInput): Message {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Security                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sent to the account's email whenever the settlement address is CHANGED (not the first time it is set). It carries both
+ * addresses in full, because the point is that the real owner can tell at a glance whether this was them.
+ */
+export function renderSettlementChanged(d: { appUrl: string; from: string; to: string }): Message {
+  const parts = layout({
+    label: "Security",
+    figure: "Your payout address was changed.",
+    figureSize: 28,
+    sub: "New invoices will be paid to the new address once it is verified.",
+    rows: [
+      ["Was", shortAddress(d.from)],
+      ["Now", shortAddress(d.to)],
+    ],
+    note: "If this was not you, sign in now, set your payout address back, and rotate your API keys in Settings.",
+    cta: { label: "Review your settings", url: `${d.appUrl}/app/settings` },
+    footer: "You are getting this because the payout address on your Tender account changed. We send it every time.",
+    appUrl: d.appUrl,
+  });
+  const text = parts.text.replace(shortAddress(d.from), d.from).replace(shortAddress(d.to), d.to);
+  return { subject: "Your Tender payout address was changed", html: parts.html, text };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Money in                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -369,11 +396,18 @@ export async function sendEmail(
   to: string,
   message: Message,
   fetchImpl: typeof fetch = fetch,
+  idempotencyKey?: string,
 ): Promise<SendResult> {
   try {
     const res = await fetchImpl("https://api.resend.com/emails", {
       method: "POST",
-      headers: { authorization: `Bearer ${cfg.apiKey}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${cfg.apiKey}`,
+        "content-type": "application/json",
+        // A send that times out is retried, and the first one may have gone through. With the same key, Resend returns
+        // the first result instead of sending again. It remembers a key for 24 hours; the longest retry gap is 2.
+        ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+      },
       body: JSON.stringify({ from: cfg.from, to, ...(cfg.replyTo ? { reply_to: cfg.replyTo } : {}), subject: message.subject, html: message.html, text: message.text }),
       signal: AbortSignal.timeout(10_000),
     });
