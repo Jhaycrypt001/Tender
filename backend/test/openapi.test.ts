@@ -5,8 +5,9 @@ import { setupApp, teardown, type TestContext } from "./helpers.js";
 
 let t: TestContext;
 beforeAll(async () => {
-  // A key is set so the assistant route exists: the document always lists it.
-  t = await setupApp({ GEMINI_API_KEY: "test" });
+  // A key is set so the assistant route exists, and a NEAR Intents client so the NEAR payout routes do: the document always lists them.
+  const near = { tokens: async () => [], quote: async () => { throw new Error("not used"); }, status: async () => null };
+  t = await setupApp({ GEMINI_API_KEY: "test" }, { near });
   await t.app.ready();
 });
 afterAll(() => teardown(t));

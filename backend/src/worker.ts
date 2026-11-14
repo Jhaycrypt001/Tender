@@ -8,6 +8,8 @@
 import { createServer } from "node:http";
 import { Redis } from "ioredis";
 import { AuroraClient } from "./aurora/client.js";
+import { NearIntentsClient } from "./near/client.js";
+import { nearDelivery } from "./near/route.js";
 import { PriceBook } from "./aurora/prices.js";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
@@ -128,6 +130,11 @@ const transferChain = createTransferChain({
   rpcUrl: config.MONAD_RPC_URL,
   relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined,
 });
+const nearIntents = new NearIntentsClient({
+  baseUrl: config.NEAR_INTENTS_API_URL,
+  apiKey: config.NEAR_INTENTS_API_KEY,
+  logger: transferLog.child({ component: "near-intents" }),
+});
 const transferLoop = startLoop(
   "transfers",
   5_000,
@@ -135,6 +142,7 @@ const transferLoop = startLoop(
     const r = await reconcileTransfers({
       db,
       aurora,
+      near: { delivery: nearDelivery(nearIntents) },
       chain: transferChain,
       logger: transferLog,
       config: { dailyLimit: config.TRANSFER_DAILY_LIMIT, maxLines: config.TRANSFER_MAX_LINES, minRelayerWei: parseEther(config.RELAYER_MIN_MON) },

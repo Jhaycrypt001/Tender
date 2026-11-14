@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isAddress } from "viem";
-import type { AuroraClient, RouteQuote } from "../aurora/client.js";
+import type { AuroraClient, MintInput, RouteQuote } from "../aurora/client.js";
 import { CHAINS, chainById, SETTLEMENT_CHAIN, type ChainInfo } from "../aurora/chains.js";
 import type { Token } from "../aurora/types.js";
 import { ApiError, validation } from "../lib/errors.js";
@@ -23,7 +23,17 @@ import type { TokenInfo } from "../lib/tokens.js";
  * On chains where exchanges need them (XRP, TON) the screen says so; the server only flags it.
  */
 
-type AuroraRoute = Pick<AuroraClient, "tokens" | "routeQuote" | "mintAddress">;
+/** What a route needs to know that Aurora's persistent addresses do not: NEAR Intents makes one address per quote. */
+export type MintHint = { /** Aurora client option, unused here: keeps this type compatible with its options. */ quiet?: boolean; amountBase?: string; refundTo?: string; originAsset?: string };
+
+/**
+ * The three calls a payout route makes. Aurora's client is one; NEAR Intents, direct (src/near/route.ts) is the other.
+ * `provider` only keeps their token lists apart in the cache.
+ */
+type AuroraRoute = Pick<AuroraClient, "tokens" | "routeQuote"> & {
+  mintAddress: (input: MintInput, hint?: MintHint) => Promise<{ depositAddress: string; correlationId?: string }>;
+  provider?: string;
+};
 
 export type PayoutChain = {
   id: string;
@@ -41,12 +51,14 @@ const STABLES = ["USDC", "USDT", "USDT0"];
 type Destination = { chain: ChainInfo; token: Token };
 
 const TOKEN_TTL_MS = 5 * 60_000;
-let cache: { at: number; tokens: Token[] } | null = null;
+const cache = new Map<string, { at: number; tokens: Token[] }>();
 
-async function listTokens(aurora: Pick<AuroraClient, "tokens">): Promise<Token[]> {
-  if (cache && Date.now() - cache.at < TOKEN_TTL_MS) return cache.tokens;
+async function listTokens(aurora: Pick<AuroraClient, "tokens"> & { provider?: string }): Promise<Token[]> {
+  const key = aurora.provider ?? "aurora";
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TOKEN_TTL_MS) return hit.tokens;
   const tokens = await aurora.tokens();
-  cache = { at: Date.now(), tokens };
+  cache.set(key, { at: Date.now(), tokens });
   return tokens;
 }
 
@@ -61,7 +73,7 @@ function destinationFor(chain: ChainInfo, tokens: Token[]): Token | null {
 }
 
 /** Every chain a payout can reach (all of them except Monad), with what the recipient receives. */
-export async function payoutChains(aurora: Pick<AuroraClient, "tokens">): Promise<PayoutChain[]> {
+export async function payoutChains(aurora: Pick<AuroraClient, "tokens"> & { provider?: string }): Promise<PayoutChain[]> {
   const tokens = await listTokens(aurora);
   const out: PayoutChain[] = [];
   for (const chain of CHAINS) {
@@ -116,16 +128,20 @@ export async function checkRoute(
 }
 
 /** Mints the one-off Monad address that delivers to `to`. A fresh sender each time, so no two payouts share an address. */
-export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string): Promise<{ address: string; sender: string }> {
+export async function mintRoute(aurora: AuroraRoute, route: Extract<RouteCheck, { ok: true }>, to: string, pay?: { amount: string; from: string }): Promise<{ address: string; sender: string }> {
   const sender = `payout:${randomUUID()}`;
-  const minted = await aurora.mintAddress({
-    recipient: to,
-    sender,
-    // Monad is an EVM chain: Aurora mints per address family, and every EVM chain shares one.
-    depositChain: "evm",
-    destinationChain: route.chain.aurora,
-    destinationAsset: route.destination.assetId,
-  });
+  const minted = await aurora.mintAddress(
+    {
+      recipient: to,
+      sender,
+      // Monad is an EVM chain: Aurora mints per address family, and every EVM chain shares one.
+      depositChain: "evm",
+      destinationChain: route.chain.aurora,
+      destinationAsset: route.destination.assetId,
+    },
+    // Aurora's client ignores this. NEAR Intents' addresses belong to one quote, so they need it.
+    pay ? { amountBase: new Decimal(pay.amount).mul(new Decimal(10).pow(route.origin.decimals)).toFixed(0), refundTo: pay.from, originAsset: route.origin.assetId } : undefined,
+  );
   if (!isAddress(minted.depositAddress)) {
     throw new ApiError(502, "route_failed", "Could not set up that route. Nothing was sent.");
   }

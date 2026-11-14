@@ -537,6 +537,8 @@ export type TransferStatus = "AWAITING_SIGNATURE" | "SUBMITTED" | "CONFIRMED" | 
 export type TransferDestination = {
   chain: string;
   chain_name: string;
+  /** Who carries the delivery: Aurora, or NEAR Intents called directly. */
+  via: "aurora" | "near-intents";
   address: string;
   asset: string;
   expected_out?: string | null;
@@ -573,6 +575,9 @@ export type PayoutChain = {
 };
 
 export type QuoteTransferInput = { dest_chain: string; to: string; amount: string };
+
+/** A payout to a NEAR account through NEAR Intents, direct. The recipient asset is USDC on NEAR. */
+export type NearTransferInput = { to: string; amount: string; note?: string };
 
 export type QuoteTransferResult =
   | {

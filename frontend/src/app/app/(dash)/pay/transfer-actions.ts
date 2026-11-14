@@ -1,7 +1,7 @@
 "use server";
 
-import { getTransfer, listPayoutChains, prepareTransfer, quoteTransfer, submitTransfer } from "@/lib/api/transfers";
-import type { ApiError, PayoutChain, PrepareTransferInput, QuoteTransferResult, Transfer } from "@/lib/api/types";
+import { getTransfer, listPayoutChains, prepareNearTransfer, prepareTransfer, quoteNearTransfer, quoteTransfer, submitNearTransfer, submitTransfer } from "@/lib/api/transfers";
+import type { ApiError, NearTransferInput, PayoutChain, PrepareTransferInput, QuoteTransferResult, Transfer } from "@/lib/api/types";
 
 /**
  * The browser's only way to the transfer endpoints: it cannot call them itself,
@@ -42,6 +42,26 @@ export async function payoutChainsAction(): Promise<PayoutChain[]> {
 export async function quoteTransferAction(input: { dest_chain: string; to: string; amount: string }): Promise<QuoteTransferResult> {
   if (!/^[a-z]{2,32}$/.test(input.dest_chain)) return { ok: false, field: "chain", message: "Choose a chain." };
   const result = await quoteTransfer(input);
+  if (result.ok) return result.data;
+  return { ok: false, field: "chain", message: result.error.message || "We could not check that just now. Try again." };
+}
+
+/* NEAR Intents, direct. Same shape of result as above: never throws, always a sentence. */
+
+export async function prepareNearTransferAction(input: NearTransferInput): Promise<TransferResult> {
+  const result = await prepareNearTransfer(input);
+  return result.ok ? { ok: true, transfer: result.data } : { ok: false, ...explain(result.error) };
+}
+
+export async function submitNearTransferAction(id: string, signatures: string[]): Promise<TransferResult> {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, message: "That transfer could not be found." };
+  const result = await submitNearTransfer(id, { signatures });
+  return result.ok ? { ok: true, transfer: result.data } : { ok: false, ...explain(result.error) };
+}
+
+/** A dry run of a payout to a NEAR account. Never throws; a failure is a sentence under the form. */
+export async function quoteNearTransferAction(input: { to: string; amount: string }): Promise<QuoteTransferResult> {
+  const result = await quoteNearTransfer(input);
   if (result.ok) return result.data;
   return { ok: false, field: "chain", message: result.error.message || "We could not check that just now. Try again." };
 }

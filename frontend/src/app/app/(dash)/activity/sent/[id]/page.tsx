@@ -81,7 +81,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
                         <Timestamp value={l.dest.delivered_at} />
                       </Line>
                     )}
-                    <Line label="Via Aurora, from">
+                    <Line label={`Via ${l.dest.via === "near-intents" ? "NEAR Intents" : "Aurora"}, from`}>
                       <span className="font-mono text-[0.75rem] text-mute">{l.to.slice(0, 10)}…{l.to.slice(-6)}</span>
                     </Line>
                   </dl>

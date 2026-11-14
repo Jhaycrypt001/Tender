@@ -18,6 +18,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "aurora:smoke": "tsx scripts/aurora-smoke.ts",
+    "near:smoke": "tsx scripts/near-smoke.ts",
     "aurora:tokens": "tsx scripts/aurora-tokens.ts",
     "aurora:measure": "tsx scripts/aurora-measure.ts",
     "e2e:local": "tsx scripts/e2e-local.ts",

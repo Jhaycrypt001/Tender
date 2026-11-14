@@ -2,6 +2,7 @@ import { request } from "./server";
 import type {
   ApiResult,
   PayoutChain,
+  NearTransferInput,
   PrepareTransferInput,
   QuoteTransferInput,
   QuoteTransferResult,
@@ -49,6 +50,23 @@ export function submitTransfer(
     method: "POST",
     body: input,
   });
+}
+
+/* NEAR Intents, direct: a payout to a NEAR account. The same two-call flow, on its own endpoints. */
+
+/** Would NEAR Intents take this, and roughly what would arrive? Moves and creates nothing. */
+export function quoteNearTransfer(input: { to: string; amount: string }): Promise<ApiResult<QuoteTransferResult>> {
+  return request<QuoteTransferResult>("/v1/transfers/near-direct/quote", { method: "POST", body: input });
+}
+
+/** Step 1. A deposit address from NEAR Intents, and the typed data to sign. Moves nothing. */
+export function prepareNearTransfer(input: NearTransferInput): Promise<ApiResult<Transfer>> {
+  return request<Transfer>("/v1/transfers/near-direct", { method: "POST", body: input });
+}
+
+/** Step 2. The wallet's signatures go back; the backend relays them. */
+export function submitNearTransfer(id: string, input: SubmitTransferInput): Promise<ApiResult<Transfer>> {
+  return request<Transfer>(`/v1/transfers/near-direct/${encodeURIComponent(id)}/submit`, { method: "POST", body: input });
 }
 
 export function getTransfer(id: string): Promise<ApiResult<Transfer>> {

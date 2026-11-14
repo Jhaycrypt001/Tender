@@ -25,6 +25,8 @@ Set these on **both** api and worker unless noted.
 | `METRICS_TOKEN` | 16+ random characters | `/metrics` is public without it. Set on api and worker. |
 | `RELAYER_PRIVATE_KEY` | `0x` + 64 hex | **api only.** The wallet that submits merchants' signed transfers and pays their gas in MON. Fund it with a few MON and nothing else; the merchant's own wallet authorizes every transfer, so this key cannot move merchant funds. Without it `/v1/transfers` answers 503. |
 | `RELAYER_MIN_MON` | default 0.02 | Transfers pause (503) when the relayer holds less than this. Alert before it gets there. |
+| `NEAR_INTENTS_API_URL` | default https://1click.chaindefuser.com | NEAR Intents, used directly for payouts to NEAR accounts. |
+| `NEAR_INTENTS_API_KEY` | optional | Without it NEAR Intents applies its unauthenticated fee. Never logged. See docs/NEAR-INTENTS.md. |
 | `MONAD_RPC_URL` | a paid endpoint | Only used to verify smart-contract settlement wallets (ERC-1271). The public default is fine for a demo. |
 | `MINIMUMS_REFRESH_MINUTES` | default 30 | See "Minimums" below. worker only. |
 | `MINIMUM_MARGIN_BPS` | default 2000 | Safety margin added to measured per-chain minimums. worker only. |

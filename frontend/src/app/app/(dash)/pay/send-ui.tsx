@@ -7,7 +7,7 @@ import { Select } from "@/components/dash/field";
 import { Hash } from "@/components/dash/money";
 import { STEP_LABEL, type SendStep } from "@/lib/use-send-transfer";
 import type { PayoutChain, QuoteTransferResult, Transfer } from "@/lib/api/types";
-import { payoutChainsAction, quoteTransferAction, transferStatusAction } from "./transfer-actions";
+import { payoutChainsAction, quoteNearTransferAction, quoteTransferAction, transferStatusAction } from "./transfer-actions";
 
 /**
  * Pieces shared by Payout, Split and Refund: one way of showing a message, one
@@ -22,6 +22,12 @@ export const looksLikeAddress = (value: string) => /^0x[0-9a-fA-F]{40}$/.test(va
 
 /** A decimal amount with at most 6 places (what USDC and USDT0 hold). */
 export const looksLikeAmount = (value: string) => /^(0|[1-9]\d*)(\.\d{1,6})?$/.test(value.trim()) && Number(value) > 0;
+
+/** A NEAR account: named ("alice.near"), or a 64-character hex implicit account. The server decides; this only spares an obvious typo a round trip. */
+export const looksLikeNearAccount = (value: string) => {
+  const v = value.trim();
+  return /^[0-9a-f]{64}$/.test(v) || (v.length >= 2 && v.length <= 64 && /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(v));
+};
 
 export function Note({ children, tone = "error" }: { children: React.ReactNode; tone?: "error" | "ok" | "info" }) {
   return (
@@ -80,6 +86,27 @@ export function useRouteQuote(chain: string, to: string, amount: string): "idle"
       clearTimeout(timer);
     };
   }, [chain, to, amount]);
+  return result;
+}
+
+/** Like `useRouteQuote`, for a payout to a NEAR account through NEAR Intents: debounced, and a slow answer for an old input is dropped. */
+export function useNearQuote(to: string, amount: string): "idle" | "checking" | QuoteTransferResult {
+  const [result, setResult] = useState<"idle" | "checking" | QuoteTransferResult>("idle");
+  useEffect(() => {
+    if (!looksLikeNearAccount(to) || !looksLikeAmount(amount)) {
+      setResult("idle");
+      return;
+    }
+    let live = true;
+    setResult("checking");
+    const timer = setTimeout(() => {
+      void quoteNearTransferAction({ to: to.trim(), amount: amount.trim() }).then((r) => live && setResult(r));
+    }, 700);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [to, amount]);
   return result;
 }
 

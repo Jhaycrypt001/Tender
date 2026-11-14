@@ -31,6 +31,11 @@ const ROUTES = [
     desc: "Send settled revenue to a supplier or a contractor.",
   },
   {
+    href: "/app/pay/near",
+    label: "To NEAR",
+    desc: "Send USDC to a NEAR account, carried by NEAR Intents.",
+  },
+  {
     href: "/app/pay/split",
     label: "Split",
     desc: "Divide one amount across several addresses. Everyone is paid together, or nobody is.",
@@ -52,7 +57,7 @@ export default async function PayPage() {
         description="Refunds to buyers, payouts to suppliers, splits across a team."
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {ROUTES.map((r) => (
           <Link
             key={r.href}

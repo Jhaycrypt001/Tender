@@ -2,6 +2,7 @@ import { Redis } from "ioredis";
 import { createPublicClient, defineChain, http } from "viem";
 import { buildApp } from "./app.js";
 import { AuroraClient } from "./aurora/client.js";
+import { NearIntentsClient } from "./near/client.js";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { createLogger } from "./lib/logger.js";
@@ -44,7 +45,12 @@ const monad = defineChain({
 const chain = createPublicClient({ chain: monad, transport: http(config.MONAD_RPC_URL, { timeout: 10_000 }) });
 
 const transferChain = createTransferChain({ client: chain, rpcUrl: config.MONAD_RPC_URL, relayerKey: config.RELAYER_PRIVATE_KEY as `0x${string}` | undefined });
-const app = await buildApp({ config, db, redis, limiterRedis, aurora, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
+const near = new NearIntentsClient({
+  baseUrl: config.NEAR_INTENTS_API_URL,
+  apiKey: config.NEAR_INTENTS_API_KEY,
+  logger: createLogger(config.LOG_LEVEL, config.NODE_ENV === "development").child({ component: "near-intents" }),
+});
+const app = await buildApp({ config, db, redis, limiterRedis, aurora, near, stream, catalogue: new ChainCatalogueReader(redis), chain, transferChain });
 // So a payment can name the coin the buyer sent, not just the amount.
 keepAssetSymbolsFresh(aurora, app.log);
 

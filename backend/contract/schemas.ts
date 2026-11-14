@@ -332,6 +332,8 @@ export const TransferStatus = z.enum(["AWAITING_SIGNATURE", "SUBMITTED", "CONFIR
 export const TransferDestination = z.object({
   chain: z.string(),
   chain_name: z.string(),
+  /** Who carries the delivery: Aurora, or NEAR Intents called directly (payouts to NEAR accounts). */
+  via: z.enum(["aurora", "near-intents"]),
   address: z.string(),
   asset: z.string(),
   expected_out: z.string().nullish(),
@@ -401,6 +403,15 @@ export const Transfer = z.object({
   /** Only on a freshly prepared transfer: what to sign, one entry per line. */
   authorizations: z.array(TransferAuthorization).optional(),
 });
+
+/** NEAR Intents, direct. A payout to a NEAR account, separate from the Aurora-backed payouts. */
+export const NearQuoteBody = z.object({
+  /** The recipient NEAR account, e.g. "alice.near", or a 64-character hex implicit account. */
+  to: z.string().trim().min(2).max(64),
+  /** Whole tokens of the merchant's settlement asset to send, e.g. "25.00". */
+  amount: z.string().trim(),
+});
+export const NearTransferBody = NearQuoteBody.extend({ note: z.string().trim().max(140).optional() });
 
 export const PrepareTransferBody = z.object({
   kind: TransferKind,

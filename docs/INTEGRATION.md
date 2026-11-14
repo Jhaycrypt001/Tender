@@ -334,3 +334,9 @@ Since 2026-09-29 the landing page, the sign-in page and the site metadata say **
 - The landing grid, "30 chains" everywhere, the sign-in page and the site metadata.
 - Labels for all 30 ids in `frontend/src/lib/chains.ts`.
 - Nothing else in the frontend hardcodes the list. The dashboard form and the checkout both show whatever `/public/chains` and the invoice return, so new chains appear on their own.
+
+## Paying out to a NEAR account (NEAR Intents, direct)
+
+A payout to a NEAR account can be sent through NEAR Intents directly, without Aurora. It is a separate path with its own
+quote, deposit address and delivery tracking, and the existing Aurora-backed payouts are untouched. See
+[NEAR-INTENTS.md](NEAR-INTENTS.md).

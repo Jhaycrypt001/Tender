@@ -334,7 +334,7 @@ describe("route and account logging", () => {
     await t.app.inject({ method: "POST", url: `/v1/invoices/${id}/cancel`, headers: m.auth });
 
     expect(appLog.find("invoice created")[0]).toMatchObject({ invoiceId: id, merchantId: m.merchant.id, reference: "ORD-LOG-1", amount: "12.5", currency: "USD", created: true });
-    expect(appLog.find("invoice create replayed (same reference)")[0]).toMatchObject({ invoiceId: id, created: false });
+    expect(appLog.find("invoice create replayed (same reference or Idempotency-Key)")[0]).toMatchObject({ invoiceId: id, created: false });
     expect(appLog.find("invoice cancelled")[0]).toMatchObject({ invoiceId: id, merchantId: m.merchant.id, status: "CANCELLED" });
   });
 

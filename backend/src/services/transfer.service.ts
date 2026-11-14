@@ -7,10 +7,11 @@ import type { Merchant, Prisma } from "../generated/prisma/client.js";
 import { ApiError, conflict, notFound, validation } from "../lib/errors.js";
 import { Decimal, isAmount } from "../lib/money.js";
 import { MONAD_CHAIN_ID, MULTICALL3, TRANSFER_WITH_AUTHORIZATION_TYPES, tokenFor, type TokenInfo } from "../lib/tokens.js";
-import type { AuroraClient } from "../aurora/client.js";
+import type { AuroraClient, MintInput } from "../aurora/client.js";
 import { SETTLEMENT_CHAIN, chainById } from "../aurora/chains.js";
 import { amount } from "./serialize.js";
-import { checkRoute, mintRoute, payoutChains, routeFailure } from "./payout-route.js";
+import { NEAR_ROUTE } from "../near/route.js";
+import { checkRoute, mintRoute, payoutChains, routeFailure, type MintHint } from "./payout-route.js";
 import { TransferNotSent, TransferRejected, type SignedLine, type TransferChain } from "./transfer-chain.js";
 
 /**
@@ -56,7 +57,15 @@ export type TransferDeps = {
   db: Db;
   chain: TransferChain | undefined;
   /** Needed only to send to another chain, and to follow that delivery. Without it such a transfer is refused. */
-  aurora?: Partial<Pick<AuroraClient, "tokens" | "routeQuote" | "mintAddress" | "deposits">>;
+  aurora?: Partial<Pick<AuroraClient, "tokens" | "routeQuote" | "deposits">> & {
+    mintAddress?: (input: MintInput, hint?: MintHint) => Promise<{ depositAddress: string; correlationId?: string }>;
+    /** Which service made this route ("near-intents"); absent for Aurora. Keeps token lists apart. */
+    provider?: string;
+  };
+  /** NEAR Intents, direct: where a delivery made that way stands. Without it such lines are left as they are. */
+  near?: { delivery: (depositAddress: string) => Promise<"delivered" | "failed" | "pending"> };
+  /** Stored on every cross-chain line this call creates, so the tracker later asks the same service. Absent: Aurora. */
+  routeName?: string;
   config: TransferConfig;
   now?: () => Date;
   /** Every state a transfer passes through is logged here. Optional so tests and scripts can leave it out. */
@@ -126,6 +135,7 @@ export function toTransfer(t: TransferWithLines, withAuthorizations = false): Wi
             ? {
                 chain: l.destChain,
                 chain_name: chainById(l.destChain)?.name ?? l.destChain,
+                via: l.route === NEAR_ROUTE ? ("near-intents" as const) : ("aurora" as const),
                 address: l.destAddress,
                 asset: l.destAsset ?? "",
                 expected_out: l.destExpectedOut,
@@ -223,7 +233,7 @@ function requireAurora(deps: TransferDeps) {
   if (!a?.tokens || !a.routeQuote || !a.mintAddress) {
     throw new ApiError(503, "transfers_unavailable", "Sending to another chain is not switched on right now. Try again later.");
   }
-  return { tokens: a.tokens.bind(a), routeQuote: a.routeQuote.bind(a), mintAddress: a.mintAddress.bind(a) };
+  return { tokens: a.tokens.bind(a), routeQuote: a.routeQuote.bind(a), mintAddress: a.mintAddress.bind(a), provider: a.provider };
 }
 
 /** Every chain a payout or refund can reach. */
@@ -309,6 +319,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
   // is kept in `destAddress` and is what the signing prompt shows. Every line is vetted BEFORE any
   // address is minted, so a split with one bad line is refused up front and nothing is created.
   type Dest = { chain: string; address: string; asset: string; expectedOut: string | null; sender: string };
+  const routeName = deps.routeName ?? null;
   const dests = new Map<number, Dest>();
   if (checked.some((l) => l.destChain)) {
     const aur = requireAurora(deps);
@@ -326,7 +337,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
     }
     for (const [i, route] of routes) {
       const l = checked[i]!;
-      const minted = await mintRoute(aur, route, l.to);
+      const minted = await mintRoute(aur, route, l.to, { amount: l.amount, from });
       dests.set(i, { chain: route.chain.id, address: l.to, asset: route.destination.symbol, expectedOut: route.expectedOut, sender: minted.sender });
       l.to = getAddress(minted.address);
     }
@@ -352,7 +363,7 @@ export async function prepareTransfer(deps: TransferDeps, merchant: Merchant, in
               toAddress: l.to,
               amount: l.amount,
               nonce: `0x${randomBytes(32).toString("hex")}`,
-              ...(d ? { destChain: d.chain, destAddress: d.address, destAsset: d.asset, destExpectedOut: d.expectedOut, destStatus: "PENDING" as const, auroraSender: d.sender } : {}),
+              ...(d ? { destChain: d.chain, destAddress: d.address, destAsset: d.asset, destExpectedOut: d.expectedOut, destStatus: "PENDING" as const, auroraSender: d.sender, route: routeName } : {}),
             };
           }),
         },
@@ -643,7 +654,16 @@ let lastDeliveryCheck = 0;
  */
 async function reconcileDeliveries(deps: TransferDeps, now: Date) {
   const aurora = deps.aurora;
-  if (!aurora?.deposits) return;
+  if (!aurora?.deposits && !deps.near) return;
+  // Where a delivery stands, asked of whoever carried it: NEAR Intents for a line made that way, otherwise Aurora.
+  // "skip" means this deployment cannot ask, so the line is left exactly as it is.
+  const delivery = async (line: { route: string | null; toAddress: string }): Promise<"delivered" | "failed" | "pending" | "skip"> => {
+    if (line.route === NEAR_ROUTE) return deps.near ? deps.near.delivery(line.toAddress) : "skip";
+    if (!aurora?.deposits) return "skip";
+    if ((await aurora.deposits(line.toAddress, "success")).length > 0) return "delivered";
+    if ((await aurora.deposits(line.toAddress, "failed")).length > 0) return "failed";
+    return "pending";
+  };
   // The transfer loop ticks every 5s, but it shares Aurora's rate limit with the invoice poller, and a
   // delivery takes a minute or two anyway. Asking every 30s keeps this from crowding out detection.
   if (now.getTime() - lastDeliveryCheck < DELIVERY_CHECK_MS) return;
@@ -666,22 +686,24 @@ async function reconcileDeliveries(deps: TransferDeps, now: Date) {
     // It is closed as UNKNOWN: not FAILED (Aurora never said so, and the money may have arrived), and named so someone can ask.
     const abandoned = await deps.db.transferLine.findMany({
       where: { destStatus: "PENDING", transfer: { status: "CONFIRMED", confirmedAt: { lt: new Date(now.getTime() - SLOW_DELIVERY_DAYS * 86_400_000) } } },
-      select: { id: true, transferId: true, toAddress: true, auroraSender: true, destChain: true, destAddress: true, destAsset: true },
+      select: { id: true, transferId: true, toAddress: true, route: true, auroraSender: true, destChain: true, destAddress: true, destAsset: true },
       take: 50,
     });
     for (const line of abandoned) {
       // Ask once more before giving up: one that landed since the last look must be recorded as what it is, not "not confirmed".
       try {
-        if ((await aurora.deposits(line.toAddress, "success")).length > 0) {
+        const state = await delivery(line);
+        if (state === "skip") continue;
+        if (state === "delivered") {
           const arrived = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
           lateDeliveryReportedAt.delete(line.id);
-          if (arrived.count === 1) deps.logger?.info({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress }, "cross-chain delivery completed");
+          if (arrived.count === 1) deps.logger?.info({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, route: line.route }, "cross-chain delivery completed");
           continue;
         }
-        if ((await aurora.deposits(line.toAddress, "failed")).length > 0) {
+        if (state === "failed") {
           const lost = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
           lateDeliveryReportedAt.delete(line.id);
-          if (lost.count === 1) deps.logger?.warn({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress }, "cross-chain delivery failed at Aurora");
+          if (lost.count === 1) deps.logger?.warn({ transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, route: line.route }, line.route === NEAR_ROUTE ? "cross-chain delivery failed at NEAR Intents" : "cross-chain delivery failed at Aurora");
           continue;
         }
       } catch (err) {
@@ -709,15 +731,17 @@ async function reconcileDeliveries(deps: TransferDeps, now: Date) {
   for (const line of waiting) {
     try {
       // Each line has its own deposit address, so its own record at Aurora.
-      const lineLog = { transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, destChain: line.destChain, destAddress: line.destAddress, destAsset: line.destAsset, destExpectedOut: line.destExpectedOut?.toString() ?? null };
-      if ((await aurora.deposits(line.toAddress, "success")).length > 0) {
+      const lineLog = { transferId: line.transferId, lineId: line.id, depositAddress: line.toAddress, route: line.route, destChain: line.destChain, destAddress: line.destAddress, destAsset: line.destAsset, destExpectedOut: line.destExpectedOut?.toString() ?? null };
+      const state = await delivery(line);
+      if (state === "skip") continue;
+      if (state === "delivered") {
         const done = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "DELIVERED", destDeliveredAt: now } });
         lateDeliveryReportedAt.delete(line.id);
         if (done.count === 1) deps.logger?.info(lineLog, "cross-chain delivery completed");
-      } else if ((await aurora.deposits(line.toAddress, "failed")).length > 0) {
+      } else if (state === "failed") {
         const done = await deps.db.transferLine.updateMany({ where: { id: line.id, destStatus: "PENDING" }, data: { destStatus: "FAILED" } });
         lateDeliveryReportedAt.delete(line.id);
-        if (done.count === 1) deps.logger?.warn(lineLog, "cross-chain delivery failed at Aurora");
+        if (done.count === 1) deps.logger?.warn(lineLog, line.route === NEAR_ROUTE ? "cross-chain delivery failed at NEAR Intents" : "cross-chain delivery failed at Aurora");
       } else {
         // Still pending. A normal delivery takes about two minutes, so say so once it is clearly late.
         const confirmedAt = (await deps.db.transfer.findUnique({ where: { id: line.transferId }, select: { confirmedAt: true } }))?.confirmedAt;

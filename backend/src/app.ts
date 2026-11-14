@@ -16,6 +16,8 @@ import type { AuroraClient } from "./aurora/client.js";
 import { FxService } from "./services/fx.service.js";
 import { assistantRoutes } from "./routes/assistant.js";
 import { transferRoutes } from "./routes/transfers.js";
+import { nearTransferRoutes } from "./routes/near-transfers.js";
+import type { NearIntentsClient } from "./near/client.js";
 import type { TransferChain } from "./services/transfer-chain.js";
 import { requireMerchant } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
@@ -46,6 +48,8 @@ export type AppDeps = {
   fx?: FxService;
   /** Sends signed transfers on Monad from the relayer. Without it the transfer routes answer 503. */
   transferChain?: TransferChain;
+  /** NEAR Intents, direct. Without it the NEAR payout routes are not served. */
+  near?: Pick<NearIntentsClient, "tokens" | "quote" | "status">;
   config: Config;
   db: Db;
   redis: Redis;
@@ -170,6 +174,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         minRelayerWei: parseEther(config.RELAYER_MIN_MON),
       },
     });
+    // NEAR Intents, direct: a payout path of its own, beside the Aurora-backed one.
+    if (deps.near) {
+      nearTransferRoutes(merchantScope, {
+        db: deps.db,
+        chain: deps.transferChain,
+        nearClient: deps.near,
+        logger: app.log.child({ component: "near-transfers" }),
+        config: { dailyLimit: config.TRANSFER_DAILY_LIMIT, maxLines: config.TRANSFER_MAX_LINES, minRelayerWei: parseEther(config.RELAYER_MIN_MON) },
+      });
+    }
     if (config.GEMINI_API_KEY) {
       assistantRoutes(merchantScope, { db: deps.db, apiKey: config.GEMINI_API_KEY, model: config.ASSISTANT_MODEL, fallbackModel: config.ASSISTANT_FALLBACK_MODEL || undefined, fetchImpl: deps.assistantFetch, wallet: deps.transferChain });
     }

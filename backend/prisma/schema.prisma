@@ -349,6 +349,8 @@ model TransferLine {
   /// The sender id the Aurora deposit address was minted under (`payout:<uuid>`). With `toAddress` it is what Aurora's
   /// support needs to find this delivery; it was never kept before.
   auroraSender    String?
+  /// Who carries a cross-chain delivery: "near-intents" for NEAR Intents, direct. Null is Aurora.
+  route           String?
 
   @@unique([transferId, index])
   @@index([destStatus])

@@ -4,12 +4,14 @@ import { reloadIfStale } from "@/lib/stale-deploy";
 import { useCallback } from "react";
 import { useSignTypedData } from "@privy-io/react-auth";
 import {
+  prepareNearTransferAction,
   prepareTransferAction,
+  submitNearTransferAction,
   submitTransferAction,
   transferStatusAction,
   type TransferResult,
 } from "@/app/app/(dash)/pay/transfer-actions";
-import type { PrepareTransferInput, Transfer } from "@/lib/api/types";
+import type { NearTransferInput, PrepareTransferInput, Transfer } from "@/lib/api/types";
 
 /**
  * Sends money out of the merchant's own wallet, from the browser.
@@ -52,10 +54,13 @@ export function useSendTransfer() {
   const { signTypedData } = useSignTypedData();
 
   return useCallback(
-    async (input: PrepareTransferInput, onStep?: (step: SendStep) => void): Promise<SendOutcome> => {
+    // `{ near }` is a payout to a NEAR account through NEAR Intents, direct; anything else is the ordinary flow.
+    async (input: PrepareTransferInput | { near: NearTransferInput }, onStep?: (step: SendStep) => void): Promise<SendOutcome> => {
       try {
+        const viaNear = "near" in input;
+        const carrier = viaNear ? "NEAR Intents" : "Aurora";
         onStep?.({ phase: "preparing" });
-        const prepared: TransferResult = await prepareTransferAction(input);
+        const prepared: TransferResult = viaNear ? await prepareNearTransferAction(input.near) : await prepareTransferAction(input);
         if (!prepared.ok) return prepared;
         const { transfer } = prepared;
         const authorizations = transfer.authorizations ?? [];
@@ -70,7 +75,7 @@ export function useSendTransfer() {
           // Another chain: the wallet signs to a one-off Monad address, so say where the money is REALLY going.
           const dest = line.dest;
           const goingTo = dest
-            ? `Send ${line.amount} ${transfer.asset} to ${dest.address} on ${dest.chain_name}${dest.expected_out ? `, arriving as about ${dest.expected_out} ${dest.asset}` : ""}. It is carried by Aurora, so it first goes to ${line.to} on Monad.`
+            ? `Send ${line.amount} ${transfer.asset} to ${dest.address} on ${dest.chain_name}${dest.expected_out ? `, arriving as about ${dest.expected_out} ${dest.asset}` : ""}. It is carried by ${carrier}, so it first goes to ${line.to} on Monad.`
             : `Send ${line.amount} ${transfer.asset} to ${line.to}.`;
           const { signature } = await signTypedData(
             {
@@ -92,7 +97,7 @@ export function useSendTransfer() {
         }
 
         onStep?.({ phase: "sending" });
-        const submitted = await submitTransferAction(transfer.id, signatures);
+        const submitted = viaNear ? await submitNearTransferAction(transfer.id, signatures) : await submitTransferAction(transfer.id, signatures);
         if (!submitted.ok) return submitted;
 
         onStep?.({ phase: "confirming" });
